@@ -9,7 +9,9 @@
         "backtest": "node scripts/backtest.js",
         "lint": "eslint src scripts",
         "format": "prettier --write \"src/**/*.js\" \"scripts/**/*.js\"",
-        "test": "node --test"
+        "test": "node --test",
+        "server": "npm run start --prefix server",
+        "web": "npm run dev --prefix web"
     },
     "keywords": [
         "vlm",

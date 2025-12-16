@@ -1,0 +1,15 @@
+{
+    "name": "vlm-trade-server",
+    "version": "1.0.0",
+    "type": "module",
+    "scripts": {
+        "start": "node index.mjs"
+    },
+    "dependencies": {
+        "body-parser": "^2.2.1",
+        "cors": "^2.8.5",
+        "cross-spawn": "^7.0.6",
+        "express": "^5.2.1",
+        "socket.io": "^4.8.1"
+    }
+}
