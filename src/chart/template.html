@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VLM Trade Chart</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #1a1a2e;
+      overflow: hidden;
+    }
+
+    #chart-container {
+      width: 100vw;
+      height: 100vh;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="chart-container"></div>
+
+  <script id="chart-config" type="application/json">
+    { "width": {{ WIDTH }}, "height": {{ HEIGHT }}, "volumeHeight": {{ VOLUME_HEIGHT }} }
+  </script>
+  <script id="chart-data" type="application/json">{{ CHART_DATA }}</script>
+  <script id="chart-overlays" type="application/json">{{ OVERLAYS }}</script>
+  <script id="chart-watermark" type="application/json">{{ WATERMARK_JSON }}</script>
+
+  <script>
+    // @ts-nocheck
+    function readJsonFromScriptTag(scriptId, fallbackValue) {
+      const element = document.getElementById(scriptId);
+      if (!element) return fallbackValue;
+
+      const rawText = (element.textContent || '').trim();
+      if (!rawText) return fallbackValue;
+
+      try {
+        return JSON.parse(rawText);
+      } catch (error) {
+        console.warn('解析 JSON 失败:', scriptId, error);
+        return fallbackValue;
+      }
+    }
+
+    function normalizeChartConfig(rawConfig) {
+      const width = Number(rawConfig?.width);
+      const height = Number(rawConfig?.height);
+      const volumeHeight = Number(rawConfig?.volumeHeight);
+
+      const normalizedWidth = Number.isFinite(width) && width > 0 ? width : 1280;
+      const normalizedHeight = Number.isFinite(height) && height > 0 ? height : 720;
+      const normalizedVolumeHeight =
+        Number.isFinite(volumeHeight) && volumeHeight > 0 && volumeHeight < 1 ? volumeHeight : 0.25;
+
+      return {
+        width: normalizedWidth,
+        height: normalizedHeight,
+        volumeHeight: normalizedVolumeHeight,
+      };
+    }
+
+    // 图表数据将通过 Puppeteer 注入
+    window.chartConfig = normalizeChartConfig(readJsonFromScriptTag('chart-config', {}));
+    window.chartData = readJsonFromScriptTag('chart-data', []);
+    window.overlays = readJsonFromScriptTag('chart-overlays', []);
+    window.watermark = readJsonFromScriptTag('chart-watermark', '');
+
+    function initChart() {
+      const container = document.getElementById('chart-container');
+      const config = window.chartConfig;
+
+      const mainHeight = config.height * (1 - config.volumeHeight);
+      const volumeHeightPx = config.height * config.volumeHeight;
+
+      // 创建主图表
+      const chart = LightweightCharts.createChart(container, {
+        width: config.width,
+        height: mainHeight,
+        layout: {
+          background: { type: 'solid', color: '#1a1a2e' },
+          textColor: '#e0e0e0',
+          fontSize: 12,
+        },
+        grid: {
+          vertLines: { color: '#2a2a4a' },
+          horzLines: { color: '#2a2a4a' },
+        },
+        crosshair: {
+          mode: LightweightCharts.CrosshairMode.Normal,
+        },
+        rightPriceScale: {
+          borderColor: '#2a2a4a',
+        },
+        timeScale: {
+          borderColor: '#2a2a4a',
+          timeVisible: true,
+          secondsVisible: false,
+        },
+        watermark: {
+          visible: true,
+          fontSize: 48,
+          horzAlign: 'center',
+          vertAlign: 'center',
+          color: 'rgba(255, 255, 255, 0.1)',
+          text: window.watermark,
+        },
+      });
+
+      // 蜡烛图系列
+      const candleSeries = chart.addCandlestickSeries({
+        upColor: '#26a69a',
+        downColor: '#ef5350',
+        wickUpColor: '#26a69a',
+        wickDownColor: '#ef5350',
+        borderUpColor: '#26a69a',
+        borderDownColor: '#ef5350',
+      });
+
+      const data = window.chartData.map(bar => ({
+        time: bar.time,
+        open: bar.open,
+        high: bar.high,
+        low: bar.low,
+        close: bar.close,
+      }));
+      candleSeries.setData(data);
+
+      // 创建成交量子图
+      const volumeContainer = document.createElement('div');
+      volumeContainer.style.width = config.width + 'px';
+      volumeContainer.style.height = volumeHeightPx + 'px';
+      container.appendChild(volumeContainer);
+
+      const volumeChart = LightweightCharts.createChart(volumeContainer, {
+        width: config.width,
+        height: volumeHeightPx,
+        layout: {
+          background: { type: 'solid', color: '#1a1a2e' },
+          textColor: '#e0e0e0',
+        },
+        grid: {
+          vertLines: { color: '#2a2a4a' },
+          horzLines: { color: '#2a2a4a' },
+        },
+        rightPriceScale: {
+          borderColor: '#2a2a4a',
+        },
+        timeScale: {
+          visible: false,
+        },
+      });
+
+      const volumeSeries = volumeChart.addHistogramSeries({
+        color: 'rgba(38, 166, 154, 0.5)',
+        priceFormat: { type: 'volume' },
+        priceScaleId: '',
+      });
+
+      const volumeData = window.chartData.map(bar => ({
+        time: bar.time,
+        value: bar.volume,
+        color: bar.close >= bar.open ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)',
+      }));
+      volumeSeries.setData(volumeData);
+
+      // 同步时间轴
+      chart.timeScale().subscribeVisibleTimeRangeChange(() => {
+        const range = chart.timeScale().getVisibleRange();
+        if (range) {
+          volumeChart.timeScale().setVisibleRange(range);
+        }
+      });
+
+      // 应用标注
+      applyOverlays(chart, candleSeries);
+
+      // 自适应
+      chart.timeScale().fitContent();
+      volumeChart.timeScale().fitContent();
+
+      window.mainChart = chart;
+      window.candleSeries = candleSeries;
+      window.__chartReady = true;
+    }
+
+    function applyOverlays(chart, candleSeries) {
+      const overlays = window.overlays || [];
+      const data = window.chartData;
+
+      for (const overlay of overlays) {
+        try {
+          if (overlay.type === 'horizontal_line') {
+            applyHorizontalLine(chart, overlay, data);
+          } else if (overlay.type === 'trend_line') {
+            applyTrendLine(chart, overlay, data);
+          } else if (overlay.type === 'marker') {
+            applyMarker(candleSeries, overlay, data);
+          } else if (overlay.type === 'parallel_channel') {
+            applyParallelChannel(chart, overlay, data);
+          } else if (overlay.type === 'ray_line') {
+            applyRayLine(chart, overlay, data);
+          }
+        } catch (e) {
+          console.error('应用标注失败:', overlay, e);
+        }
+      }
+    }
+
+    function applyHorizontalLine(chart, overlay, data) {
+      if (overlay.price == null || !data.length) return;
+
+      const lineSeries = chart.addLineSeries({
+        color: overlay.color || '#ffffff',
+        lineWidth: overlay.width || 2,
+        priceLineVisible: true,
+        lastValueVisible: true,
+      });
+
+      const startTime = data[0].time;
+      const endTime = data[data.length - 1].time;
+
+      lineSeries.setData([
+        { time: startTime, value: overlay.price },
+        { time: endTime, value: overlay.price },
+      ]);
+    }
+
+    function applyTrendLine(chart, overlay, data) {
+      if (!overlay.start || !overlay.end || !data.length) return;
+
+      const startBarIndex = overlay.start.barIndex;
+      const endBarIndex = overlay.end.barIndex;
+
+      if (startBarIndex == null || endBarIndex == null) return;
+      if (startBarIndex < 0 || startBarIndex >= data.length) return;
+      if (endBarIndex < 0 || endBarIndex >= data.length) return;
+
+      const lineSeries = chart.addLineSeries({
+        color: overlay.color || '#ffffff',
+        lineWidth: overlay.width || 2,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+
+      lineSeries.setData([
+        { time: data[startBarIndex].time, value: overlay.start.price },
+        { time: data[endBarIndex].time, value: overlay.end.price },
+      ]);
+    }
+
+    function applyParallelChannel(chart, overlay, data) {
+      if (!overlay.start || !overlay.end || !data.length) return;
+
+      const startBarIndex = overlay.start.barIndex;
+      const endBarIndex = overlay.end.barIndex;
+      const channelWidth = overlay.channelWidth || 0;
+
+      if (startBarIndex == null || endBarIndex == null) return;
+      if (startBarIndex < 0 || startBarIndex >= data.length) return;
+      if (endBarIndex < 0 || endBarIndex >= data.length) return;
+
+      const color = overlay.color || '#ffffff';
+      const width = overlay.width || 2;
+
+      // 主线
+      const line1 = chart.addLineSeries({
+        color, lineWidth: width, priceLineVisible: false, lastValueVisible: false,
+      });
+      line1.setData([
+        { time: data[startBarIndex].time, value: overlay.start.price },
+        { time: data[endBarIndex].time, value: overlay.end.price },
+      ]);
+
+      // 平行线
+      const line2 = chart.addLineSeries({
+        color, lineWidth: width, priceLineVisible: false, lastValueVisible: false,
+      });
+      line2.setData([
+        { time: data[startBarIndex].time, value: overlay.start.price + channelWidth },
+        { time: data[endBarIndex].time, value: overlay.end.price + channelWidth },
+      ]);
+    }
+
+    function applyRayLine(chart, overlay, data) {
+      if (!overlay.start || !data.length) return;
+
+      const startBarIndex = overlay.start.barIndex;
+      if (startBarIndex == null || startBarIndex < 0 || startBarIndex >= data.length) return;
+
+      const lineSeries = chart.addLineSeries({
+        color: overlay.color || '#ffffff',
+        lineWidth: overlay.width || 2,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+
+      lineSeries.setData([
+        { time: data[startBarIndex].time, value: overlay.start.price },
+        { time: data[data.length - 1].time, value: overlay.start.price },
+      ]);
+    }
+
+    function applyMarker(candleSeries, overlay, data) {
+      if (!overlay.start) return;
+
+      const barIndex = overlay.start.barIndex;
+      if (barIndex == null || barIndex < 0 || barIndex >= data.length) return;
+
+      const shapeMap = {
+        arrow_up: 'arrowUp',
+        arrow_down: 'arrowDown',
+        circle: 'circle',
+        square: 'square',
+      };
+
+      const positionMap = {
+        above_bar: 'aboveBar',
+        below_bar: 'belowBar',
+        inside_bar: 'inBar',
+      };
+
+      candleSeries.setMarkers([
+        ...candleSeries.markers ? candleSeries.markers() : [],
+        {
+          time: data[barIndex].time,
+          position: positionMap[overlay.position] || 'belowBar',
+          shape: shapeMap[overlay.shape] || 'arrowUp',
+          color: overlay.color || '#ffffff',
+          text: overlay.text || '',
+        },
+      ]);
+    }
+
+    // 由 Node 侧在 lightweight-charts 注入完成后调用
+    window.__initChart = initChart;
+  </script>
+</body>
+
+</html>
