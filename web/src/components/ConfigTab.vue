@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted } from 'vue';
 import { Settings, Save, Loader2, CheckCircle2, AlertCircle, Database, Key, BarChart2, FileText, Sliders } from 'lucide-vue-next';
 
 const config = ref({});
@@ -8,32 +8,12 @@ const isLoading = ref(false);
 const isSaving = ref(false);
 const saveStatus = ref(null);
 
-// 图标映射
-const groupIcons = {
-  database: Database,
-  openai: Key,
-  chart: BarChart2,
-  log: FileText,
-  defaults: Sliders
-};
-
-// 输入类型映射
+const groupIcons = { database: Database, openai: Key, chart: BarChart2, log: FileText, defaults: Sliders };
 const inputTypes = {
-  DB_PORT: 'number',
-  DB_POOL_MIN: 'number',
-  DB_POOL_MAX: 'number',
-  DB_PASSWORD: 'password',
-  OPENAI_API_KEY: 'password',
-  OPENAI_MAX_TOKENS: 'number',
-  OPENAI_TEMPERATURE: 'number',
-  OPENAI_TIMEOUT: 'number',
-  CHART_WIDTH: 'number',
-  CHART_HEIGHT: 'number',
-  CHART_VOLUME_PANE_HEIGHT: 'number',
-  DEFAULT_BARS: 'number'
+  DB_PORT: 'number', DB_POOL_MIN: 'number', DB_POOL_MAX: 'number', DB_PASSWORD: 'password',
+  OPENAI_API_KEY: 'password', OPENAI_MAX_TOKENS: 'number', OPENAI_TEMPERATURE: 'number', OPENAI_TIMEOUT: 'number',
+  CHART_WIDTH: 'number', CHART_HEIGHT: 'number', CHART_VOLUME_PANE_HEIGHT: 'number', DEFAULT_BARS: 'number'
 };
-
-// Select 选项
 const selectOptions = {
   OPENAI_ENABLE_THINKING: ['true', 'false'],
   LOG_LEVEL: ['debug', 'info', 'warn', 'error', 'silent'],
@@ -48,11 +28,8 @@ async function loadConfig() {
     if (data.error) throw new Error(data.error);
     config.value = data.config;
     schema.value = data.schema;
-  } catch (e) {
-    console.error('加载配置失败:', e);
-  } finally {
-    isLoading.value = false;
-  }
+  } catch (e) { console.error(e); }
+  finally { isLoading.value = false; }
 }
 
 async function saveConfig() {
@@ -68,119 +45,72 @@ async function saveConfig() {
     if (data.error) throw new Error(data.error);
     saveStatus.value = 'success';
     setTimeout(() => saveStatus.value = null, 3000);
-  } catch (e) {
-    console.error('保存配置失败:', e);
-    saveStatus.value = 'error';
-  } finally {
-    isSaving.value = false;
-  }
+  } catch (e) { saveStatus.value = 'error'; }
+  finally { isSaving.value = false; }
 }
 
-function getInputType(key) {
-  return inputTypes[key] || 'text';
-}
-
-function hasSelectOptions(key) {
-  return key in selectOptions;
-}
-
-function getSelectOptions(key) {
-  return selectOptions[key] || [];
-}
+function getInputType(key) { return inputTypes[key] || 'text'; }
+function hasSelectOptions(key) { return key in selectOptions; }
+function getSelectOptions(key) { return selectOptions[key] || []; }
 
 onMounted(loadConfig);
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="space-y-5">
     <!-- Header -->
-    <div class="glass-card p-6 flex justify-between items-center">
-      <div>
-        <h1 class="text-2xl font-bold text-snow flex items-center gap-3">
-          <Settings class="w-6 h-6 text-neon-teal" />
-          Configuration
-        </h1>
-        <p class="text-mist text-sm mt-1">管理环境变量配置</p>
+    <div class="liquid-glass p-5 flex justify-between items-center animate-slide-up">
+      <div class="flex items-center gap-3">
+        <div class="flex items-center justify-center w-9 h-9 rounded-xl bg-ink shadow">
+          <Settings class="w-5 h-5 text-white" />
+        </div>
+        <div>
+          <h1 class="text-lg font-semibold text-ink">Configuration</h1>
+          <p class="text-xs text-ink-tertiary">Environment variables</p>
+        </div>
       </div>
       
-      <button 
-        @click="saveConfig"
-        :disabled="isSaving"
-        class="btn-primary flex items-center gap-2"
-      >
-        <Loader2 v-if="isSaving" class="w-5 h-5 animate-spin" />
-        <Save v-else class="w-5 h-5" />
-        {{ isSaving ? 'Saving...' : 'Save Config' }}
+      <button @click="saveConfig" :disabled="isSaving" class="btn-liquid flex items-center gap-2">
+        <Loader2 v-if="isSaving" class="w-4 h-4 animate-spin" />
+        <Save v-else class="w-4 h-4" />
+        Save
       </button>
     </div>
 
-    <!-- Save Status -->
-    <transition name="fade">
-      <div v-if="saveStatus === 'success'" class="flex items-center gap-2 text-neon-teal bg-neon-teal/10 px-4 py-3 rounded-lg border border-neon-teal/30">
-        <CheckCircle2 class="w-5 h-5" />
-        <span>配置已保存成功，重启服务后生效</span>
+    <!-- Status -->
+    <transition enter-active-class="transition duration-200" leave-active-class="transition duration-150"
+      enter-from-class="opacity-0 -translate-y-1" leave-to-class="opacity-0 -translate-y-1">
+      <div v-if="saveStatus === 'success'" class="liquid-glass p-3 flex items-center gap-2 text-green text-sm">
+        <CheckCircle2 class="w-4 h-4" /> Saved. Restart to apply.
       </div>
-      <div v-else-if="saveStatus === 'error'" class="flex items-center gap-2 text-red-400 bg-red-500/10 px-4 py-3 rounded-lg border border-red-500/30">
-        <AlertCircle class="w-5 h-5" />
-        <span>保存失败，请检查服务器状态</span>
+      <div v-else-if="saveStatus === 'error'" class="liquid-glass p-3 flex items-center gap-2 text-red text-sm">
+        <AlertCircle class="w-4 h-4" /> Failed.
       </div>
     </transition>
 
     <!-- Loading -->
     <div v-if="isLoading" class="flex justify-center py-12">
-      <Loader2 class="w-8 h-8 animate-spin text-neon-teal" />
+      <Loader2 class="w-8 h-8 animate-spin text-ink-muted" />
     </div>
 
-    <!-- Config Groups -->
-    <div v-else class="space-y-6">
-      <div 
-        v-for="(group, groupKey) in schema" 
-        :key="groupKey"
-        class="glass-card p-6 animate-slide-up"
-      >
-        <h2 class="text-sm font-bold text-mist uppercase tracking-widest mb-6 flex items-center gap-2 border-b border-white/5 pb-4">
-          <component :is="groupIcons[groupKey]" class="w-4 h-4 text-neon-teal" />
+    <!-- Groups -->
+    <div v-else class="space-y-5">
+      <div v-for="(group, groupKey) in schema" :key="groupKey" class="liquid-glass p-5 animate-slide-up">
+        <h2 class="text-xs font-semibold text-ink-tertiary uppercase tracking-wider mb-4 flex items-center gap-2 border-b border-black/[0.04] pb-3">
+          <component :is="groupIcons[groupKey]" class="w-4 h-4" />
           {{ group.label }}
         </h2>
         
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          <div v-for="key in group.items" :key="key" class="group">
-            <label class="block text-xs font-semibold text-mist uppercase tracking-wider mb-2 group-focus-within:text-neon-teal transition-colors">
-              {{ key }}
-            </label>
-            
-            <!-- Select -->
-            <select 
-              v-if="hasSelectOptions(key)"
-              v-model="config[key]"
-              class="input-premium cursor-pointer"
-            >
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div v-for="key in group.items" :key="key">
+            <label class="block text-xs font-medium text-ink-secondary mb-1.5 truncate">{{ key }}</label>
+            <select v-if="hasSelectOptions(key)" v-model="config[key]" class="select-liquid">
               <option v-for="opt in getSelectOptions(key)" :key="opt" :value="opt">{{ opt }}</option>
             </select>
-            
-            <!-- Input -->
-            <input 
-              v-else
-              v-model="config[key]"
-              :type="getInputType(key)"
-              class="input-premium font-mono"
-              :placeholder="key"
-            />
+            <input v-else v-model="config[key]" :type="getInputType(key)" class="input-liquid font-mono text-sm" />
           </div>
         </div>
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-</style>

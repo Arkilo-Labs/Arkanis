@@ -15,63 +15,52 @@ const CurrentComponent = computed(() => {
     default: return MainTab;
   }
 });
+
+const tabs = [
+  { id: 'main', label: 'Strategy', icon: TrendingUp },
+  { id: 'backtest', label: 'Backtest', icon: Terminal },
+  { id: 'config', label: 'Config', icon: Settings }
+];
 </script>
 
 <template>
   <div class="min-h-screen">
-    <!-- Premium Header -->
-    <header class="fixed top-0 left-0 right-0 z-50 bg-obsidian/80 backdrop-blur-md border-b border-white/5 shadow-glass">
-      <div class="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
-        <!-- Logo Area -->
-        <h1 class="text-2xl font-bold flex items-center gap-3 tracking-tight">
-          <div class="relative flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-deep-teal to-neon-teal shadow-glow">
-            <Activity class="w-6 h-6 text-obsidian" />
+    <!-- Header -->
+    <header class="fixed top-0 left-0 right-0 z-50 liquid-glass !rounded-none !border-x-0 !border-t-0">
+      <div class="max-w-7xl mx-auto px-8 h-16 flex justify-between items-center">
+        <!-- Logo -->
+        <h1 class="text-xl font-semibold flex items-center gap-3 text-ink">
+          <div class="flex items-center justify-center w-9 h-9 rounded-xl bg-blue shadow-button">
+            <Activity class="w-5 h-5 text-white" />
           </div>
-          <span class="bg-gradient-to-r from-snow to-mist bg-clip-text text-transparent">VLM Trade</span>
+          VLM Trade
         </h1>
 
-        <!-- Navigation -->
-        <nav class="flex gap-2 bg-charcoal/50 p-1.5 rounded-xl border border-white/5">
+        <!-- Tabs -->
+        <nav class="flex gap-1 p-1 rounded-xl bg-white/60 backdrop-blur-sm border border-black/[0.04] shadow-glass-sm">
           <button 
-            @click="currentTab = 'main'"
-            :class="['px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 flex items-center gap-2', 
-              currentTab === 'main' 
-                ? 'bg-gradient-to-r from-deep-teal to-neon-teal text-obsidian shadow-lg shadow-neon-teal/20' 
-                : 'text-mist hover:text-snow hover:bg-white/5']"
+            v-for="tab in tabs"
+            :key="tab.id"
+            @click="currentTab = tab.id"
+            :class="[
+              'px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2',
+              currentTab === tab.id 
+                ? 'bg-white text-ink shadow-glass-sm' 
+                : 'text-ink-tertiary hover:text-ink-secondary hover:bg-white/50'
+            ]"
           >
-            <TrendingUp class="w-4 h-4" />
-            Strategy
-          </button>
-          <button 
-            @click="currentTab = 'backtest'"
-            :class="['px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 flex items-center gap-2', 
-              currentTab === 'backtest' 
-                ? 'bg-gradient-to-r from-purple-500 to-indigo-400 text-white shadow-lg shadow-purple-500/20' 
-                : 'text-mist hover:text-snow hover:bg-white/5']"
-          >
-            <Terminal class="w-4 h-4" />
-            Backtest
-          </button>
-          <button 
-            @click="currentTab = 'config'"
-            :class="['px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 flex items-center gap-2', 
-              currentTab === 'config' 
-                ? 'bg-gradient-to-r from-amber-500 to-orange-400 text-white shadow-lg shadow-amber-500/20' 
-                : 'text-mist hover:text-snow hover:bg-white/5']"
-          >
-            <Settings class="w-4 h-4" />
-            Config
+            <component :is="tab.icon" class="w-4 h-4" />
+            {{ tab.label }}
           </button>
         </nav>
       </div>
     </header>
 
-    <!-- Main Content Area -->
-    <main class="max-w-7xl mx-auto pt-28 px-6 pb-12 animate-fade-in">
+    <!-- Main -->
+    <main class="max-w-7xl mx-auto pt-24 px-8 pb-12 animate-fade-in">
       <KeepAlive>
         <component :is="CurrentComponent" />
       </KeepAlive>
     </main>
   </div>
 </template>
-

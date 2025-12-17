@@ -4,128 +4,325 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================
+   LIQUID GLASS - 极简灰白设计系统
+   ============================================ */
+:root {
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
+  --blur-glass: 20px;
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ============================================
+   BASE
+   ============================================ */
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    @apply bg-obsidian text-snow font-sans antialiased overflow-x-hidden;
+    @apply bg-canvas text-ink font-sans antialiased;
+    min-height: 100vh;
+  }
+
+  ::selection {
+    @apply bg-blue/20 text-ink;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-blue/40 ring-offset-2 ring-offset-surface;
   }
 }
 
+/* ============================================
+   COMPONENTS
+   ============================================ */
 @layer components {
 
-  /* Glassmorphism Card Utility */
+  /* 玻璃卡片 */
+  .liquid-glass {
+    position: relative;
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(var(--blur-glass)) saturate(180%);
+    -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(180%);
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+    transition: all var(--duration-normal) var(--ease-smooth);
+  }
+
+  .liquid-glass::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 20px;
+    right: 20px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+    pointer-events: none;
+  }
+
+  .liquid-glass:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06), 0 12px 40px rgba(0, 0, 0, 0.08);
+  }
+
   .glass-card {
-    @apply bg-surface backdrop-blur-md border border-white/10 shadow-glass rounded-xl;
+    @apply liquid-glass;
   }
 
-  /* Premium Input Style */
+  /* 输入框 */
+  .input-liquid {
+    @apply w-full px-4 py-3 text-ink placeholder-ink-muted font-sans bg-white;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: var(--radius-md);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: all var(--duration-fast) var(--ease-smooth);
+  }
+
+  .input-liquid:hover {
+    border-color: rgba(0, 0, 0, 0.12);
+  }
+
+  .input-liquid:focus {
+    @apply outline-none;
+    border-color: rgba(0, 122, 255, 0.5);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 3px rgba(0, 122, 255, 0.1);
+  }
+
   .input-premium {
-    @apply w-full bg-obsidian/50 border border-charcoal rounded-lg px-4 py-3 text-snow placeholder-mist/50 outline-none focus:border-neon-teal/50 focus:ring-1 focus:ring-neon-teal/50 transition-all duration-300 ease-out;
+    @apply input-liquid;
   }
 
-  /* Premium Button - Primary */
+  /* 下拉框 */
+  .select-liquid {
+    @apply input-liquid cursor-pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236e6e73' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 40px;
+  }
+
+  /* 主按钮 */
+  .btn-liquid {
+    position: relative;
+    @apply font-semibold py-3 px-6 text-white;
+    background: #007aff;
+    border: none;
+    border-radius: var(--radius-md);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(0, 122, 255, 0.2);
+    transition: all var(--duration-fast) var(--ease-smooth);
+  }
+
+  .btn-liquid::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 10%;
+    right: 10%;
+    height: 50%;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.25) 0%, transparent 100%);
+    border-radius: var(--radius-lg) var(--radius-lg) 100% 100%;
+    pointer-events: none;
+  }
+
+  .btn-liquid:hover {
+    background: #0066d6;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12), 0 8px 20px rgba(0, 122, 255, 0.25);
+  }
+
+  .btn-liquid:active {
+    transform: translateY(0);
+  }
+
   .btn-primary {
-    @apply bg-gradient-to-r from-deep-teal to-neon-teal text-obsidian font-bold py-3 px-6 rounded-lg hover:shadow-glow hover:scale-[1.02] active:scale-[0.98] transition-all duration-300;
+    @apply btn-liquid;
   }
 
-  /* Premium Button - Danger */
+  /* 危险按钮 */
+  .btn-liquid-danger {
+    @apply btn-liquid;
+    background: #ff3b30;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(255, 59, 48, 0.2);
+  }
+
+  .btn-liquid-danger:hover {
+    background: #e0332a;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12), 0 8px 20px rgba(255, 59, 48, 0.25);
+  }
+
   .btn-danger {
-    @apply bg-gradient-to-r from-red-600 to-red-500 text-white font-bold py-3 px-6 rounded-lg hover:shadow-lg hover:shadow-red-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300;
+    @apply btn-liquid-danger;
   }
 
-  /* Log Terminal Scrollbar */
-  .scrollbar-thin::-webkit-scrollbar {
+  /* 次级按钮 */
+  .btn-secondary {
+    @apply font-semibold py-3 px-6 text-ink-secondary bg-white;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: var(--radius-md);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: all var(--duration-fast) var(--ease-smooth);
+  }
+
+  .btn-secondary:hover {
+    background: #f5f5f7;
+    border-color: rgba(0, 0, 0, 0.15);
+  }
+
+  /* Toggle */
+  .toggle-liquid {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+  }
+
+  .toggle-liquid input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  .toggle-liquid .toggle-track {
+    width: 46px;
+    height: 26px;
+    border-radius: 13px;
+    background: #e5e5ea;
+    transition: all var(--duration-fast) var(--ease-smooth);
+  }
+
+  .toggle-liquid .toggle-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 10px;
+    background: white;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15), 0 0 1px rgba(0, 0, 0, 0.1);
+    transition: all var(--duration-fast) var(--ease-spring);
+  }
+
+  .toggle-liquid input:checked+.toggle-track {
+    background: #007aff;
+  }
+
+  .toggle-liquid input:checked~.toggle-thumb {
+    transform: translateX(20px);
+  }
+
+  /* Scrollbar */
+  .scrollbar-liquid::-webkit-scrollbar {
     width: 6px;
+    height: 6px;
   }
 
-  .scrollbar-thin::-webkit-scrollbar-track {
-    @apply bg-obsidian;
+  .scrollbar-liquid::-webkit-scrollbar-track {
+    background: transparent;
   }
 
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    @apply bg-charcoal rounded-full hover:bg-deep-teal/50 transition-colors;
+  .scrollbar-liquid::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 3px;
+  }
+
+  .scrollbar-liquid::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.25);
+  }
+
+  .scrollbar-thin {
+    @apply scrollbar-liquid;
+  }
+
+  /* Terminal */
+  .terminal-liquid {
+    @apply font-mono text-sm;
+    background: #f0f0f2;
+    color: #424245;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: var(--radius-md);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+
+  /* Badge */
+  .badge-liquid {
+    @apply inline-flex items-center px-2.5 py-0.5 text-xs font-medium rounded-full;
+    background: rgba(0, 0, 0, 0.04);
+    color: #6e6e73;
+  }
+
+  .badge-blue {
+    @apply badge-liquid;
+    background: rgba(0, 122, 255, 0.1);
+    color: #007aff;
+  }
+
+  .badge-green {
+    @apply badge-liquid;
+    background: rgba(52, 199, 89, 0.1);
+    color: #34c759;
+  }
+
+  .badge-red {
+    @apply badge-liquid;
+    background: rgba(255, 59, 48, 0.1);
+    color: #ff3b30;
   }
 }
 
+/* ============================================
+   BASE OVERRIDES
+   ============================================ */
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: Inter, system-ui, sans-serif;
   line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  color-scheme: light;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-
-button:hover {
-  border-color: #646cff;
-}
-
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-.card {
-  padding: 2em;
 }
 
 #app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+  width: 100%;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
+a {
+  color: #007aff;
+  text-decoration: none;
+}
 
-  a:hover {
-    color: #747bff;
-  }
+a:hover {
+  color: #0066d6;
+}
 
-  button {
-    background-color: #f9f9f9;
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

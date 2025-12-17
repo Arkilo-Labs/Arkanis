@@ -3,7 +3,7 @@ import { ref, watch, nextTick } from 'vue';
 
 const props = defineProps({
   logs: {
-    type: Array, // Array of { type: 'stdout'|'stderr'|'error', data: string, timestamp: number }
+    type: Array,
     default: () => []
   }
 });
@@ -21,15 +21,23 @@ watch(() => props.logs.length, async () => {
 <template>
   <div 
     ref="containerRef"
-    class="bg-obsidian/50 text-xs font-mono p-4 rounded-lg overflow-y-auto h-full min-h-[inherit] border border-charcoal shadow-inner scrollbar-thin text-left"
+    class="terminal-liquid text-xs p-4 overflow-y-auto h-full min-h-[inherit] scrollbar-liquid text-left"
   >
-    <div v-if="logs.length === 0" class="text-mist/30 italic font-light tracking-wide">Waiting for process output...</div>
-    <div v-for="(log, index) in logs" :key="index" class="whitespace-pre-wrap break-all mb-0.5 leading-relaxed">
-      <span class="text-mist/40 select-none mr-2">[{{ new Date(log.timestamp).toLocaleTimeString() }}]</span>
+    <div v-if="logs.length === 0" class="text-gray-500 italic">
+      Waiting for output...
+    </div>
+    <div 
+      v-for="(log, index) in logs" 
+      :key="index" 
+      class="whitespace-pre-wrap break-all mb-1 leading-relaxed flex"
+    >
+      <span class="text-ink-muted select-none mr-3 flex-shrink-0 tabular-nums">
+        [{{ new Date(log.timestamp).toLocaleTimeString() }}]
+      </span>
       <span :class="{
-        'text-mist': log.type === 'stdout',
-        'text-yellow-400': log.type === 'stderr',
-        'text-red-400 font-bold': log.type === 'error'
+        'text-ink-secondary': log.type === 'stdout',
+        'text-orange': log.type === 'stderr',
+        'text-red font-semibold': log.type === 'error'
       }">{{ log.data }}</span>
     </div>
   </div>

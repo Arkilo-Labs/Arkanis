@@ -1,12 +1,11 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
-import { Play, Square, Calendar, Loader2, ArrowRight } from 'lucide-vue-next';
+import { Play, Square, Calendar, Loader2, ArrowRight, Cpu } from 'lucide-vue-next';
 import LogTerminal from './LogTerminal.vue';
 import { useSocket } from '../composables/useSocket';
 
 const { socket } = useSocket();
 
-// Config
 const config = ref({
   symbol: 'BTCUSDT',
   timeframe: '5m',
@@ -17,11 +16,9 @@ const config = ref({
   enable4x: false
 });
 
-// State
 const isRunning = ref(false);
 const logs = ref([]);
 const pid = ref(null);
-const resultSummary = ref(null);
 
 const timeframes = ['5m', '15m', '1h', '4h'];
 
@@ -32,7 +29,6 @@ function addLog(type, data) {
 function runBacktest() {
   isRunning.value = true;
   logs.value = [];
-  resultSummary.value = null;
   pid.value = null;
 
   const args = [
@@ -41,16 +37,11 @@ function runBacktest() {
     '--bars', config.value.bars.toString(),
     '--start-time', config.value.startTime,
     '--workers', config.value.workers.toString(),
-    '--wait', '500' // Faster for backtest
+    '--wait', '500'
   ];
 
-  if (config.value.endTime) {
-      args.push('--end-time', config.value.endTime);
-  }
-  
-  if (config.value.enable4x) {
-    args.push('--enable-4x-chart');
-  }
+  if (config.value.endTime) args.push('--end-time', config.value.endTime);
+  if (config.value.enable4x) args.push('--enable-4x-chart');
 
   addLog('stdout', `Starting backtest.js with args: ${args.join(' ')}`);
 
@@ -63,45 +54,32 @@ function runBacktest() {
   .then(data => {
     if (data.pid) {
       pid.value = data.pid;
-      addLog('stdout', `Backtest process started with PID: ${data.pid}`);
+      addLog('stdout', `Started with PID: ${data.pid}`);
     } else if (data.error) {
-       addLog('error', `Failed to start: ${data.error}`);
+       addLog('error', `Failed: ${data.error}`);
        isRunning.value = false;
     }
   })
   .catch(err => {
-    addLog('error', `API Error: ${err.message}`);
+    addLog('error', `Error: ${err.message}`);
     isRunning.value = false;
   });
 }
 
 function stopBacktest() {
-  if (pid.value) {
-    socket.emit('kill-process', pid.value);
-  }
+  if (pid.value) socket.emit('kill-process', pid.value);
 }
 
-// Socket listeners
-const onLog = (msg) => {
-    addLog(msg.type, msg.data);
-    // Try to parse summary from logs if possible, or wait for file
-    // The backtest script prints: "分析成功: N", "入场信号: N" etc.
-};
-
+const onLog = (msg) => addLog(msg.type, msg.data);
 const onProcessExit = (msg) => {
-  addLog('stdout', `Process exited with code ${msg.code}`);
+  addLog('stdout', `Exited with code ${msg.code}`);
   isRunning.value = false;
   pid.value = null;
-  
-  if (msg.code === 0) {
-     // We could fetch the latest result json, but the filenames are timestamped.
-     // For now, rely on logs.
-     addLog('stdout', 'Backtest complete. Check "outputs/backtest" for detailed results.');
-  }
+  if (msg.code === 0) addLog('stdout', 'Complete. Check outputs/backtest.');
 };
 const onProcessKilled = (killedPid) => {
   if (killedPid === pid.value) {
-    addLog('stderr', 'Backtest terminated by user.');
+    addLog('stderr', 'Terminated.');
     isRunning.value = false;
     pid.value = null;
   }
@@ -121,94 +99,94 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-    <!-- Configuration Panel (4 cols) -->
-    <div class="lg:col-span-4 space-y-8">
-      <div class="glass-card p-6 animate-slide-up" style="animation-delay: 0.1s;">
-        <h2 class="text-sm font-bold text-mist uppercase tracking-widest mb-6 flex items-center gap-2">
-          <Calendar class="w-4 h-4 text-neon-teal" />
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+    <!-- Config -->
+    <div class="lg:col-span-4">
+      <div class="liquid-glass p-5 animate-slide-up">
+        <h2 class="text-xs font-semibold text-ink-tertiary uppercase tracking-wider mb-4 flex items-center gap-2">
+          <Calendar class="w-4 h-4" />
           Backtest Config
         </h2>
         
-        <div class="space-y-6">
-          <div class="group">
-            <label class="block text-xs font-semibold text-mist uppercase tracking-wider mb-2 group-focus-within:text-neon-teal transition-colors">Symbol</label>
-            <input v-model="config.symbol" type="text" class="input-premium font-mono" />
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-medium text-ink-secondary mb-1.5">Symbol</label>
+            <input v-model="config.symbol" type="text" class="input-liquid font-mono" />
           </div>
 
-          <div class="grid grid-cols-2 gap-4">
-             <div class="group">
-              <label class="block text-xs font-semibold text-mist uppercase tracking-wider mb-2 group-focus-within:text-neon-teal transition-colors">Timeframe</label>
-              <select v-model="config.timeframe" class="input-premium cursor-pointer">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-ink-secondary mb-1.5">Timeframe</label>
+              <select v-model="config.timeframe" class="select-liquid">
                 <option v-for="tf in timeframes" :key="tf" :value="tf">{{ tf }}</option>
               </select>
             </div>
-            <div class="group">
-              <label class="block text-xs font-semibold text-mist uppercase tracking-wider mb-2 group-focus-within:text-neon-teal transition-colors">Bars / Step</label>
-              <input v-model.number="config.bars" type="number" class="input-premium font-mono" />
+            <div>
+              <label class="block text-xs font-medium text-ink-secondary mb-1.5">Bars</label>
+              <input v-model.number="config.bars" type="number" class="input-liquid font-mono" />
             </div>
           </div>
 
-          <div class="group">
-             <label class="block text-xs font-semibold text-mist uppercase tracking-wider mb-2 group-focus-within:text-neon-teal transition-colors">Date Range</label>
-             <div class="flex items-center gap-3">
-                <input v-model="config.startTime" type="date" class="input-premium text-sm flex-1" />
-                <ArrowRight class="w-4 h-4 text-mist" />
-                <input v-model="config.endTime" type="date" class="input-premium text-sm flex-1" />
-             </div>
-          </div>
-
-           <div class="grid grid-cols-2 gap-4">
-            <div class="group">
-               <label class="block text-xs font-semibold text-mist uppercase tracking-wider mb-2 group-focus-within:text-neon-teal transition-colors">Workers</label>
-               <input v-model.number="config.workers" type="number" min="1" max="10" class="input-premium font-mono" />
-            </div>
-            <div class="flex items-center pt-6 border-l border-white/5 pl-4">
-                <label class="flex items-center gap-3 cursor-pointer group">
-                  <div class="relative flex items-center">
-                    <input v-model="config.enable4x" type="checkbox" class="peer sr-only">
-                    <div class="w-11 h-6 bg-charcoal rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-neon-teal"></div>
-                  </div>
-                  <span class="text-xs font-medium text-mist group-hover:text-snow transition-colors">Enable 4x</span>
-                </label>
+          <div>
+            <label class="block text-xs font-medium text-ink-secondary mb-1.5">Date Range</label>
+            <div class="flex items-center gap-2">
+              <input v-model="config.startTime" type="date" class="input-liquid text-sm flex-1" />
+              <ArrowRight class="w-4 h-4 text-ink-muted flex-shrink-0" />
+              <input v-model="config.endTime" type="date" class="input-liquid text-sm flex-1" />
             </div>
           </div>
 
-          <div class="pt-4">
+          <div class="grid grid-cols-2 gap-3 pt-3 border-t border-black/[0.04]">
+            <div>
+              <label class="block text-xs font-medium text-ink-secondary mb-1.5 flex items-center gap-1">
+                <Cpu class="w-3 h-3" /> Workers
+              </label>
+              <input v-model.number="config.workers" type="number" min="1" max="10" class="input-liquid font-mono" />
+            </div>
+            <div class="flex items-end pb-1">
+              <label class="toggle-liquid">
+                <input v-model="config.enable4x" type="checkbox">
+                <div class="toggle-track"></div>
+                <div class="toggle-thumb"></div>
+                <span class="ml-3 text-xs text-ink-secondary">4x</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="pt-3">
             <button 
               v-if="!isRunning"
               @click="runBacktest"
-              class="btn-primary w-full flex justify-center items-center gap-3 bg-gradient-to-r from-purple-500 to-indigo-500 hover:shadow-purple-500/20"
+              class="btn-liquid w-full flex justify-center items-center gap-2"
             >
-              <Play class="w-5 h-5 fill-current" />
-              Start Backtest
+              <Play class="w-4 h-4 fill-current" />
+              Start
             </button>
             <button 
               v-else
               @click="stopBacktest"
-              class="btn-danger w-full flex justify-center items-center gap-3 animate-pulse"
+              class="btn-liquid-danger w-full flex justify-center items-center gap-2"
             >
-              <Square class="w-5 h-5 fill-current" />
-              Stop Backtest
+              <Square class="w-4 h-4 fill-current" />
+              Stop
             </button>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Logs (8 cols) -->
-    <div class="lg:col-span-8 space-y-6">
-      <div v-if="isRunning" class="glass-card p-4 flex items-center justify-between border-neon-teal/30 bg-neon-teal/5 animate-slide-up">
-          <div class="flex items-center gap-3">
-             <Loader2 class="w-5 h-5 animate-spin text-neon-teal" />
-             <span class="text-snow font-medium tracking-wide">Backtest running... processing historical data.</span>
-          </div>
+    <!-- Logs -->
+    <div class="lg:col-span-8 space-y-4">
+      <div v-if="isRunning" class="liquid-glass p-3 flex items-center gap-3 animate-slide-up">
+        <Loader2 class="w-4 h-4 animate-spin text-blue" />
+        <span class="text-ink text-sm">Running...</span>
+        <span class="badge-liquid ml-auto">{{ config.workers }} workers</span>
       </div>
 
-       <div class="glass-card p-6 animate-slide-up" style="animation-delay: 0.2s;">
-        <h3 class="text-sm font-bold text-mist uppercase tracking-widest mb-4 flex items-center gap-2">
-          <Play class="w-4 h-4 text-neon-teal" />
-          Execution Logs
+      <div class="liquid-glass p-5 animate-slide-up">
+        <h3 class="text-xs font-semibold text-ink-tertiary uppercase tracking-wider mb-3 flex items-center gap-2">
+          <Play class="w-4 h-4" />
+          Logs
         </h3>
         <LogTerminal :logs="logs" class="min-h-[400px]" />
       </div>
