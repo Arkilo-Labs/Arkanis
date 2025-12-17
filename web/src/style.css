@@ -1,22 +1,51 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+SC:wght@400;500;700;900&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ============================================
-   LIQUID GLASS - 极简灰白设计系统
+   BENTO GLASS - 深色主题设计系统
    ============================================ */
 :root {
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 18px;
-  --radius-xl: 22px;
-  --blur-glass: 20px;
+  /* 背景层次 */
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-elevated: #1a1a24;
+
+  /* 文字颜色 */
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-tertiary: rgba(255, 255, 255, 0.5);
+  --text-muted: rgba(255, 255, 255, 0.3);
+
+  /* 高亮文字 */
+  --highlight-color: #ffffff;
+
+  /* 单色高亮透明度渐变 */
+  --glow-blue: linear-gradient(180deg, rgba(0, 122, 255, 0.8) 0%, rgba(0, 122, 255, 0) 100%);
+  --glow-green: linear-gradient(180deg, rgba(52, 199, 89, 0.8) 0%, rgba(52, 199, 89, 0) 100%);
+  --glow-red: linear-gradient(180deg, rgba(255, 59, 48, 0.8) 0%, rgba(255, 59, 48, 0) 100%);
+  --glow-purple: linear-gradient(180deg, rgba(175, 82, 222, 0.8) 0%, rgba(175, 82, 222, 0) 100%);
+  --glow-orange: linear-gradient(180deg, rgba(255, 149, 0, 0.8) 0%, rgba(255, 149, 0, 0) 100%);
+
+  /* 玻璃效果 */
+  --glass-bg: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-shine: rgba(255, 255, 255, 0.15);
+
+  /* 圆角 */
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-xl: 32px;
+
+  /* 动效 */
   --duration-fast: 150ms;
-  --duration-normal: 250ms;
+  --duration-normal: 300ms;
+  --duration-slow: 500ms;
   --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 2.2);
 }
 
 /* ============================================
@@ -25,273 +54,642 @@
 @layer base {
   html {
     scroll-behavior: smooth;
+    font-size: 16px;
   }
 
   body {
-    @apply bg-canvas text-ink font-sans antialiased;
+    font-family: 'Inter', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   ::selection {
-    @apply bg-blue/20 text-ink;
+    background: rgba(0, 122, 255, 0.3);
+    color: white;
   }
 
   :focus-visible {
-    @apply outline-none ring-2 ring-blue/40 ring-offset-2 ring-offset-surface;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.5);
   }
 }
 
 /* ============================================
-   COMPONENTS
+   LIQUID GLASS
    ============================================ */
 @layer components {
 
-  /* 玻璃卡片 */
-  .liquid-glass {
+  /* 基础玻璃卡片 */
+  .liquidGlass-wrapper {
     position: relative;
-    background: rgba(255, 255, 255, 0.72);
-    backdrop-filter: blur(var(--blur-glass)) saturate(180%);
-    -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(180%);
-    border: 1px solid rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 1.5rem;
     border-radius: var(--radius-lg);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+    cursor: default;
+    box-shadow:
+      0 6px 6px rgba(0, 0, 0, 0.2),
+      0 0 40px rgba(0, 0, 0, 0.1);
+    transition: all 0.4s var(--ease-spring);
+  }
+
+  .liquidGlass-wrapper:hover {
+    transform: translateY(-2px);
+    box-shadow:
+      0 12px 20px rgba(0, 0, 0, 0.3),
+      0 0 60px rgba(0, 0, 0, 0.15);
+  }
+
+  /* 扭曲层 */
+  .liquidGlass-effect {
+    position: absolute;
+    z-index: 0;
+    inset: 0;
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    filter: url(#glass-distortion);
+  }
+
+  /* 色调层 */
+  .liquidGlass-tint {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: inherit;
+  }
+
+  /* 光泽层 */
+  .liquidGlass-shine {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow:
+      inset 1px 1px 0 0 rgba(255, 255, 255, 0.1),
+      inset -1px -1px 0 0 rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* 内容层 */
+  .liquidGlass-content {
+    position: relative;
+    z-index: 3;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* 简化版玻璃卡片 */
+  .glass-card {
+    position: relative;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    isolation: isolate;
+    transform: translateZ(0);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
     transition: all var(--duration-normal) var(--ease-smooth);
   }
 
-  .liquid-glass::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 20px;
-    right: 20px;
-    height: 1px;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
-    pointer-events: none;
+  .glass-card:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow:
+      0 8px 40px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
   }
 
-  .liquid-glass:hover {
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06), 0 12px 40px rgba(0, 0, 0, 0.08);
+  /* ============================================
+     TYPOGRAPHY
+     ============================================ */
+
+  /* 超大中文标题 */
+  .text-hero-cn {
+    font-family: 'Noto Sans SC', sans-serif;
+    font-size: clamp(3rem, 8vw, 6rem);
+    font-weight: 900;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
   }
 
-  .glass-card {
-    @apply liquid-glass;
+  /* 英文小字点缀 */
+  .text-subtitle-en {
+    font-family: 'Inter', sans-serif;
+    font-size: clamp(0.75rem, 1.5vw, 1rem);
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
   }
 
-  /* 输入框 */
-  .input-liquid {
-    @apply w-full px-4 py-3 text-ink placeholder-ink-muted font-sans bg-white;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: var(--radius-md);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
-    transition: all var(--duration-fast) var(--ease-smooth);
+  /* 苹果渐变文字 */
+  .text-apple-gradient {
+    color: var(--highlight-color);
   }
 
-  .input-liquid:hover {
-    border-color: rgba(0, 0, 0, 0.12);
+  /* 超大数字 */
+  .text-giant-number {
+    font-family: 'Inter', sans-serif;
+    font-size: clamp(4rem, 12vw, 8rem);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.04em;
   }
 
-  .input-liquid:focus {
-    @apply outline-none;
-    border-color: rgba(0, 122, 255, 0.5);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 3px rgba(0, 122, 255, 0.1);
+  /* 大数字 */
+  .text-big-number {
+    font-family: 'Inter', sans-serif;
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
   }
 
-  .input-premium {
-    @apply input-liquid;
+  /* 标签文字 */
+  .text-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
   }
 
-  /* 下拉框 */
-  .select-liquid {
-    @apply input-liquid cursor-pointer;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236e6e73' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 12px center;
-    padding-right: 40px;
+  /* ============================================
+     BENTO GRID
+     ============================================ */
+
+  .bento-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(12, 1fr);
+    width: 100%;
   }
 
-  /* 主按钮 */
-  .btn-liquid {
+  /* 响应式断点 */
+  @media (max-width: 1024px) {
+    .bento-grid {
+      grid-template-columns: repeat(6, 1fr);
+    }
+  }
+
+  @media (max-width: 768px) {
+    .bento-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* 1920px+ 优化 */
+  @media (min-width: 1920px) {
+    .bento-grid {
+      gap: 1.5rem;
+    }
+  }
+
+  /* 卡片尺寸 */
+  .bento-sm {
+    grid-column: span 3;
+  }
+
+  .bento-md {
+    grid-column: span 4;
+  }
+
+  .bento-lg {
+    grid-column: span 6;
+  }
+
+  .bento-xl {
+    grid-column: span 8;
+  }
+
+  .bento-full {
+    grid-column: span 12;
+  }
+
+  @media (max-width: 1024px) {
+
+    .bento-sm,
+    .bento-md {
+      grid-column: span 3;
+    }
+
+    .bento-lg,
+    .bento-xl {
+      grid-column: span 6;
+    }
+
+    .bento-full {
+      grid-column: span 6;
+    }
+  }
+
+  @media (max-width: 768px) {
+
+    .bento-sm,
+    .bento-md,
+    .bento-lg,
+    .bento-xl,
+    .bento-full {
+      grid-column: span 1;
+    }
+  }
+
+  /* ============================================
+     BUTTONS
+     ============================================ */
+
+  .btn-glass {
     position: relative;
-    @apply font-semibold py-3 px-6 text-white;
-    background: #007aff;
-    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.875rem 1.5rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: white;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: var(--radius-md);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(0, 122, 255, 0.2);
+    cursor: pointer;
+    overflow: hidden;
     transition: all var(--duration-fast) var(--ease-smooth);
+    box-shadow:
+      0 2px 8px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
 
-  .btn-liquid::before {
+  .btn-glass::before {
     content: '';
     position: absolute;
     top: 0;
-    left: 10%;
-    right: 10%;
+    left: 0;
+    right: 0;
     height: 50%;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.25) 0%, transparent 100%);
-    border-radius: var(--radius-lg) var(--radius-lg) 100% 100%;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 100%);
     pointer-events: none;
   }
 
-  .btn-liquid:hover {
-    background: #0066d6;
+  .btn-glass:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.3);
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12), 0 8px 20px rgba(0, 122, 255, 0.25);
+    box-shadow:
+      0 4px 16px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
   }
 
-  .btn-liquid:active {
+  .btn-glass:active {
     transform: translateY(0);
   }
 
-  .btn-primary {
-    @apply btn-liquid;
+  .btn-glass-danger {
+    background: rgba(255, 59, 48, 0.9);
+    box-shadow:
+      0 2px 8px rgba(255, 59, 48, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
   }
 
-  /* 危险按钮 */
-  .btn-liquid-danger {
-    @apply btn-liquid;
-    background: #ff3b30;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(255, 59, 48, 0.2);
+  .btn-glass-danger:hover {
+    background: rgba(255, 59, 48, 1);
+    box-shadow:
+      0 4px 16px rgba(255, 59, 48, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3);
   }
 
-  .btn-liquid-danger:hover {
-    background: #e0332a;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12), 0 8px 20px rgba(255, 59, 48, 0.25);
+  .btn-glass-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow:
+      0 2px 8px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
   }
 
-  .btn-danger {
-    @apply btn-liquid-danger;
+  .btn-glass-secondary:hover {
+    background: rgba(255, 255, 255, 0.15);
+    box-shadow:
+      0 4px 16px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
   }
 
-  /* 次级按钮 */
-  .btn-secondary {
-    @apply font-semibold py-3 px-6 text-ink-secondary bg-white;
-    border: 1px solid rgba(0, 0, 0, 0.1);
+  /* ============================================
+     INPUTS
+     ============================================ */
+
+  .input-glass {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    font-family: 'Inter', monospace;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: var(--radius-md);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    outline: none;
     transition: all var(--duration-fast) var(--ease-smooth);
   }
 
-  .btn-secondary:hover {
-    background: #f5f5f7;
-    border-color: rgba(0, 0, 0, 0.15);
+  .input-glass::placeholder {
+    color: var(--text-muted);
   }
 
-  /* Toggle */
-  .toggle-liquid {
+  .input-glass:hover {
+    border-color: rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.35);
+  }
+
+  .input-glass:focus {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(0, 0, 0, 0.35);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.05);
+  }
+
+  .select-glass {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 40px;
+    cursor: pointer;
+  }
+
+  /* ============================================
+     TOGGLE
+     ============================================ */
+
+  .toggle-glass {
     position: relative;
     display: inline-flex;
     align-items: center;
     cursor: pointer;
   }
 
-  .toggle-liquid input {
+  .toggle-glass input {
     position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border-width: 0;
+    opacity: 0;
+    width: 0;
+    height: 0;
   }
 
-  .toggle-liquid .toggle-track {
-    width: 46px;
-    height: 26px;
-    border-radius: 13px;
-    background: #e5e5ea;
+  .toggle-glass .toggle-track {
+    width: 48px;
+    height: 28px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     transition: all var(--duration-fast) var(--ease-smooth);
   }
 
-  .toggle-liquid .toggle-thumb {
+  .toggle-glass .toggle-thumb {
     position: absolute;
-    top: 3px;
-    left: 3px;
+    top: 4px;
+    left: 4px;
     width: 20px;
     height: 20px;
     border-radius: 10px;
     background: white;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15), 0 0 1px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
     transition: all var(--duration-fast) var(--ease-spring);
   }
 
-  .toggle-liquid input:checked+.toggle-track {
-    background: #007aff;
+  .toggle-glass input:checked+.toggle-track {
+    background: rgba(0, 122, 255, 0.9);
+    border-color: rgba(0, 122, 255, 0.9);
   }
 
-  .toggle-liquid input:checked~.toggle-thumb {
+  .toggle-glass input:checked~.toggle-thumb {
     transform: translateX(20px);
   }
 
-  /* Scrollbar */
-  .scrollbar-liquid::-webkit-scrollbar {
+  /* ============================================
+     TERMINAL
+     ============================================ */
+
+  .terminal-glass {
+    font-family: 'SF Mono', 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+  }
+
+  .terminal-glass .log-time {
+    color: var(--text-muted);
+  }
+
+  .terminal-glass .log-stdout {
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .terminal-glass .log-stderr {
+    color: #ff9500;
+  }
+
+  .terminal-glass .log-error {
+    color: #ff3b30;
+    font-weight: 600;
+  }
+
+  /* ============================================
+     SCROLLBAR
+     ============================================ */
+
+  .scrollbar-glass::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
 
-  .scrollbar-liquid::-webkit-scrollbar-track {
+  .scrollbar-glass::-webkit-scrollbar-track {
     background: transparent;
   }
 
-  .scrollbar-liquid::-webkit-scrollbar-thumb {
-    background: rgba(0, 0, 0, 0.15);
+  .scrollbar-glass::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
     border-radius: 3px;
   }
 
-  .scrollbar-liquid::-webkit-scrollbar-thumb:hover {
-    background: rgba(0, 0, 0, 0.25);
+  .scrollbar-glass::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
   }
 
-  .scrollbar-thin {
-    @apply scrollbar-liquid;
-  }
+  /* ============================================
+     BADGES
+     ============================================ */
 
-  /* Terminal */
-  .terminal-liquid {
-    @apply font-mono text-sm;
-    background: #f0f0f2;
-    color: #424245;
-    border: 1px solid rgba(0, 0, 0, 0.06);
-    border-radius: var(--radius-md);
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
-  }
-
-  /* Badge */
-  .badge-liquid {
-    @apply inline-flex items-center px-2.5 py-0.5 text-xs font-medium rounded-full;
-    background: rgba(0, 0, 0, 0.04);
-    color: #6e6e73;
+  .badge-glass {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
   }
 
   .badge-blue {
-    @apply badge-liquid;
-    background: rgba(0, 122, 255, 0.1);
-    color: #007aff;
+    background: rgba(0, 122, 255, 0.2);
+    color: #5ac8fa;
   }
 
   .badge-green {
-    @apply badge-liquid;
-    background: rgba(52, 199, 89, 0.1);
+    background: rgba(52, 199, 89, 0.2);
     color: #34c759;
   }
 
   .badge-red {
-    @apply badge-liquid;
-    background: rgba(255, 59, 48, 0.1);
-    color: #ff3b30;
+    background: rgba(255, 59, 48, 0.2);
+    color: #ff6b6b;
+  }
+
+  .badge-orange {
+    background: rgba(255, 149, 0, 0.2);
+    color: #ff9500;
+  }
+
+  /* ============================================
+     GLOW EFFECTS
+     ============================================ */
+
+  .glow-blue {
+    position: relative;
+  }
+
+  .glow-blue::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--glow-blue);
+    border-radius: inherit;
+    opacity: 0.3;
+    pointer-events: none;
+    z-index: -1;
+    filter: blur(40px);
+  }
+
+  .glow-green::after {
+    background: var(--glow-green);
+  }
+
+  .glow-red::after {
+    background: var(--glow-red);
+  }
+
+  .glow-purple::after {
+    background: var(--glow-purple);
+  }
+
+  /* ============================================
+     MENU ITEM (from user spec)
+     ============================================ */
+
+  .menu-item {
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.75rem;
+    transition: all 0.15s ease-in;
+  }
+
+  .menu-item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    box-shadow: inset -2px -2px 2px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(2px);
+  }
+
+  .menu-item.active {
+    background-color: rgba(255, 255, 255, 0.15);
+  }
+
+  /* ============================================
+     ANIMATIONS
+     ============================================ */
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes pulse {
+
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.4s ease-out;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .animate-pulse {
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  /* stagger */
+  .stagger-1 {
+    animation-delay: 0.1s;
+  }
+
+  .stagger-2 {
+    animation-delay: 0.2s;
+  }
+
+  .stagger-3 {
+    animation-delay: 0.3s;
+  }
+
+  .stagger-4 {
+    animation-delay: 0.4s;
+  }
+}
+
+/* ============================================
+   UTILITIES
+   ============================================ */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
   }
 }
 
 /* ============================================
    BASE OVERRIDES
    ============================================ */
-:root {
-  font-family: Inter, system-ui, sans-serif;
-  line-height: 1.5;
-  color-scheme: light;
-  -webkit-font-smoothing: antialiased;
+* {
+  box-sizing: border-box;
 }
 
 body {
@@ -301,15 +699,17 @@ body {
 
 #app {
   width: 100%;
+  min-height: 100vh;
 }
 
 a {
-  color: #007aff;
+  color: #5ac8fa;
   text-decoration: none;
+  transition: color var(--duration-fast) var(--ease-smooth);
 }
 
 a:hover {
-  color: #0066d6;
+  color: #007aff;
 }
 
 button {
@@ -317,6 +717,7 @@ button {
   cursor: pointer;
 }
 
+/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
 
   *,

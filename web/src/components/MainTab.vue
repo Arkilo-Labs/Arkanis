@@ -1,6 +1,5 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
-import { Play, Square, Loader2, Image as ImageIcon, FileText, Activity, TrendingUp, TrendingDown } from 'lucide-vue-next';
 import LogTerminal from './LogTerminal.vue';
 import { useSocket } from '../composables/useSocket';
 
@@ -113,145 +112,197 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
-    <!-- Left -->
-    <div class="lg:col-span-4 space-y-5">
-      
-      <!-- Config -->
-      <div class="liquid-glass p-5 animate-slide-up">
-        <h2 class="text-xs font-semibold text-ink-tertiary uppercase tracking-wider mb-4 flex items-center gap-2">
-          <FileText class="w-4 h-4" />
-          Configuration
-        </h2>
-        
-        <div class="space-y-4">
-          <div>
-            <label class="block text-xs font-medium text-ink-secondary mb-1.5">Symbol</label>
-            <input v-model="config.symbol" type="text" class="input-liquid font-mono" placeholder="BTCUSDT" />
-          </div>
-
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-medium text-ink-secondary mb-1.5">Timeframe</label>
-              <select v-model="config.timeframe" class="select-liquid">
-                <option v-for="tf in timeframes" :key="tf" :value="tf">{{ tf }}</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-ink-secondary mb-1.5">Bars</label>
-              <input v-model.number="config.bars" type="number" class="input-liquid font-mono" />
-            </div>
-          </div>
-
-          <div class="pt-3 border-t border-black/[0.04]">
-            <label class="toggle-liquid">
-              <input v-model="config.enable4x" type="checkbox">
-              <div class="toggle-track"></div>
-              <div class="toggle-thumb"></div>
-              <span class="ml-3 text-sm text-ink-secondary">4x Chart</span>
-            </label>
-          </div>
-          
-          <div v-if="config.enable4x" class="animate-fade-in">
-            <label class="block text-xs font-medium text-ink-secondary mb-1.5">Aux Timeframe</label>
-            <select v-model="config.auxTimeframe" class="select-liquid">
-              <option value="">Auto</option>
-              <option v-for="tf in timeframes" :key="tf" :value="tf">{{ tf }}</option>
-            </select>
-          </div>
-
-          <div class="pt-3">
-            <button 
-              v-if="!isRunning"
-              @click="runScript"
-              class="btn-liquid w-full flex justify-center items-center gap-2"
-            >
-              <Play class="w-4 h-4 fill-current" />
-              Run Analysis
-            </button>
-            <button 
-              v-else
-              @click="stopScript"
-              class="btn-liquid-danger w-full flex justify-center items-center gap-2"
-            >
-              <Square class="w-4 h-4 fill-current" />
-              Stop
-            </button>
-          </div>
+  <div class="space-y-6">
+    <!-- Hero Section -->
+    <div class="glass-card p-8 animate-slide-up">
+      <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+        <div>
+          <span class="text-subtitle-en mb-2 block">AI-Powered Trading Analysis</span>
+          <h1 class="text-hero-cn text-apple-gradient">策略分析</h1>
         </div>
-      </div>
-
-      <!-- Result -->
-      <div v-if="resultJson" class="liquid-glass p-5 animate-slide-up">
-        <div class="flex justify-between items-start mb-4">
-          <div>
-            <div class="text-xs font-medium text-ink-tertiary mb-1">Decision</div>
-            <div class="text-2xl font-bold" :class="resultJson.enter ? 'text-green' : 'text-ink-tertiary'">
-              {{ resultJson.enter ? 'ENTER' : 'WAIT' }}
-            </div>
+        <div class="flex items-center gap-4">
+          <div v-if="resultJson" class="text-right">
+            <span class="text-label block mb-1">Confidence</span>
+            <span class="text-big-number text-apple-gradient">{{ (resultJson.confidence * 100).toFixed(0) }}%</span>
           </div>
-          <div v-if="resultJson.enter" class="text-right">
-            <div class="text-xs font-medium text-ink-tertiary mb-1">Confidence</div>
-            <div class="text-lg font-mono text-ink">{{ (resultJson.confidence * 100).toFixed(0) }}%</div>
-          </div>
-        </div>
-
-        <div v-if="resultJson.enter" class="grid grid-cols-2 gap-3 mb-4 p-3 rounded-lg bg-canvas border border-black/[0.04]">
-          <div>
-            <span class="text-xs text-ink-tertiary block mb-0.5">Direction</span>
-            <div class="flex items-center gap-1.5 font-semibold" :class="resultJson.direction === 'LONG' ? 'text-green' : 'text-red'">
-              <component :is="resultJson.direction === 'LONG' ? TrendingUp : TrendingDown" class="w-4 h-4" />
-              {{ resultJson.direction }}
-            </div>
-          </div>
-          <div>
-            <span class="text-xs text-ink-tertiary block mb-0.5">Entry</span>
-            <div class="font-mono text-ink">{{ resultJson.entryPrice }}</div>
-          </div>
-        </div>
-
-        <div class="pt-3 border-t border-black/[0.04]">
-          <div class="text-xs font-medium text-ink-tertiary mb-2 flex items-center gap-1.5">
-            <Activity class="w-3 h-3" />
-            Reasoning
-          </div>
-          <p class="text-sm text-ink-secondary leading-relaxed max-h-28 overflow-y-auto scrollbar-liquid">
-            {{ resultJson.reason }}
-          </p>
+          <button 
+            v-if="!isRunning"
+            @click="runScript"
+            class="btn-glass h-14 px-8"
+          >
+            <i class="fas fa-play"></i>
+            <span class="font-bold">开始分析</span>
+          </button>
+          <button 
+            v-else
+            @click="stopScript"
+            class="btn-glass btn-glass-danger h-14 px-8"
+          >
+            <i class="fas fa-stop"></i>
+            <span class="font-bold">停止</span>
+          </button>
         </div>
       </div>
     </div>
 
-    <!-- Right -->
-    <div class="lg:col-span-8 space-y-5">
+    <!-- Bento Grid -->
+    <div class="bento-grid">
       
-      <!-- Chart -->
-      <div class="liquid-glass p-1 min-h-[460px] flex items-center justify-center animate-slide-up">
-        <div v-if="resultImage" class="w-full h-full p-0.5">
-          <img :src="resultImage" class="w-full h-auto rounded-[14px] shadow-glass" alt="Analysis" />
-        </div>
-        
-        <div v-else-if="isRunning" class="flex flex-col items-center gap-3">
-          <Loader2 class="w-10 h-10 animate-spin text-blue" />
-          <span class="text-ink-tertiary text-sm">Processing...</span>
-        </div>
-        
-        <div v-else class="flex flex-col items-center gap-3 opacity-40">
-          <div class="w-16 h-16 rounded-2xl bg-canvas border border-black/[0.04] flex items-center justify-center">
-            <ImageIcon class="w-7 h-7 text-ink-muted" />
+      <!-- Config Card -->
+      <div class="bento-md glass-card p-6 animate-slide-up stagger-1">
+        <div class="liquidGlass-content">
+          <h2 class="text-label flex items-center gap-2 mb-6">
+            <i class="fas fa-sliders-h"></i>
+            Configuration
+          </h2>
+          
+          <div class="space-y-5">
+            <!-- Symbol -->
+            <div>
+              <label class="text-label block mb-2">交易对 Symbol</label>
+              <input 
+                v-model="config.symbol" 
+                type="text" 
+                class="input-glass font-mono"
+                placeholder="BTCUSDT"
+              />
+            </div>
+
+            <!-- Timeframe & Bars -->
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-label block mb-2">周期 Timeframe</label>
+                <select v-model="config.timeframe" class="input-glass select-glass">
+                  <option v-for="tf in timeframes" :key="tf" :value="tf">{{ tf }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-label block mb-2">K线数 Bars</label>
+                <input v-model.number="config.bars" type="number" class="input-glass font-mono" />
+              </div>
+            </div>
+
+            <!-- 4x Toggle -->
+            <div class="pt-4 border-t border-white/10">
+              <label class="toggle-glass">
+                <input v-model="config.enable4x" type="checkbox">
+                <div class="toggle-track"></div>
+                <div class="toggle-thumb"></div>
+                <span class="ml-3 text-sm text-white/70">4x Chart Mode</span>
+              </label>
+            </div>
+            
+            <div v-if="config.enable4x" class="animate-fade-in">
+              <label class="text-label block mb-2">辅助周期 Aux Timeframe</label>
+              <select v-model="config.auxTimeframe" class="input-glass select-glass">
+                <option value="">Auto</option>
+                <option v-for="tf in timeframes" :key="tf" :value="tf">{{ tf }}</option>
+              </select>
+            </div>
           </div>
-          <span class="text-ink-muted text-sm">Ready</span>
         </div>
       </div>
 
-      <!-- Logs -->
-      <div class="liquid-glass p-5 animate-slide-up">
-        <h3 class="text-xs font-semibold text-ink-tertiary uppercase tracking-wider mb-3 flex items-center gap-2">
-          <Terminal class="w-4 h-4" />
-          Logs
-        </h3>
-        <LogTerminal :logs="logs" class="min-h-[160px]" />
+      <!-- Chart Display -->
+      <div class="bento-xl glass-card p-4 min-h-[500px] flex items-center justify-center animate-slide-up stagger-2">
+        <!-- Result Image -->
+        <div v-if="resultImage" class="w-full h-full">
+          <img 
+            :src="resultImage" 
+            class="w-full h-auto rounded-2xl shadow-2xl" 
+            alt="Analysis Result"
+          />
+        </div>
+        
+        <!-- Loading State -->
+        <div v-else-if="isRunning" class="flex flex-col items-center gap-4">
+          <div class="w-16 h-16 rounded-2xl bg-blue-500/20 flex items-center justify-center">
+            <i class="fas fa-spinner fa-spin text-blue-400 text-2xl"></i>
+          </div>
+          <div class="text-center">
+            <span class="text-white/80 text-lg font-medium block">分析中</span>
+            <span class="text-white/40 text-sm">Processing...</span>
+          </div>
+        </div>
+        
+        <!-- Empty State -->
+        <div v-else class="flex flex-col items-center gap-4 opacity-40">
+          <div class="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center">
+            <i class="fas fa-chart-area text-white/30 text-3xl"></i>
+          </div>
+          <div class="text-center">
+            <span class="text-white/50 text-lg block">等待分析</span>
+            <span class="text-white/30 text-sm">Ready to analyze</span>
+          </div>
+        </div>
       </div>
+
+      <!-- Decision Panel -->
+      <div v-if="resultJson" class="bento-md glass-card p-6 animate-slide-up stagger-3">
+        <div class="liquidGlass-content">
+          <h2 class="text-label flex items-center gap-2 mb-6">
+            <i class="fas fa-brain"></i>
+            Decision Result
+          </h2>
+
+          <!-- Main Decision -->
+          <div class="mb-6">
+            <span class="text-subtitle-en block mb-2">Trading Signal</span>
+            <div class="text-giant-number" :class="resultJson.enter ? 'text-green-400' : 'text-white/30'">
+              {{ resultJson.enter ? 'ENTER' : 'WAIT' }}
+            </div>
+          </div>
+
+          <!-- Details -->
+          <div v-if="resultJson.enter" class="space-y-4">
+            <!-- Direction -->
+            <div class="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
+              <span class="text-label">方向 Direction</span>
+              <div class="flex items-center gap-2">
+                <i 
+                  :class="[
+                    'fas',
+                    resultJson.direction === 'LONG' ? 'fa-arrow-up text-green-400' : 'fa-arrow-down text-red-400'
+                  ]"
+                ></i>
+                <span 
+                  class="text-xl font-bold"
+                  :class="resultJson.direction === 'LONG' ? 'text-green-400' : 'text-red-400'"
+                >
+                  {{ resultJson.direction }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Entry Price -->
+            <div class="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
+              <span class="text-label">入场价 Entry</span>
+              <span class="text-xl font-mono text-white">{{ resultJson.entryPrice }}</span>
+            </div>
+          </div>
+
+          <!-- Reasoning -->
+          <div class="mt-6 pt-6 border-t border-white/10">
+            <span class="text-label flex items-center gap-2 mb-3">
+              <i class="fas fa-comment-alt"></i>
+              分析理由 Reasoning
+            </span>
+            <p class="text-sm text-white/60 leading-relaxed max-h-32 overflow-y-auto scrollbar-glass">
+              {{ resultJson.reason }}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Logs Terminal -->
+      <div :class="[resultJson ? 'bento-xl' : 'bento-full']" class="glass-card p-6 animate-slide-up stagger-4">
+        <h3 class="text-label flex items-center gap-2 mb-4">
+          <i class="fas fa-terminal"></i>
+          日志输出 Logs
+        </h3>
+        <LogTerminal :logs="logs" class="min-h-[200px] max-h-[300px]" />
+      </div>
+
     </div>
   </div>
 </template>

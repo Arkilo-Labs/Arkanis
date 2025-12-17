@@ -1,6 +1,5 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import { Settings, Save, Loader2, CheckCircle2, AlertCircle, Database, Key, BarChart2, FileText, Sliders } from 'lucide-vue-next';
 
 const config = ref({});
 const schema = ref({});
@@ -8,12 +7,20 @@ const isLoading = ref(false);
 const isSaving = ref(false);
 const saveStatus = ref(null);
 
-const groupIcons = { database: Database, openai: Key, chart: BarChart2, log: FileText, defaults: Sliders };
+const groupIcons = { 
+  database: 'fas fa-database', 
+  openai: 'fas fa-key', 
+  chart: 'fas fa-chart-bar', 
+  log: 'fas fa-file-alt', 
+  defaults: 'fas fa-sliders-h' 
+};
+
 const inputTypes = {
   DB_PORT: 'number', DB_POOL_MIN: 'number', DB_POOL_MAX: 'number', DB_PASSWORD: 'password',
   OPENAI_API_KEY: 'password', OPENAI_MAX_TOKENS: 'number', OPENAI_TEMPERATURE: 'number', OPENAI_TIMEOUT: 'number',
   CHART_WIDTH: 'number', CHART_HEIGHT: 'number', CHART_VOLUME_PANE_HEIGHT: 'number', DEFAULT_BARS: 'number'
 };
+
 const selectOptions = {
   OPENAI_ENABLE_THINKING: ['true', 'false'],
   LOG_LEVEL: ['debug', 'info', 'warn', 'error', 'silent'],
@@ -57,57 +64,80 @@ onMounted(loadConfig);
 </script>
 
 <template>
-  <div class="space-y-5">
-    <!-- Header -->
-    <div class="liquid-glass p-5 flex justify-between items-center animate-slide-up">
-      <div class="flex items-center gap-3">
-        <div class="flex items-center justify-center w-9 h-9 rounded-xl bg-ink shadow">
-          <Settings class="w-5 h-5 text-white" />
-        </div>
+  <div class="space-y-6">
+    <!-- Hero Section -->
+    <div class="glass-card p-8 animate-slide-up">
+      <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
         <div>
-          <h1 class="text-lg font-semibold text-ink">Configuration</h1>
-          <p class="text-xs text-ink-tertiary">Environment variables</p>
+          <span class="text-subtitle-en mb-2 block">Environment Variables</span>
+          <h1 class="text-hero-cn text-apple-gradient">系统配置</h1>
+        </div>
+        <div class="flex items-center gap-4">
+          <button 
+            @click="saveConfig" 
+            :disabled="isSaving"
+            class="btn-glass h-14 px-8"
+          >
+            <i :class="isSaving ? 'fas fa-spinner fa-spin' : 'fas fa-save'"></i>
+            <span class="font-bold">保存配置</span>
+          </button>
         </div>
       </div>
-      
-      <button @click="saveConfig" :disabled="isSaving" class="btn-liquid flex items-center gap-2">
-        <Loader2 v-if="isSaving" class="w-4 h-4 animate-spin" />
-        <Save v-else class="w-4 h-4" />
-        Save
-      </button>
     </div>
 
-    <!-- Status -->
-    <transition enter-active-class="transition duration-200" leave-active-class="transition duration-150"
-      enter-from-class="opacity-0 -translate-y-1" leave-to-class="opacity-0 -translate-y-1">
-      <div v-if="saveStatus === 'success'" class="liquid-glass p-3 flex items-center gap-2 text-green text-sm">
-        <CheckCircle2 class="w-4 h-4" /> Saved. Restart to apply.
+    <!-- Status Toast -->
+    <transition 
+      enter-active-class="transition duration-200" 
+      leave-active-class="transition duration-150"
+      enter-from-class="opacity-0 -translate-y-2" 
+      leave-to-class="opacity-0 -translate-y-2"
+    >
+      <div v-if="saveStatus === 'success'" class="glass-card p-4 flex items-center gap-3 border-green-500/30">
+        <i class="fas fa-check-circle text-green-400"></i>
+        <span class="text-green-400">保存成功，重启后生效 Saved. Restart to apply.</span>
       </div>
-      <div v-else-if="saveStatus === 'error'" class="liquid-glass p-3 flex items-center gap-2 text-red text-sm">
-        <AlertCircle class="w-4 h-4" /> Failed.
+      <div v-else-if="saveStatus === 'error'" class="glass-card p-4 flex items-center gap-3 border-red-500/30">
+        <i class="fas fa-exclamation-circle text-red-400"></i>
+        <span class="text-red-400">保存失败 Failed to save.</span>
       </div>
     </transition>
 
     <!-- Loading -->
-    <div v-if="isLoading" class="flex justify-center py-12">
-      <Loader2 class="w-8 h-8 animate-spin text-ink-muted" />
+    <div v-if="isLoading" class="flex justify-center py-20">
+      <div class="flex flex-col items-center gap-4">
+        <i class="fas fa-spinner fa-spin text-4xl text-white/30"></i>
+        <span class="text-white/50">Loading configuration...</span>
+      </div>
     </div>
 
-    <!-- Groups -->
-    <div v-else class="space-y-5">
-      <div v-for="(group, groupKey) in schema" :key="groupKey" class="liquid-glass p-5 animate-slide-up">
-        <h2 class="text-xs font-semibold text-ink-tertiary uppercase tracking-wider mb-4 flex items-center gap-2 border-b border-black/[0.04] pb-3">
-          <component :is="groupIcons[groupKey]" class="w-4 h-4" />
+    <!-- Config Groups -->
+    <div v-else class="space-y-6">
+      <div 
+        v-for="(group, groupKey) in schema" 
+        :key="groupKey" 
+        class="glass-card p-6 animate-slide-up"
+      >
+        <h2 class="text-label flex items-center gap-2 mb-6 pb-4 border-b border-white/10">
+          <i :class="groupIcons[groupKey]"></i>
           {{ group.label }}
         </h2>
         
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           <div v-for="key in group.items" :key="key">
-            <label class="block text-xs font-medium text-ink-secondary mb-1.5 truncate">{{ key }}</label>
-            <select v-if="hasSelectOptions(key)" v-model="config[key]" class="select-liquid">
+            <label class="text-label block mb-2 truncate" :title="key">{{ key }}</label>
+            <select 
+              v-if="hasSelectOptions(key)" 
+              v-model="config[key]" 
+              class="input-glass select-glass"
+            >
               <option v-for="opt in getSelectOptions(key)" :key="opt" :value="opt">{{ opt }}</option>
             </select>
-            <input v-else v-model="config[key]" :type="getInputType(key)" class="input-liquid font-mono text-sm" />
+            <input 
+              v-else 
+              v-model="config[key]" 
+              :type="getInputType(key)" 
+              class="input-glass font-mono text-sm"
+            />
           </div>
         </div>
       </div>
