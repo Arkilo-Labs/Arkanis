@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package vlmbridge;
+
+message SignalFromSignGit {
+  string event_id = 1;
+  string source = 2;
+
+  string symbol = 10;
+  string timeframe = 11;
+  int64 timestamp_ms = 12;
+
+  string strategy = 20;
+  string signal_type = 21;
+  double score = 22;
+  string basis = 23;
+
+  double entry_price = 30;
+  double stop_loss = 31;
+  double take_profit = 32;
+  double risk_pct = 33;
+  double rr_ratio = 34;
+
+  string analysis_time_iso = 40;
+  string details_json = 41;
+}
+
+message VlmDecision {
+  string event_id = 1;
+  string source = 2;
+
+  string signal_event_id = 10;
+  string symbol = 11;
+  string timeframe = 12;
+  int64 received_timestamp_ms = 13;
+
+  bool enter = 20;
+  string direction = 21;
+  double position_size = 22;
+  int32 leverage = 23;
+  double confidence = 24;
+
+  double entry_price = 30;
+  double stop_loss_price = 31;
+  double take_profit_price = 32;
+
+  string reason = 40;
+  string raw_decision_json = 41;
+  string signal_json = 42;
+}

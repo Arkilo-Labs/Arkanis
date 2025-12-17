@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VLM Bridge 控制台</title>
+    <style>
+      :root {
+        /* 与主 Web UI 一致：深色底 + 玻璃层次（避免蓝紫渐变背景） */
+        --bg: #0a0a0f;
+        --panel: rgba(255,255,255,.06);
+        --border: rgba(255,255,255,.10);
+        --text: rgba(255,255,255,.92);
+        --muted: rgba(255,255,255,.55);
+        --muted2: rgba(255,255,255,.35);
+        --accent: rgba(255, 255, 255, .92);
+        --radius: 18px;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto;
+        background:
+          radial-gradient(1200px 800px at 50% -10%, rgba(255,255,255,.06), transparent 60%),
+          radial-gradient(900px 600px at 15% 0%, rgba(255,255,255,.03), transparent 55%),
+          var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+      }
+
+      a { color: inherit; }
+
+      .container { max-width: 1800px; margin: 0 auto; padding: 20px 16px 28px; }
+
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        padding: 14px 16px;
+        background: rgba(10,10,15,.75);
+        backdrop-filter: blur(18px) saturate(180%);
+        border-bottom: 1px solid rgba(255,255,255,.08);
+      }
+
+      .headerRow { max-width: 1800px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+      .brandTitle { font-weight: 800; letter-spacing: -.01em; }
+      .brandSub { font-size: 11px; color: var(--muted2); letter-spacing: .12em; text-transform: uppercase; }
+      .statusDot { width: 8px; height: 8px; border-radius: 999px; background: #22c55e; box-shadow: 0 0 0 6px rgba(34,197,94,.12); }
+
+      .tabs {
+        display: flex;
+        gap: 6px;
+        padding: 6px;
+        border: 1px solid rgba(255,255,255,.10);
+        background: rgba(255,255,255,.04);
+        border-radius: 14px;
+      }
+
+      .tabBtn {
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--muted);
+        padding: 8px 12px;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all .15s ease;
+        font-weight: 600;
+      }
+
+      .tabBtn:hover { color: rgba(255,255,255,.82); background: rgba(255,255,255,.05); }
+      .tabBtn.active { color: rgba(255,255,255,.95); background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.10); }
+
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+      @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 14px;
+        backdrop-filter: blur(18px) saturate(180%);
+      }
+
+      .cardTitle { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0 0 10px; }
+      .cardTitle h3 { margin: 0; font-size: 14px; font-weight: 800; color: rgba(255,255,255,.92); }
+      .cardTitle small { color: var(--muted2); font-size: 12px; }
+
+      .btnRow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+      .btn {
+        appearance: none;
+        border: 1px solid rgba(255,255,255,.12);
+        background: rgba(255,255,255,.06);
+        color: rgba(255,255,255,.92);
+        padding: 9px 12px;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all .15s ease;
+        font-weight: 650;
+      }
+      .btn:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.18); }
+      .btn.primary { border-color: rgba(0,122,255,.35); background: rgba(0,122,255,.20); }
+      .btn.primary:hover { background: rgba(0,122,255,.26); }
+      .btn.danger { border-color: rgba(255,59,48,.35); background: rgba(255,59,48,.14); }
+
+      .hint { color: var(--muted2); font-size: 12px; line-height: 1.45; }
+      .msg { color: var(--muted); font-size: 12px; }
+      .msg.err { color: rgba(255, 140, 140, .92); }
+
+      textarea {
+        width: 100%;
+        min-height: 360px;
+        resize: vertical;
+        padding: 10px 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(255,255,255,.10);
+        background: rgba(10,10,15,.55);
+        color: rgba(255,255,255,.90);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        line-height: 1.45;
+      }
+
+      pre {
+        margin: 0;
+        padding: 12px;
+        border-radius: 14px;
+        border: 1px solid rgba(255,255,255,.08);
+        background: rgba(10,10,15,.65);
+        overflow: auto;
+        max-height: 420px;
+        color: rgba(255,255,255,.90);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        line-height: 1.45;
+      }
+
+      .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      @media (max-width: 980px) { .split { grid-template-columns: 1fr; } }
+
+      code { color: rgba(255,255,255,.88); background: rgba(255,255,255,.06); padding: 2px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,.08); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="headerRow">
+        <div>
+          <div class="brandTitle">VLM Bridge</div>
+          <div class="brandSub">Channel Console</div>
+        </div>
+
+        <nav class="tabs" aria-label="tabs">
+          <button class="tabBtn active" id="tabConfig" type="button">配置</button>
+          <button class="tabBtn" id="tabStatus" type="button">状态</button>
+        </nav>
+
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div class="statusDot" title="在线"></div>
+          <div class="hint" style="display:none;" id="serverInfo"></div>
+        </div>
+      </div>
+    </header>
+
+    <div class="container">
+      <div class="hint" style="margin: 0 0 12px;">
+        这里直接读写 Redis 的 <code>vlmbridge:config</code>（JSON 字符串）。如果 Redis 里没有配置，会自动用“当前生效配置”填充编辑框，避免你手写空 JSON。
+      </div>
+
+      <section id="panelConfig" class="grid">
+        <div class="card">
+          <div class="cardTitle">
+            <h3>Redis 覆盖配置（可编辑）</h3>
+            <small id="configKey">key: -</small>
+          </div>
+          <div class="btnRow" style="margin: 0 0 10px;">
+            <button class="btn" id="btnLoad" type="button">加载</button>
+            <button class="btn" id="btnFillEffective" type="button">用当前生效配置填充</button>
+            <button class="btn" id="btnFormat" type="button">格式化</button>
+            <button class="btn primary" id="btnSave" type="button">保存</button>
+            <button class="btn danger" id="btnClear" type="button">清空（删除 Redis key）</button>
+            <span id="msg" class="msg"></span>
+          </div>
+          <textarea id="config" spellcheck="false" placeholder="{ ... }"></textarea>
+        </div>
+
+        <div class="card">
+          <div class="cardTitle">
+            <h3>当前生效配置（只读）</h3>
+            <small>defaults + file(bridge.config.json) + redis</small>
+          </div>
+          <pre id="effective"></pre>
+        </div>
+      </section>
+
+      <section id="panelStatus" class="grid" style="display:none;">
+        <div class="card">
+          <div class="cardTitle">
+            <h3>last_signal_json</h3>
+            <small id="statusNow">-</small>
+          </div>
+          <pre id="signal"></pre>
+        </div>
+        <div class="card">
+          <div class="cardTitle">
+            <h3>last_decision_json</h3>
+            <small>vlmbridge:last_decision_json</small>
+          </div>
+          <pre id="decision"></pre>
+        </div>
+
+        <div class="card" style="grid-column: 1 / -1;">
+          <div class="cardTitle">
+            <h3>操作</h3>
+            <small>刷新状态不会改动 Redis</small>
+          </div>
+          <div class="btnRow">
+            <button class="btn" id="btnStatus" type="button">刷新状态</button>
+            <span class="hint">如果你在跑 bridge:vlm / bridge:tg，这里能看到最新 signal/decision 的 JSON。</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -15,7 +15,13 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 import { config, defaultConfig } from '../src/config/index.js';
-import { KlinesRepository, closePool, TIMEFRAME_MINUTES } from '../src/data/index.js';
+import {
+    KlinesRepository,
+    closePool,
+    TIMEFRAME_MINUTES,
+    aggregateBarsByFactor,
+    formatMinutesAsTimeframe,
+} from '../src/data/index.js';
 import { ChartBuilder, ChartInput } from '../src/chart/index.js';
 import { VLMClient, ENHANCED_USER_PROMPT_TEMPLATE, drawInstructionToOverlay } from '../src/vlm/index.js';
 import logger from '../src/utils/logger.js';
@@ -75,6 +81,16 @@ function resolveAuxTimeframe(baseTimeframe, auxTimeframe) {
     }
 
     throw new Error(`无法找到 ${targetMinutes} 分钟对应的 timeframe`);
+}
+
+function buildAuto4xAux({ baseTimeframe, baseBars }) {
+    const baseMinutes = TIMEFRAME_MINUTES[baseTimeframe];
+    if (!baseMinutes) throw new Error(`不支持的主 timeframe: ${baseTimeframe}`);
+
+    const targetMinutes = baseMinutes * 4;
+    const auxTimeframe = formatMinutesAsTimeframe(targetMinutes, TIMEFRAME_MINUTES);
+    const auxBars = aggregateBarsByFactor(baseBars, 4, { align: 'end' });
+    return { auxTimeframe, auxBars };
 }
 
 async function main() {
@@ -170,25 +186,33 @@ async function main() {
 
         if (opts.enable4xChart) {
             try {
-                auxTimeframe = resolveAuxTimeframe(opts.timeframe, opts.auxTimeframe);
-                logger.info(`[信息] 辅助周期: ${auxTimeframe} (主周期: ${opts.timeframe})`);
+                let auxBars;
+                if (opts.auxTimeframe) {
+                    auxTimeframe = resolveAuxTimeframe(opts.timeframe, opts.auxTimeframe);
+                    logger.info(`[信息] 辅助周期: ${auxTimeframe} (主周期: ${opts.timeframe})`);
 
-                const tfMinutes = TIMEFRAME_MINUTES[opts.timeframe];
-                const auxMinutes = TIMEFRAME_MINUTES[auxTimeframe];
+                    const tfMinutes = TIMEFRAME_MINUTES[opts.timeframe];
+                    const auxMinutes = TIMEFRAME_MINUTES[auxTimeframe];
 
-                const primaryEnd = new Date(bars[bars.length - 1].ts.getTime() + tfMinutes * 60 * 1000);
-                const auxFetchStart = new Date(bars[0].ts.getTime() - auxMinutes * opts.bars * 60 * 1000);
+                    const primaryEnd = new Date(bars[bars.length - 1].ts.getTime() + tfMinutes * 60 * 1000);
+                    const auxFetchStart = new Date(bars[0].ts.getTime() - auxMinutes * opts.bars * 60 * 1000);
 
-                const auxBars = await repo.getBarsByRange({
-                    symbol: opts.symbol,
-                    timeframe: auxTimeframe,
-                    startTime: auxFetchStart,
-                    endTime: primaryEnd,
-                });
+                    auxBars = await repo.getBarsByRange({
+                        symbol: opts.symbol,
+                        timeframe: auxTimeframe,
+                        startTime: auxFetchStart,
+                        endTime: primaryEnd,
+                    });
+                } else {
+                    const auto = buildAuto4xAux({ baseTimeframe: opts.timeframe, baseBars: bars });
+                    auxTimeframe = auto.auxTimeframe;
+                    auxBars = auto.auxBars;
+                    logger.info(`[信息] 辅助周期(自动聚合): ${auxTimeframe} (主周期: ${opts.timeframe})`);
+                }
 
                 if (auxBars.length >= 10) {
                     const auxInput = new ChartInput({
-                        bars: auxBars.slice(-opts.bars),
+                        bars: opts.auxTimeframe ? auxBars.slice(-opts.bars) : auxBars,
                         symbol: opts.symbol,
                         timeframe: auxTimeframe,
                     });

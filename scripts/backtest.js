@@ -15,7 +15,13 @@ import { fileURLToPath } from 'url';
 import { tmpdir } from 'os';
 
 import { config, defaultConfig } from '../src/config/index.js';
-import { KlinesRepository, closePool, TIMEFRAME_MINUTES } from '../src/data/index.js';
+import {
+    KlinesRepository,
+    closePool,
+    TIMEFRAME_MINUTES,
+    aggregateBarsByFactor,
+    formatMinutesAsTimeframe,
+} from '../src/data/index.js';
 import { ChartBuilder, ChartInput } from '../src/chart/index.js';
 import { VLMClient } from '../src/vlm/index.js';
 import logger from '../src/utils/logger.js';
@@ -70,6 +76,12 @@ function resolveAuxTimeframe(baseTimeframe, auxTimeframe) {
     }
 
     throw new Error(`无法找到 ${targetMinutes} 分钟对应的 timeframe`);
+}
+
+function buildAuto4xAuxLabel(baseTimeframe) {
+    const baseMinutes = TIMEFRAME_MINUTES[baseTimeframe];
+    if (!baseMinutes) throw new Error(`不支持的主 timeframe: ${baseTimeframe}`);
+    return formatMinutesAsTimeframe(baseMinutes * 4, TIMEFRAME_MINUTES);
 }
 
 /**
@@ -230,10 +242,17 @@ async function main() {
         const endTime = opts.endTime ? parseTime(opts.endTime) : new Date();
 
         let auxTimeframe = null;
+        let useAggregatedAux = false;
         if (opts.enable4xChart) {
             try {
-                auxTimeframe = resolveAuxTimeframe(opts.timeframe, opts.auxTimeframe);
-                logger.info(`辅助周期: ${auxTimeframe} (主周期: ${opts.timeframe})`);
+                if (opts.auxTimeframe) {
+                    auxTimeframe = resolveAuxTimeframe(opts.timeframe, opts.auxTimeframe);
+                    logger.info(`辅助周期: ${auxTimeframe} (主周期: ${opts.timeframe})`);
+                } else {
+                    auxTimeframe = buildAuto4xAuxLabel(opts.timeframe);
+                    useAggregatedAux = true;
+                    logger.info(`辅助周期(自动聚合): ${auxTimeframe} (主周期: ${opts.timeframe})`);
+                }
             } catch (e) {
                 logger.warn(`[警告] ${e.message}，将回退为单图回测`);
             }
@@ -264,7 +283,7 @@ async function main() {
 
         // 辅助周期数据
         let auxBars = null;
-        if (auxTimeframe) {
+        if (auxTimeframe && !useAggregatedAux) {
             const auxMinutes = TIMEFRAME_MINUTES[auxTimeframe];
             const auxDataStart = new Date(dataStartTime.getTime() - auxMinutes * opts.bars * 60 * 1000);
 
@@ -340,7 +359,22 @@ async function main() {
 
             // 渲染辅助图
             let auxImgBuffer = null;
-            if (auxTimeframe && auxBars) {
+            if (useAggregatedAux && auxTimeframe) {
+                const auxHistBars = aggregateBarsByFactor(histBars, 4, { align: 'end' });
+                if (auxHistBars.length >= 10) {
+                    const auxInput = new ChartInput({
+                        bars: auxHistBars,
+                        symbol: opts.symbol,
+                        timeframe: auxTimeframe,
+                    });
+
+                    auxImgBuffer = await builder.buildAndExport(
+                        auxInput,
+                        join(chartsDir || tmpdir(), `temp_aux_${idx}.png`),
+                        { waitMs: opts.wait }
+                    );
+                }
+            } else if (auxTimeframe && auxBars) {
                 const baseTs = targetBar.ts;
                 const baseEnd = new Date(baseTs.getTime() + baseTfMinutes * 60 * 1000);
 
