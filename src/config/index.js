@@ -89,6 +89,7 @@ export const openaiConfig = {
     temperature: getEnvFloat('OPENAI_TEMPERATURE', 0.2),
     timeout: getEnvFloat('OPENAI_TIMEOUT', 240),
     enableThinking: getEnvBool('OPENAI_ENABLE_THINKING', true),
+    promptName: getEnv('PROMPT_NAME', 'default'),
 };
 
 /**

@@ -25,6 +25,7 @@ import { VLMClient, ENHANCED_USER_PROMPT_TEMPLATE } from '../src/vlm/index.js';
 import logger from '../src/utils/logger.js';
 import { decodeSignalFromSignGit, encodeVlmDecision } from '../src/bridge/proto.js';
 import { loadBridgeConfig } from '../src/bridge/redis_config.js';
+import PromptManager from '../src/vlm/promptManager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -267,7 +268,17 @@ async function handleSignal({ signal, cfg, repo, builder, client, redisPub, outp
         if (cfg.vlm.skipVlm) {
             throw new Error('已开启 skipVlm，但未提供决策注入逻辑（当前不支持假决策）');
         }
-        decision = await client.analyzeChart(basePng, { userPrompt });
+
+        let systemPrompt = null;
+        if (cfg.vlm?.promptName) {
+            try {
+                systemPrompt = PromptManager.getPrompt(cfg.vlm.promptName);
+            } catch (e) {
+                logger.warn(`Failed to load prompt ${cfg.vlm.promptName}, using default`);
+            }
+        }
+
+        decision = await client.analyzeChart(basePng, { userPrompt, systemPrompt });
     }
 
     const eventId = crypto.randomUUID();

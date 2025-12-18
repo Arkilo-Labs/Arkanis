@@ -7,6 +7,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { readFile, writeFile } from 'fs/promises';
 import bodyParser from 'body-parser';
+import PromptManager from '../src/vlm/promptManager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -102,10 +103,20 @@ app.post('/api/run-script', (req, res) => {
     }
 });
 
+app.get('/api/prompts', (req, res) => {
+    try {
+        const prompts = PromptManager.listPrompts();
+        res.json(prompts);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // 允许修改的配置项白名单
 const ALLOWED_CONFIG_KEYS = [
     'DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_DATABASE', 'DB_POOL_MIN', 'DB_POOL_MAX',
     'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'OPENAI_MODEL', 'OPENAI_MAX_TOKENS', 'OPENAI_TEMPERATURE', 'OPENAI_TIMEOUT', 'OPENAI_ENABLE_THINKING',
+    'PROMPT_NAME',
     'CHART_WIDTH', 'CHART_HEIGHT', 'CHART_VOLUME_PANE_HEIGHT',
     'LOG_LEVEL',
     'DEFAULT_SYMBOL', 'DEFAULT_TIMEFRAME', 'DEFAULT_BARS'
@@ -119,7 +130,7 @@ const CONFIG_SCHEMA = {
     },
     openai: {
         label: 'OpenAI API',
-        items: ['OPENAI_API_KEY', 'OPENAI_BASE_URL', 'OPENAI_MODEL', 'OPENAI_MAX_TOKENS', 'OPENAI_TEMPERATURE', 'OPENAI_TIMEOUT', 'OPENAI_ENABLE_THINKING']
+        items: ['OPENAI_API_KEY', 'OPENAI_BASE_URL', 'OPENAI_MODEL', 'OPENAI_MAX_TOKENS', 'OPENAI_TEMPERATURE', 'OPENAI_TIMEOUT', 'OPENAI_ENABLE_THINKING', 'PROMPT_NAME']
     },
     chart: {
         label: '图表配置',

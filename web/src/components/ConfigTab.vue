@@ -21,20 +21,30 @@ const inputTypes = {
   CHART_WIDTH: 'number', CHART_HEIGHT: 'number', CHART_VOLUME_PANE_HEIGHT: 'number', DEFAULT_BARS: 'number'
 };
 
-const selectOptions = {
+const selectOptions = ref({
   OPENAI_ENABLE_THINKING: ['true', 'false'],
   LOG_LEVEL: ['debug', 'info', 'warn', 'error', 'silent'],
-  DEFAULT_TIMEFRAME: ['1m', '5m', '15m', '30m', '1h', '4h', '1d']
-};
+  DEFAULT_TIMEFRAME: ['1m', '5m', '15m', '30m', '1h', '4h', '1d'],
+  PROMPT_NAME: ['default'] // Default, will be updated from API
+});
 
 async function loadConfig() {
   isLoading.value = true;
   try {
-    const res = await fetch('/api/config');
-    const data = await res.json();
+    const [resConfig, resPrompts] = await Promise.all([
+      fetch('/api/config'),
+      fetch('/api/prompts')
+    ]);
+    
+    const data = await resConfig.json();
     if (data.error) throw new Error(data.error);
     config.value = data.config;
     schema.value = data.schema;
+
+    const prompts = await resPrompts.json();
+    if (Array.isArray(prompts)) {
+      selectOptions.value.PROMPT_NAME = prompts;
+    }
   } catch (e) { console.error(e); }
   finally { isLoading.value = false; }
 }
@@ -57,8 +67,8 @@ async function saveConfig() {
 }
 
 function getInputType(key) { return inputTypes[key] || 'text'; }
-function hasSelectOptions(key) { return key in selectOptions; }
-function getSelectOptions(key) { return selectOptions[key] || []; }
+function hasSelectOptions(key) { return key in selectOptions.value; }
+function getSelectOptions(key) { return selectOptions.value[key] || []; }
 
 onMounted(loadConfig);
 </script>

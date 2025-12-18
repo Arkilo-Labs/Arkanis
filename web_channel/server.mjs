@@ -8,6 +8,7 @@ import { config as dotenvConfig } from 'dotenv';
 import Redis from 'ioredis';
 
 import { bridgeConfigDefaults, loadBridgeConfig } from '../src/bridge/redis_config.js';
+import PromptManager from '../src/vlm/promptManager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -117,6 +118,15 @@ const server = createServer(async (req, res) => {
                 last_signal_json: lastSignal ? JSON.parse(lastSignal) : null,
                 last_decision_json: lastDecision ? JSON.parse(lastDecision) : null,
             });
+        }
+
+        if (url.pathname === '/api/prompts' && req.method === 'GET') {
+            try {
+                const prompts = PromptManager.listPrompts();
+                return sendJson(res, 200, prompts);
+            } catch (e) {
+                return sendJson(res, 500, { error: e.message });
+            }
         }
 
         return sendJson(res, 404, { error: 'Not found' });

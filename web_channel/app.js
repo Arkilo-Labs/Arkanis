@@ -5,6 +5,7 @@ const elSignal = document.getElementById('signal');
 const elDecision = document.getElementById('decision');
 const elMsg = document.getElementById('msg');
 const elStatusTimeDisplay = document.getElementById('statusTimeDisplay');
+const elPromptSelect = document.getElementById('promptSelect');
 
 const elTabConfig = document.getElementById('tabConfig');
 const elTabStatus = document.getElementById('tabStatus');
@@ -179,9 +180,9 @@ function toggleAutoRefresh() {
 
   if (next) {
     elBtnAutoRefresh.innerHTML = '<i class="fas fa-clock"></i> 自动刷新（开）';
-    refreshStatus({ silent: true }).catch(() => {});
+    refreshStatus({ silent: true }).catch(() => { });
     state.autoRefreshInterval = setInterval(() => {
-      refreshStatus({ silent: true }).catch(() => {});
+      refreshStatus({ silent: true }).catch(() => { });
     }, 5000);
     setMsg('自动刷新已开启（每5秒）');
   } else {
@@ -206,9 +207,52 @@ elTabConfig.addEventListener('click', () => setActiveTab('config'));
 elTabStatus.addEventListener('click', () => {
   setActiveTab('status');
   if (!state.lastRefreshTime) {
-    refreshStatus().catch(() => {});
+    refreshStatus().catch(() => { });
   }
 });
 
+// Prompt Logic
+async function initPrompts() {
+  try {
+    const prompts = await apiGet('/api/prompts');
+    elPromptSelect.innerHTML = prompts.map(p => `<option value="${p}">${p}</option>`).join('');
+  } catch (e) {
+    console.error('Failed to load prompts', e);
+  }
+}
+
+function updateSelectFromConfig(config) {
+  if (!config) return;
+  const val = config.vlm?.promptName || 'default';
+  elPromptSelect.value = val;
+}
+
+elPromptSelect.addEventListener('change', () => {
+  const val = elPromptSelect.value;
+  const raw = elConfig.value || '{}';
+  const parsed = tryParseJson(raw);
+  let obj = parsed.ok && parsed.value ? parsed.value : {};
+
+  if (!obj.vlm) obj.vlm = {};
+  obj.vlm.promptName = val;
+
+  elConfig.value = formatJsonText(obj);
+  setMsg(`已更新 JSON 中的 promptName 为 ${val} (需点击保存)`);
+});
+
+// Hook into loadConfig
+const originalLoadConfig = loadConfig;
+loadConfig = async function (opts) {
+  await originalLoadConfig(opts);
+  // Try to read from editor value first if available, else from effective
+  const raw = elConfig.value;
+  const parsed = tryParseJson(raw);
+  if (parsed.ok && parsed.value) {
+    updateSelectFromConfig(parsed.value);
+  } else if (state.lastConfigData?.effectiveConfig) {
+    updateSelectFromConfig(state.lastConfigData.effectiveConfig);
+  }
+};
+
 setActiveTab('config');
-loadConfig().catch(() => {});
+initPrompts().then(() => loadConfig().catch(() => { }));
