@@ -18,6 +18,7 @@ export const OverlayType = {
     TREND_LINE: 'trend_line',
     PARALLEL_CHANNEL: 'parallel_channel',
     RAY_LINE: 'ray_line',
+    POLYLINE: 'polyline',
     MARKER: 'marker',
     LABEL: 'label',
     VERTICAL_SPAN: 'vertical_span',

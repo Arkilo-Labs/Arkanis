@@ -2,7 +2,8 @@
  * OpenAI Vision API 客户端
  */
 
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
 import axios from 'axios';
 import { openaiConfig } from '../config/index.js';
 import { VLMDecision, VLMDecisionSchema } from './schema.js';
@@ -19,13 +20,18 @@ export const DEFAULT_USER_PROMPT = `请仔细分析这张 K 线图，根据 Syst
 2. 仔细观察右上角的价格刻度，确保你标注的价格在图表显示范围内
 3. 如果没有明确的交易机会，enter 设为 false
 4. 如果决定入场，必须设置止损和止盈价位
-5. 在 draw_instructions 中使用 0~1000 归一化坐标，并在关键点位同时提供 price
-6. 请尽可能的提高盈亏比，确保每笔交易的风险回报比至少为 1:2 或更高。
-7. 你应该仔细分析当前的市场结构、关键支撑阻力位以及价格行为形态
-8. 请尽可能的保守来降低风险
-9. 要顺势交易，不要试图抄底
-10. 警惕假突破
-11. 入场晚了就别入，出场晚了就极速出`;
+5. **entry_price 必须给出具体价格值**，基于以下策略：
+   - 做多：在支撑位上方、回调位、突破后回踩位设置限价买入
+   - 做空：在阻力位下方、反弹位、跌破后反抽位设置限价卖出
+   - 如果当前价格已经是最佳入场点，可以用 "market"
+   - 限价单价格应该比当前价格更优（做多低于当前价，做空高于当前价）
+6. 在 draw_instructions 中使用 0~1000 归一化坐标，并在关键点位同时提供 price
+7. 请尽可能的提高盈亏比，确保每笔交易的风险回报比至少为 1:2 或更高
+8. 你应该仔细分析当前的市场结构、关键支撑阻力位以及价格行为形态
+9. 请尽可能的保守来降低风险
+10. 要顺势交易，不要试图抄底
+11. 警惕假突破
+12. 入场晚了就别入，出场晚了就极速出`;
 
 export const ENHANCED_USER_PROMPT_TEMPLATE = `请仔细分析这张 K 线图。
 
@@ -34,19 +40,153 @@ export const ENHANCED_USER_PROMPT_TEMPLATE = `请仔细分析这张 K 线图。
 - 时间周期: {timeframe}
 - K线数量: {barsCount} 根
 - bar_index 范围: 0 ~ {maxBarIndex} (0=最早, {maxBarIndex}=最新)
+- **重要**: 图表宽度均匀分布 {barsCount} 根 K 线，每根 K 线的宽度相等
+- **定位方法**: 将图表宽度分为 {barsCount} 等份，第 n 根 K 线位于 n/{maxBarIndex} 处
 - 价格范围: {priceMin} ~ {priceMax}
 - 当前价格 (最新收盘): {currentPrice}
 
+# bar_index 精确定位指南
+1. **横向定位**: 图表从左到右线性分布，使用以下公式计算 bar_index
+   - 最左侧（图表起点）= bar_index 0
+   - 最右侧（图表终点）= bar_index {maxBarIndex}
+   - 中间位置 = bar_index {maxBarIndex}/2 = {halfBarIndex}
+   - 任意位置 = (图表宽度占比) × {maxBarIndex}
+
+2. **关键参考点**:
+   - 如果你看到的 K 线在图表 25% 位置，其 bar_index ≈ {quarterBarIndex}
+   - 如果在 50% 位置（中点），bar_index ≈ {halfBarIndex}
+   - 如果在 75% 位置，bar_index ≈ {threeQuarterBarIndex}
+
+3. **识别转折点**: 仔细观察每个波浪的高点/低点，估算其在图表中的水平位置占比，然后换算为 bar_index
+
 # 分析要求
-1. **结构识别**: 首先识别市场结构 (上升/下降/震荡)，用 trend_line 连接 3-5 个波浪点并用 label 标注序号
-2. **关键价位**: 画出 2-3 条支撑线和 2-3 条阻力线
-3. **形态分析**: 如有经典形态 (双顶/双底/头肩/楔形)，用多条 trend_line 勾勒
-4. **入场标注**: 如有机会，用 marker 标注入场点，horizontal_line 标 SL/TP
-5. **坐标规范**: 所有坐标使用 0~1000 归一化（左上角(0,0)→右下角(1000,1000)），并在关键点同时提供 price
+1. **结构识别**: 首先识别市场结构 (上升/下降/震荡) - **这是最重要的步骤**
+   - 找出 3-5 个明显的波浪转折点（Swing High/Low）
+   - **必须用 trend_line 或 polyline 连接这些转折点**
+   - 用 label 标注波浪序号 (1, 2, 3, 4, 5)
+   - **必须提供精确的 bar_index**，根据转折点在图表中的位置估算
+   - **至少画 2-3 条斜向趋势线**，不能只画水平线
+   - 趋势线应该连接实际的高点或低点，不能随意画
+
+2. **关键价位**: 画出 2-3 条支撑线和 2-3 条阻力位
+   - 观察价格多次触及的水平位
+   - 用 horizontal_line 标注，必须提供 price
+   - 注意：水平线是辅助工具，不能替代趋势线
+
+3. **形态分析**: 如有经典形态 (双顶/双底/头肩/楔形/旗形)
+   - 用多条 trend_line 勾勒形态轮廓
+   - 每个关键点必须提供 bar_index 和 price
+
+4. **入场标注**: 如有机会
+   - 用 marker 标注入场点
+   - 用 horizontal_line 标 SL/TP
+   - **必须给出具体的 entry_price**
+
+5. **入场价格策略**:
+   - **做多限价单**: 在关键支撑位上方 10-50 点设置买入价
+     * 例如：支撑 86000，当前价 86200，设置 entry_price: 86050
+   - **做空限价单**: 在关键阻力位下方 10-50 点设置卖出价
+     * 例如：阻力 87400，当前价 87200，设置 entry_price: 87350
+   - **回调入场**: 价格向支撑/阻力回调时的限价位
+     * 例如：趋势向上，等待回调到 0.382 斐波那契位
+   - **市价入场**: 仅在以下情况使用 "market"
+     * 强势突破且不会回踩
+     * 入场机会稍纵即逝
+     * 当前价格就是最佳入场点
+   - **价格合理性检查**:
+     * 限价买入必须 ≤ 当前价格（{currentPrice}）
+     * 限价卖出必须 ≥ 当前价格（{currentPrice}）
+     * 入场价与止损价之间要留出合理的风险空间
+
+6. **坐标规范**:
+   - **优先使用 bar_index + price**，这是最精确的定位方式
+   - 归一化坐标 (x_norm, y_norm) 仅作为辅助参考
+   - x_norm = bar_index × 1000 / {maxBarIndex}
+   - y_norm = (price 的归一化值) × 1000，顶部=0，底部=1000
 
 # 画线数量要求
-- 最少 6 条线，推荐 8-10 条
-- 必须包含: 趋势结构线 + 支撑阻力线 + 波浪序号标签
+- 最少 8 条线，推荐 10-15 条
+- **必须包含**: 趋势结构线 (2-3条 trend_line/polyline，必须有) + 支撑阻力线 (4-6条 horizontal_line) + 波浪标签 (3-5个 label)
+- **禁止**: 不能只画水平线而不画趋势线
+- **优先级**: 趋势线 > 水平线 > 标签
+
+# 示例：如何精确标注和设置入场价格
+假设你识别了一个上升趋势，有 3 个关键点：
+- 点1（起点）: 在图表 10% 位置，价格 85000，估算 bar_index = {maxBarIndex} × 0.1 ≈ {exampleBar1}
+- 点2（中继）: 在图表 50% 位置，价格 84000，估算 bar_index ≈ {halfBarIndex}
+- 点3（高点）: 在图表 90% 位置，价格 87000，估算 bar_index = {maxBarIndex} × 0.9 ≈ {exampleBar3}
+- 当前价格: {currentPrice}
+- 关键支撑位: 86800
+
+入场分析：
+- 趋势向上，应做多
+- 价格在支撑位上方，等待小幅回调后入场
+- 入场价设置在 86850（支撑 86800 上方 50 点）
+- 止损设置在 86600（支撑下方 200 点）
+- 止盈设置在 87600（盈亏比约 1:3.75）
+
+输出示例：
+{{
+  "enter": true,
+  "direction": "long",
+  "entry_price": 86850,
+  "stop_loss_price": 86600,
+  "take_profit_price": 87600,
+  "position_size": 0.3,
+  "leverage": 5,
+  "confidence": 0.75,
+  "reason": "上升趋势完好，价格回调至支撑位上方形成买入机会。设置限价单在86850等待回调入场。",
+  "draw_instructions": [
+    {{
+      "type": "polyline",
+      "points": [
+        {{"bar_index": {exampleBar1}, "price": 85000}},
+        {{"bar_index": {halfBarIndex}, "price": 84000}},
+        {{"bar_index": {exampleBar3}, "price": 87000}}
+      ],
+      "color": "#00ffff",
+      "text": "Uptrend Structure"
+    }},
+    {{
+      "type": "trend_line",
+      "from": {{"bar_index": {exampleBar1}, "price": 85000}},
+      "to": {{"bar_index": {exampleBar3}, "price": 86800}},
+      "color": "#22c55e",
+      "text": "Support Trendline"
+    }},
+    {{
+      "type": "horizontal_line",
+      "price": 86800,
+      "color": "#22c55e",
+      "text": "Support"
+    }},
+    {{
+      "type": "marker",
+      "position": {{"bar_index": {exampleBar3}, "price": 86850}},
+      "shape": "arrow_up",
+      "color": "#00ff00",
+      "text": "Entry"
+    }},
+    {{
+      "type": "horizontal_line",
+      "price": 86600,
+      "color": "#ef4444",
+      "text": "SL"
+    }},
+    {{
+      "type": "horizontal_line",
+      "price": 87600,
+      "color": "#22c55e",
+      "text": "TP"
+    }},
+    {{
+      "type": "label",
+      "position": {{"bar_index": {halfBarIndex}, "price": 84000}},
+      "text": "1",
+      "color": "#ffffff"
+    }}
+  ]
+}}
 
 # 风险提示
 - 顺势交易，不抄底
@@ -125,7 +265,33 @@ function extractJson(text) {
         }
     }
 
-    return content;
+    return sanitizeJson(content);
+}
+
+/**
+ * 清理不规范的 JSON 格式
+ */
+function sanitizeJson(jsonStr) {
+    let cleaned = jsonStr;
+
+    // 1. 移除单行注释 // ...
+    cleaned = cleaned.replace(/\/\/.*$/gm, '');
+
+    // 2. 移除多行注释 /* ... */
+    cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, '');
+
+    // 3. 处理尾随逗号（对象和数组）
+    cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
+
+    // 4. 将单引号替换为双引号（需要小心处理字符串内容）
+    // 简单处理：替换作为字符串分隔符的单引号
+    cleaned = cleaned.replace(/'([^']*?)'/g, '"$1"');
+
+    // 5. 为没有引号的属性名添加引号
+    // 匹配模式: 单词字符后跟冒号，且前面没有引号
+    cleaned = cleaned.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3');
+
+    return cleaned;
 }
 
 /**
@@ -337,7 +503,29 @@ ${primaryUserPrompt || DEFAULT_USER_PROMPT}
      */
     _parseResponse(responseText) {
         const jsonStr = extractJson(responseText);
-        return VLMDecision.fromJson(jsonStr);
+        try {
+            return VLMDecision.fromJson(jsonStr);
+        } catch (error) {
+            logger.error('[JSON解析失败] 原始响应长度:', responseText.length);
+            logger.error('[JSON解析失败] 提取的JSON长度:', jsonStr.length);
+            // 保存到文件以便调试
+            const debugDir = './outputs/debug';
+            if (!existsSync(debugDir)) {
+                mkdirSync(debugDir, { recursive: true });
+            }
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            writeFileSync(
+                join(debugDir, `vlm_response_${timestamp}.txt`),
+                responseText
+            );
+            writeFileSync(
+                join(debugDir, `vlm_json_${timestamp}.txt`),
+                jsonStr
+            );
+            logger.error(`[调试信息] 已保存原始响应到: outputs/debug/vlm_response_${timestamp}.txt`);
+            logger.error(`[调试信息] 已保存提取JSON到: outputs/debug/vlm_json_${timestamp}.txt`);
+            throw error;
+        }
     }
 }
 

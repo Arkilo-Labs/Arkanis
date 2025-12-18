@@ -21,6 +21,7 @@ export const DrawInstructionType = {
     TREND_LINE: 'trend_line',
     PARALLEL_CHANNEL: 'parallel_channel',
     RAY_LINE: 'ray_line',
+    POLYLINE: 'polyline',
     MARKER: 'marker',
     LABEL: 'label',
     VERTICAL_SPAN: 'vertical_span',
@@ -34,8 +35,9 @@ export const AnchorPointSchema = z.object({
     timestamp: z.string().datetime().optional().nullable(),
     price: z.number().optional().nullable(),
     // VLM 坐标策略：0~1000 归一化（左上角(0,0) → 右下角(1000,1000)）
-    x_norm: z.number().min(0).max(1000).optional().nullable(),
-    y_norm: z.number().min(0).max(1000).optional().nullable(),
+    // 使用 coerce 自动修正超出范围的值
+    x_norm: z.coerce.number().transform(val => Math.max(0, Math.min(1000, val))).optional().nullable(),
+    y_norm: z.coerce.number().transform(val => Math.max(0, Math.min(1000, val))).optional().nullable(),
 });
 
 /**
@@ -47,6 +49,7 @@ export const DrawInstructionSchema = z.object({
         'trend_line',
         'parallel_channel',
         'ray_line',
+        'polyline',
         'marker',
         'label',
         'vertical_span',
@@ -57,9 +60,12 @@ export const DrawInstructionSchema = z.object({
     from: AnchorPointSchema.optional().nullable(),
     to: AnchorPointSchema.optional().nullable(),
 
+    // 多点折线专用
+    points: z.array(AnchorPointSchema).optional().nullable(),
+
     // 水平线专用
     price: z.number().optional().nullable(),
-    y_norm: z.number().min(0).max(1000).optional().nullable(),
+    y_norm: z.coerce.number().transform(val => Math.max(0, Math.min(1000, val))).optional().nullable(),
 
     // 平行通道专用
     channel_width: z.number().optional().nullable(),
@@ -70,8 +76,8 @@ export const DrawInstructionSchema = z.object({
     marker_position: z.string().optional().nullable(),
 
     // 垂直区间专用
-    start_x_norm: z.number().min(0).max(1000).optional().nullable(),
-    end_x_norm: z.number().min(0).max(1000).optional().nullable(),
+    start_x_norm: z.coerce.number().transform(val => Math.max(0, Math.min(1000, val))).optional().nullable(),
+    end_x_norm: z.coerce.number().transform(val => Math.max(0, Math.min(1000, val))).optional().nullable(),
     start_bar_index: z.number().int().optional().nullable(),
     end_bar_index: z.number().int().optional().nullable(),
 
@@ -88,11 +94,12 @@ export const VLMDecisionSchema = z.object({
     enter: z.boolean().default(false),
     direction: z
         .preprocess((val) => {
-            if (val === null || val === '' || val === 'none' || val === 'null') return null;
+            if (val === null || val === '' || val === 'none' || val === 'null' || val === 'neutral') return null;
             if (typeof val === 'string') {
                 const v = val.toLowerCase().trim();
                 if (['long', 'buy', '多'].includes(v)) return 'long';
                 if (['short', 'sell', '空'].includes(v)) return 'short';
+                if (['neutral', 'none', 'wait', 'hold'].includes(v)) return null;
             }
             return val;
         }, z.enum(['long', 'short']).nullable().optional())
@@ -178,6 +185,7 @@ export class DrawInstruction {
         this.mode = data.mode ?? 'normalized';
         this.start = data.from ?? null;
         this.end = data.to ?? null;
+        this.points = data.points ?? null;
         this.price = data.price ?? null;
         this.yNorm = data.y_norm ?? null;
         this.channelWidth = data.channel_width ?? null;
@@ -199,6 +207,7 @@ export class DrawInstruction {
             mode: this.mode,
             from: this.start,
             to: this.end,
+            points: this.points,
             price: this.price,
             y_norm: this.yNorm,
             channel_width: this.channelWidth,

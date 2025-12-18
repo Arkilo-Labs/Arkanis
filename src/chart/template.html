@@ -183,9 +183,27 @@
       // 应用标注
       applyOverlays(chart, candleSeries);
 
-      // 自适应
-      chart.timeScale().fitContent();
-      volumeChart.timeScale().fitContent();
+      // 设置可见范围，右侧预留5根K线的空间
+      const totalBars = data.length;
+      if (totalBars > 0) {
+        const rightPadding = 5; // 右侧预留的K线数量
+        const visibleTo = totalBars - 1;
+        const visibleFrom = 0;
+        
+        chart.timeScale().setVisibleLogicalRange({
+          from: visibleFrom - 0.5,
+          to: visibleTo + rightPadding
+        });
+        
+        volumeChart.timeScale().setVisibleLogicalRange({
+          from: visibleFrom - 0.5,
+          to: visibleTo + rightPadding
+        });
+      } else {
+        // 数据为空时使用默认行为
+        chart.timeScale().fitContent();
+        volumeChart.timeScale().fitContent();
+      }
 
       window.mainChart = chart;
       window.candleSeries = candleSeries;
@@ -202,8 +220,12 @@
             applyHorizontalLine(chart, overlay, data);
           } else if (overlay.type === 'trend_line') {
             applyTrendLine(chart, overlay, data);
+          } else if (overlay.type === 'polyline') {
+            applyPolyline(chart, overlay, data);
           } else if (overlay.type === 'marker') {
             applyMarker(candleSeries, overlay, data);
+          } else if (overlay.type === 'label') {
+            applyLabel(candleSeries, overlay, data);
           } else if (overlay.type === 'parallel_channel') {
             applyParallelChannel(chart, overlay, data);
           } else if (overlay.type === 'ray_line') {
@@ -255,6 +277,32 @@
         { time: data[startBarIndex].time, value: overlay.start.price },
         { time: data[endBarIndex].time, value: overlay.end.price },
       ]);
+    }
+
+    function applyPolyline(chart, overlay, data) {
+      if (!overlay.points || overlay.points.length < 2 || !data.length) return;
+
+      const lineData = [];
+      for (const point of overlay.points) {
+        const barIndex = point.barIndex;
+        if (barIndex == null || barIndex < 0 || barIndex >= data.length) continue;
+
+        lineData.push({
+          time: data[barIndex].time,
+          value: point.price
+        });
+      }
+
+      if (lineData.length < 2) return;
+
+      const lineSeries = chart.addLineSeries({
+        color: overlay.color || '#ffffff',
+        lineWidth: overlay.width || 2,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+
+      lineSeries.setData(lineData);
     }
 
     function applyParallelChannel(chart, overlay, data) {
@@ -334,6 +382,25 @@
           time: data[barIndex].time,
           position: positionMap[overlay.position] || 'belowBar',
           shape: shapeMap[overlay.shape] || 'arrowUp',
+          color: overlay.color || '#ffffff',
+          text: overlay.text || '',
+        },
+      ]);
+    }
+
+    function applyLabel(candleSeries, overlay, data) {
+      if (!overlay.start) return;
+
+      const barIndex = overlay.start.barIndex;
+      if (barIndex == null || barIndex < 0 || barIndex >= data.length) return;
+
+      // Label 使用 marker 实现，但用 circle 形状且显示文本
+      candleSeries.setMarkers([
+        ...candleSeries.markers ? candleSeries.markers() : [],
+        {
+          time: data[barIndex].time,
+          position: 'aboveBar',
+          shape: 'circle',
           color: overlay.color || '#ffffff',
           text: overlay.text || '',
         },

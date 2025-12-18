@@ -1,5 +1,6 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
+import CustomSelect from './CustomSelect.vue';
 
 const config = ref({});
 const schema = ref({});
@@ -68,7 +69,10 @@ async function saveConfig() {
 
 function getInputType(key) { return inputTypes[key] || 'text'; }
 function hasSelectOptions(key) { return key in selectOptions.value; }
-function getSelectOptions(key) { return selectOptions.value[key] || []; }
+function getSelectOptions(key) { 
+  const options = selectOptions.value[key] || [];
+  return options.map(opt => ({ value: opt, label: opt }));
+}
 
 onMounted(loadConfig);
 </script>
@@ -135,13 +139,11 @@ onMounted(loadConfig);
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           <div v-for="key in group.items" :key="key">
             <label class="text-label block mb-2 truncate" :title="key">{{ key }}</label>
-            <select 
+            <CustomSelect 
               v-if="hasSelectOptions(key)" 
               v-model="config[key]" 
-              class="input-glass select-glass"
-            >
-              <option v-for="opt in getSelectOptions(key)" :key="opt" :value="opt">{{ opt }}</option>
-            </select>
+              :options="getSelectOptions(key)"
+            />
             <input 
               v-else 
               v-model="config[key]" 

@@ -30,7 +30,7 @@ function escapeHtml(text) {
 function fmtNum(v, digits = 4) {
     if (v === null || v === undefined) return '-';
     const n = Number(v);
-    if (!Number.isFinite(n)) return '-';
+    if (!Number.isFinite(n) || n === 0) return '-';
     return n.toFixed(digits);
 }
 

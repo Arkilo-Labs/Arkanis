@@ -24,8 +24,9 @@ import { ChartBuilder, ChartInput } from '../src/chart/index.js';
 import { VLMClient, ENHANCED_USER_PROMPT_TEMPLATE } from '../src/vlm/index.js';
 import logger from '../src/utils/logger.js';
 import { decodeSignalFromSignGit, encodeVlmDecision } from '../src/bridge/proto.js';
-import { loadBridgeConfig } from '../src/bridge/redis_config.js';
+import { loadBridgeConfig, watchConfigFiles } from '../src/bridge/redis_config.js';
 import PromptManager from '../src/vlm/promptManager.js';
+import { watchEnvFile } from '../src/config/envReloader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -169,12 +170,23 @@ function buildPrompt({ symbol, timeframe, bars, signal }) {
     const priceMin = Math.min(...bars.map((b) => b.low));
     const priceMax = Math.max(...bars.map((b) => b.high));
     const currentPrice = bars[bars.length - 1].close;
+    const maxBarIndex = bars.length - 1;
+    const halfBarIndex = Math.floor(maxBarIndex / 2);
+    const quarterBarIndex = Math.floor(maxBarIndex / 4);
+    const threeQuarterBarIndex = Math.floor(maxBarIndex * 3 / 4);
+    const exampleBar1 = Math.floor(maxBarIndex * 0.1);
+    const exampleBar3 = Math.floor(maxBarIndex * 0.9);
 
     const base = ENHANCED_USER_PROMPT_TEMPLATE
         .replace('{symbol}', symbol)
         .replace('{timeframe}', timeframe)
         .replace('{barsCount}', String(bars.length))
-        .replace('{maxBarIndex}', String(bars.length - 1))
+        .replace(/{maxBarIndex}/g, String(maxBarIndex))
+        .replace(/{halfBarIndex}/g, String(halfBarIndex))
+        .replace(/{quarterBarIndex}/g, String(quarterBarIndex))
+        .replace(/{threeQuarterBarIndex}/g, String(threeQuarterBarIndex))
+        .replace(/{exampleBar1}/g, String(exampleBar1))
+        .replace(/{exampleBar3}/g, String(exampleBar3))
         .replace('{priceMin}', priceMin.toFixed(6))
         .replace('{priceMax}', priceMax.toFixed(6))
         .replace('{currentPrice}', currentPrice.toFixed(6));
@@ -282,6 +294,16 @@ async function handleSignal({ signal, cfg, repo, builder, client, redisPub, outp
     }
 
     const eventId = crypto.randomUUID();
+    
+    // 处理 entry_price：可能是数字、"market" 或 null
+    let entryPriceValue = 0;
+    if (typeof decision.entryPrice === 'number' && Number.isFinite(decision.entryPrice)) {
+        entryPriceValue = decision.entryPrice;
+    } else if (decision.entryPrice === 'market') {
+        // protobuf 不支持字符串作为 entry_price，用0表示市价
+        entryPriceValue = 0;
+    }
+
     const payload = {
         event_id: eventId,
         source: 'vlm_trade_js',
@@ -294,9 +316,9 @@ async function handleSignal({ signal, cfg, repo, builder, client, redisPub, outp
         position_size: Number(decision.positionSize || 0),
         leverage: Number(decision.leverage || 1),
         confidence: Number(decision.confidence || 0),
-        entry_price: typeof decision.entryPrice === 'number' ? decision.entryPrice : 0,
-        stop_loss_price: Number(decision.stopLossPrice || 0),
-        take_profit_price: Number(decision.takeProfitPrice || 0),
+        entry_price: entryPriceValue,
+        stop_loss_price: (decision.stopLossPrice && Number.isFinite(Number(decision.stopLossPrice))) ? Number(decision.stopLossPrice) : 0,
+        take_profit_price: (decision.takeProfitPrice && Number.isFinite(Number(decision.takeProfitPrice))) ? Number(decision.takeProfitPrice) : 0,
         reason: decision.reason || '',
         raw_decision_json: JSON.stringify(decision.toDict()),
         signal_json: JSON.stringify(signal),
@@ -368,6 +390,19 @@ async function main() {
     logger.info(`Redis URL: ${redisUrl}`);
     logger.info(`订阅 Channel: ${signalChannel}`);
     logger.info(`发布 Decision Channel: ${initialCfg.channels.decision}`);
+
+    // 启动配置文件热重载监听
+    watchConfigFiles(() => {
+        logger.info('[Config Hot Reload] bridge.config.json 已重新加载');
+    });
+    
+    // 启动 .env 文件热重载监听
+    const envPath = join(PROJECT_ROOT, '.env');
+    watchEnvFile(envPath, (parsed) => {
+        logger.info(`[Env Hot Reload] .env 已重新加载，更新了 ${Object.keys(parsed).length} 个环境变量`);
+    });
+    
+    logger.info('[Config Hot Reload] 配置文件监听已启动 (.env, bridge.config.json)');
 
     await redisSub.subscribe(signalChannel);
 

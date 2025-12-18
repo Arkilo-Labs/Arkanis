@@ -2,6 +2,7 @@ import { defaultConfig } from '../config/index.js';
 import { readFile } from 'fs/promises';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import chokidar from 'chokidar';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -64,7 +65,18 @@ async function loadJsonFileIfExists(filePath) {
     }
 }
 
+// 配置缓存
+let configCache = null;
+let configCacheTime = 0;
+const CACHE_TTL = 1000; // 1秒缓存，防止频繁读取
+
 export async function loadBridgeConfig(redis) {
+    // 使用缓存避免频繁读取文件
+    const now = Date.now();
+    if (configCache && (now - configCacheTime) < CACHE_TTL) {
+        return configCache;
+    }
+
     // 优先本地文件，减少必须改 Redis 的心智负担
     const cfgPath = (process.env.BRIDGE_CONFIG_PATH || join(PROJECT_ROOT, 'bridge.config.json')).trim();
     const fileCfg = await loadJsonFileIfExists(cfgPath);
@@ -79,7 +91,41 @@ export async function loadBridgeConfig(redis) {
         merged.channels.configKey = redisKey;
     }
 
+    configCache = merged;
+    configCacheTime = now;
     return merged;
+}
+
+// 清除缓存，强制下次读取时重新加载
+export function invalidateConfigCache() {
+    configCache = null;
+    configCacheTime = 0;
+}
+
+// 启动配置文件监听，自动失效缓存
+export function watchConfigFiles(callback) {
+    const cfgPath = (process.env.BRIDGE_CONFIG_PATH || join(PROJECT_ROOT, 'bridge.config.json')).trim();
+    
+    const watcher = chokidar.watch(cfgPath, {
+        persistent: true,
+        ignoreInitial: true,
+        awaitWriteFinish: {
+            stabilityThreshold: 300,
+            pollInterval: 100
+        }
+    });
+
+    watcher.on('change', (path) => {
+        console.log(`[Config Hot Reload] bridge.config.json 已更新`);
+        invalidateConfigCache();
+        if (callback) callback(path);
+    });
+
+    watcher.on('error', (error) => {
+        console.error(`[Config Watcher] Error: ${error.message}`);
+    });
+
+    return watcher;
 }
 
 export { DEFAULTS as bridgeConfigDefaults };

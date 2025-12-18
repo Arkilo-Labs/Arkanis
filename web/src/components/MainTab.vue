@@ -1,6 +1,8 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import LogTerminal from './LogTerminal.vue';
+import CustomSelect from './CustomSelect.vue';
+import ChartView from './ChartView.vue';
 import { useSocket } from '../composables/useSocket';
 
 const { socket } = useSocket();
@@ -16,10 +18,23 @@ const config = ref({
 const isRunning = ref(false);
 const logs = ref([]);
 const pid = ref(null);
-const resultImage = ref(null);
+const sessionId = ref(null);
+const baseChartData = ref(null);
+const auxChartData = ref(null);
+const vlmChartData = ref(null);
 const resultJson = ref(null);
+const showChartGallery = ref(false);
 
 const timeframes = ['1m', '5m', '15m', '30m', '1h', '4h', '1d'];
+
+const timeframeOptions = computed(() => 
+  timeframes.map(tf => ({ value: tf, label: tf }))
+);
+
+const auxTimeframeOptions = computed(() => [
+  { value: '', label: 'Auto' },
+  ...timeframes.map(tf => ({ value: tf, label: tf }))
+]);
 
 function addLog(type, data) {
   logs.value.push({ type, data, timestamp: Date.now() });
@@ -28,15 +43,20 @@ function addLog(type, data) {
 function runScript() {
   isRunning.value = true;
   logs.value = [];
-  resultImage.value = null;
+  baseChartData.value = null;
+  auxChartData.value = null;
+  vlmChartData.value = null;
   resultJson.value = null;
+  showChartGallery.value = false;
   pid.value = null;
+  sessionId.value = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   const args = [
     '--symbol', config.value.symbol,
     '--timeframe', config.value.timeframe,
     '--bars', config.value.bars.toString(),
-    '--wait', '1000'
+    '--wait', '1000',
+    '--session-id', sessionId.value
   ];
 
   if (config.value.enable4x) {
@@ -80,14 +100,26 @@ const onProcessExit = (msg) => {
   addLog('stdout', `Process exited with code ${msg.code}`);
   isRunning.value = false;
   pid.value = null;
-  
-  if (msg.code === 0) {
-    const timestamp = Date.now();
-    resultImage.value = `/outputs/${config.value.symbol}_${config.value.timeframe}_with_vlm_decision.png?t=${timestamp}`;
-    fetch(`/outputs/vlm_decision.json?t=${timestamp}`)
-      .then(r => r.json())
-      .then(data => resultJson.value = data)
-      .catch(e => console.error(e));
+
+  if (msg.code === 0 && sessionId.value) {
+    // 从API获取图表数据
+    fetch(`/api/chart-data/${sessionId.value}`)
+      .then(r => {
+        if (!r.ok) throw new Error('Failed to fetch chart data');
+        return r.json();
+      })
+      .then(data => {
+        baseChartData.value = data.base;
+        auxChartData.value = data.aux;
+        vlmChartData.value = data.vlm;
+        resultJson.value = data.decision;
+        showChartGallery.value = true;
+        addLog('stdout', 'Chart data loaded successfully');
+      })
+      .catch(e => {
+        console.error('Load chart data error:', e);
+        addLog('error', `Failed to load chart data: ${e.message}`);
+      });
   }
 };
 const onProcessKilled = (killedPid) => {
@@ -109,6 +141,14 @@ onUnmounted(() => {
   socket.off('process-exit', onProcessExit);
   socket.off('process-killed', onProcessKilled);
 });
+
+function formatPrice(value) {
+  if (value === null || value === undefined || value === 0) return '-';
+  if (value === 'market') return '市价';
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '-';
+  return num.toFixed(6);
+}
 </script>
 
 <template>
@@ -172,9 +212,10 @@ onUnmounted(() => {
             <div class="grid grid-cols-2 gap-3">
               <div>
                 <label class="text-label block mb-2">周期 Timeframe</label>
-                <select v-model="config.timeframe" class="input-glass select-glass">
-                  <option v-for="tf in timeframes" :key="tf" :value="tf">{{ tf }}</option>
-                </select>
+                <CustomSelect 
+                  v-model="config.timeframe" 
+                  :options="timeframeOptions"
+                />
               </div>
               <div>
                 <label class="text-label block mb-2">K线数 Bars</label>
@@ -194,45 +235,87 @@ onUnmounted(() => {
             
             <div v-if="config.enable4x" class="animate-fade-in">
               <label class="text-label block mb-2">辅助周期 Aux Timeframe</label>
-              <select v-model="config.auxTimeframe" class="input-glass select-glass">
-                <option value="">Auto</option>
-                <option v-for="tf in timeframes" :key="tf" :value="tf">{{ tf }}</option>
-              </select>
+              <CustomSelect 
+                v-model="config.auxTimeframe" 
+                :options="auxTimeframeOptions"
+              />
             </div>
           </div>
         </div>
       </div>
 
       <!-- Chart Display -->
-      <div class="bento-xl glass-card p-4 min-h-[500px] flex items-center justify-center animate-slide-up stagger-2">
-        <!-- Result Image -->
-        <div v-if="resultImage" class="w-full h-full">
-          <img 
-            :src="resultImage" 
-            class="w-full h-auto rounded-2xl shadow-2xl" 
-            alt="Analysis Result"
-          />
+      <div class="bento-xl glass-card min-h-[500px] animate-slide-up stagger-2">
+        <!-- Chart Gallery -->
+        <div v-if="showChartGallery" class="w-full h-full p-4">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <!-- Base Chart -->
+            <div v-if="baseChartData" class="space-y-2">
+              <div class="flex items-center gap-2 px-2">
+                <i class="fas fa-chart-line text-blue-400 text-xs"></i>
+                <span class="text-label">Base Chart ({{ config.timeframe }})</span>
+              </div>
+              <div class="rounded-xl border border-white/10 overflow-hidden">
+                <ChartView :data="baseChartData" :title="`${config.symbol} ${config.timeframe}`" :height="400" />
+              </div>
+            </div>
+
+            <!-- Aux Chart (4x) -->
+            <div v-if="auxChartData" class="space-y-2">
+              <div class="flex items-center gap-2 px-2">
+                <i class="fas fa-chart-area text-purple-400 text-xs"></i>
+                <span class="text-label">4x Chart (Higher Timeframe)</span>
+              </div>
+              <div class="rounded-xl border border-white/10 overflow-hidden">
+                <ChartView :data="auxChartData" :title="`${config.symbol} ${auxChartData.timeframe || '4x'}`" :height="400" />
+              </div>
+            </div>
+
+            <!-- VLM Decision Chart (Full Width) -->
+            <div v-if="vlmChartData" :class="auxChartData ? 'lg:col-span-2' : 'lg:col-span-2'" class="space-y-2">
+              <div class="flex items-center gap-2 px-2">
+                <i class="fas fa-brain text-green-400 text-xs"></i>
+                <span class="text-label">VLM Analysis Result</span>
+              </div>
+              <div class="rounded-xl border border-white/10 overflow-hidden">
+                <ChartView :data="vlmChartData" :title="`${config.symbol} ${config.timeframe} - VLM Analysis`" :height="500" />
+              </div>
+            </div>
+          </div>
         </div>
-        
+
         <!-- Loading State -->
-        <div v-else-if="isRunning" class="flex flex-col items-center gap-4">
-          <div class="w-16 h-16 rounded-2xl bg-blue-500/20 flex items-center justify-center">
-            <i class="fas fa-spinner fa-spin text-blue-400 text-2xl"></i>
-          </div>
-          <div class="text-center">
-            <span class="text-white/80 text-lg font-medium block">分析中</span>
-            <span class="text-white/40 text-sm">Processing...</span>
+        <div v-else-if="isRunning" class="w-full h-full flex items-center justify-center p-4">
+          <div class="flex flex-col items-center gap-4">
+            <div class="w-16 h-16 rounded-2xl bg-blue-500/20 flex items-center justify-center">
+              <svg class="spinner-custom" width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="16" cy="4" r="2.5" fill="rgba(255, 255, 255, 0.9)" />
+                <circle cx="23.8" cy="8.2" r="2.5" fill="rgba(255, 255, 255, 0.8)" />
+                <circle cx="27.8" cy="16" r="2.5" fill="rgba(255, 255, 255, 0.7)" />
+                <circle cx="23.8" cy="23.8" r="2.5" fill="rgba(255, 255, 255, 0.6)" />
+                <circle cx="16" cy="28" r="2.5" fill="rgba(255, 255, 255, 0.5)" />
+                <circle cx="8.2" cy="23.8" r="2.5" fill="rgba(255, 255, 255, 0.4)" />
+                <circle cx="4.2" cy="16" r="2.5" fill="rgba(255, 255, 255, 0.3)" />
+                <circle cx="8.2" cy="8.2" r="2.5" fill="rgba(255, 255, 255, 0.2)" />
+              </svg>
+            </div>
+            <div class="text-center">
+              <span class="text-white/80 text-lg font-medium block">分析中</span>
+              <span class="text-white/40 text-sm">Processing...</span>
+            </div>
           </div>
         </div>
-        
+
         <!-- Empty State -->
-        <div v-else class="flex flex-col items-center gap-4 opacity-40">
-          <div class="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center">
-            <i class="fas fa-chart-area text-white/30 text-3xl"></i>
-          </div>
-          <div class="text-center">
-            <span class="text-white/50 text-lg block">等待分析</span>
-            <span class="text-white/30 text-sm">Ready to analyze</span>
+        <div v-else class="w-full h-full flex items-center justify-center p-4">
+          <div class="flex flex-col items-center gap-4 opacity-40">
+            <div class="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center">
+              <i class="fas fa-chart-area text-white/30 text-3xl"></i>
+            </div>
+            <div class="text-center">
+              <span class="text-white/50 text-lg block">等待分析</span>
+              <span class="text-white/30 text-sm">Ready to analyze</span>
+            </div>
           </div>
         </div>
       </div>
@@ -259,17 +342,17 @@ onUnmounted(() => {
             <div class="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
               <span class="text-label">方向 Direction</span>
               <div class="flex items-center gap-2">
-                <i 
+                <i
                   :class="[
                     'fas',
-                    resultJson.direction === 'LONG' ? 'fa-arrow-up text-green-400' : 'fa-arrow-down text-red-400'
+                    resultJson.direction === 'long' ? 'fa-arrow-up text-green-400' : 'fa-arrow-down text-red-400'
                   ]"
                 ></i>
-                <span 
+                <span
                   class="text-xl font-bold"
-                  :class="resultJson.direction === 'LONG' ? 'text-green-400' : 'text-red-400'"
+                  :class="resultJson.direction === 'long' ? 'text-green-400' : 'text-red-400'"
                 >
-                  {{ resultJson.direction }}
+                  {{ resultJson.direction?.toUpperCase() }}
                 </span>
               </div>
             </div>
@@ -277,7 +360,31 @@ onUnmounted(() => {
             <!-- Entry Price -->
             <div class="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
               <span class="text-label">入场价 Entry</span>
-              <span class="text-xl font-mono text-white">{{ resultJson.entryPrice }}</span>
+              <span class="text-xl font-mono text-white">{{ formatPrice(resultJson.entry_price) }}</span>
+            </div>
+
+            <!-- Stop Loss -->
+            <div class="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
+              <span class="text-label">止损 Stop Loss</span>
+              <span class="text-xl font-mono text-red-400">{{ formatPrice(resultJson.stop_loss_price) }}</span>
+            </div>
+
+            <!-- Take Profit -->
+            <div class="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
+              <span class="text-label">止盈 Take Profit</span>
+              <span class="text-xl font-mono text-green-400">{{ formatPrice(resultJson.take_profit_price) }}</span>
+            </div>
+
+            <!-- Position & Leverage -->
+            <div class="grid grid-cols-2 gap-3">
+              <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+                <span class="text-label block mb-1">仓位 Position</span>
+                <span class="text-lg font-mono text-white">{{ (resultJson.position_size * 100).toFixed(0) }}%</span>
+              </div>
+              <div class="p-4 rounded-xl bg-white/5 border border-white/10">
+                <span class="text-label block mb-1">杠杆 Leverage</span>
+                <span class="text-lg font-mono text-white">{{ resultJson.leverage || 1 }}x</span>
+              </div>
             </div>
           </div>
 
@@ -306,3 +413,19 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.spinner-custom {
+  animation: spin-rotate 1.2s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes spin-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+</style>

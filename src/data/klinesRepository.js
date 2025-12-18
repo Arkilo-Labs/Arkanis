@@ -47,9 +47,10 @@ export class KlinesRepository {
      * @param {string} params.timeframe 时间周期
      * @param {Date} [params.endTime] 结束时间
      * @param {number} [params.limit] K 线数量
+     * @param {boolean} [params.forceUpdate] 强制更新最新数据
      * @returns {Promise<Bar[]>}
      */
-    async getBars({ symbol, timeframe, endTime = null, limit = 200 }) {
+    async getBars({ symbol, timeframe, endTime = null, limit = 200, forceUpdate = false }) {
         if (!TIMEFRAME_MINUTES[timeframe]) {
             throw new Error(`不支持的 timeframe: ${timeframe}，可选: ${Object.keys(TIMEFRAME_MINUTES).join(', ')}`);
         }
@@ -59,6 +60,15 @@ export class KlinesRepository {
         // 统一按 UTC 处理
         const actualEndTime = endTime ? new Date(endTime) : new Date();
         const requiredStart = new Date(actualEndTime.getTime() - limit * tfMinutes * 60 * 1000);
+
+        // 如果启用forceUpdate且没有指定endTime，强制拉取最新数据
+        if (forceUpdate && !endTime && this.autoFill) {
+            const now = new Date();
+            const updateStartTime = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 最近24小时
+            
+            logger.info(`强制从交易所更新 ${symbol} 最近24小时数据...`);
+            await this._fillFromExchange(symbol, timeframe, updateStartTime, now);
+        }
 
         // 使用时间范围查询
         let rawBars = await this._fetchRawBarsByRange(symbol, requiredStart, actualEndTime);

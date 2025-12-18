@@ -29,6 +29,8 @@ import logger from '../src/utils/logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000';
+
 /**
  * 解析时间字符串
  */
@@ -94,6 +96,29 @@ function buildAuto4xAux({ baseTimeframe, baseBars, desiredBarsCount }) {
     return { auxTimeframe, auxBars };
 }
 
+/**
+ * 发送图表数据到服务器
+ */
+async function sendChartDataToServer(sessionId, chartData) {
+    try {
+        const response = await fetch(`${SERVER_URL}/api/chart-data`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId, data: chartData }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        logger.info('[成功] 图表数据已发送到服务器');
+        return true;
+    } catch (error) {
+        logger.error(`[错误] 发送图表数据失败: ${error.message}`);
+        return false;
+    }
+}
+
 async function main() {
     const program = new Command();
 
@@ -111,6 +136,8 @@ async function main() {
         .option('--skip-vlm', '跳过 VLM 调用')
         .option('--enable-4x-chart', '启用 4 倍辅助周期图')
         .option('--aux-timeframe <tf>', '辅助周期')
+        .option('--session-id <id>', '会话ID')
+        .option('--skip-png', '跳过PNG生成')
         .parse();
 
     const opts = program.opts();
@@ -153,10 +180,12 @@ async function main() {
                 limit: opts.bars,
             });
         } else {
+            // 默认获取最新数据，强制更新
             bars = await repo.getBars({
                 symbol: opts.symbol,
                 timeframe: opts.timeframe,
                 limit: opts.bars,
+                forceUpdate: true,
             });
         }
 
@@ -169,6 +198,14 @@ async function main() {
         logger.info(`       时间范围: ${bars[0].ts.toISOString()} ~ ${bars[bars.length - 1].ts.toISOString()}`);
         logger.info(`       价格范围: ${Math.min(...bars.map((b) => b.low)).toFixed(2)} ~ ${Math.max(...bars.map((b) => b.high)).toFixed(2)}`);
 
+        // 准备图表数据收集（用于前端渲染）
+        const chartData = {
+            base: null,
+            aux: null,
+            vlm: null,
+            decision: null,
+        };
+
         // 构建基础图表
         logger.info('\n[步骤2] 渲染基础图表...');
         const chartInput = new ChartInput({
@@ -177,9 +214,23 @@ async function main() {
             timeframe: opts.timeframe,
         });
 
+        // 收集基础图表数据
+        chartData.base = {
+            symbol: opts.symbol,
+            timeframe: opts.timeframe,
+            bars: bars.map(b => b.toDict()),
+            overlays: [],
+        };
+
         const basePng = join(outputDir, `${opts.symbol}_${opts.timeframe}_base.png`);
-        await builder.buildAndExport(chartInput, basePng, { waitMs: opts.wait });
-        logger.info(`[成功] 基础图表已保存: ${basePng}`);
+        if (!opts.skipPng && !opts.sessionId) {
+            await builder.buildAndExport(chartInput, basePng, { waitMs: opts.wait });
+            logger.info(`[成功] 基础图表已保存: ${basePng}`);
+        } else {
+            // 为VLM分析临时生成PNG
+            await builder.buildAndExport(chartInput, basePng, { waitMs: opts.wait });
+            logger.info(`[信息] 基础图表已生成（临时用于VLM分析）`);
+        }
 
         // 辅助图表
         let auxTimeframe = null;
@@ -224,14 +275,29 @@ async function main() {
                 }
 
                 if (auxBars.length >= 10) {
+                    const auxBarsForChart = opts.auxTimeframe ? auxBars.slice(-opts.bars) : auxBars;
                     const auxInput = new ChartInput({
-                        bars: opts.auxTimeframe ? auxBars.slice(-opts.bars) : auxBars,
+                        bars: auxBarsForChart,
                         symbol: opts.symbol,
                         timeframe: auxTimeframe,
                     });
+
+                    // 收集辅助图表数据
+                    chartData.aux = {
+                        symbol: opts.symbol,
+                        timeframe: auxTimeframe,
+                        bars: auxBarsForChart.map(b => b.toDict()),
+                        overlays: [],
+                    };
+
                     auxPng = join(outputDir, `${opts.symbol}_${auxTimeframe}_aux.png`);
-                    await builder.buildAndExport(auxInput, auxPng, { waitMs: opts.wait });
-                    logger.info(`[成功] 辅助图表已保存: ${auxPng}`);
+                    if (!opts.skipPng && !opts.sessionId) {
+                        await builder.buildAndExport(auxInput, auxPng, { waitMs: opts.wait });
+                        logger.info(`[成功] 辅助图表已保存: ${auxPng}`);
+                    } else {
+                        await builder.buildAndExport(auxInput, auxPng, { waitMs: opts.wait });
+                        logger.info(`[信息] 辅助图表已生成（临时用于VLM分析）`);
+                    }
                 } else {
                     logger.warn(`[警告] 辅助图跳过：历史数据不足 (${auxTimeframe})`);
                     auxTimeframe = null;
@@ -257,17 +323,28 @@ async function main() {
         const priceMin = Math.min(...bars.map((b) => b.low));
         const priceMax = Math.max(...bars.map((b) => b.high));
         const currentPrice = bars[bars.length - 1].close;
+        const maxBarIndex = bars.length - 1;
+        const halfBarIndex = Math.floor(maxBarIndex / 2);
+        const quarterBarIndex = Math.floor(maxBarIndex / 4);
+        const threeQuarterBarIndex = Math.floor(maxBarIndex * 3 / 4);
+        const exampleBar1 = Math.floor(maxBarIndex * 0.1);
+        const exampleBar3 = Math.floor(maxBarIndex * 0.9);
 
         const enhancedPrompt = ENHANCED_USER_PROMPT_TEMPLATE
             .replace('{symbol}', opts.symbol)
             .replace('{timeframe}', opts.timeframe)
             .replace('{barsCount}', String(bars.length))
-            .replace('{maxBarIndex}', String(bars.length - 1))
+            .replace(/{maxBarIndex}/g, String(maxBarIndex))
+            .replace(/{halfBarIndex}/g, String(halfBarIndex))
+            .replace(/{quarterBarIndex}/g, String(quarterBarIndex))
+            .replace(/{threeQuarterBarIndex}/g, String(threeQuarterBarIndex))
+            .replace(/{exampleBar1}/g, String(exampleBar1))
+            .replace(/{exampleBar3}/g, String(exampleBar3))
             .replace('{priceMin}', priceMin.toFixed(2))
             .replace('{priceMax}', priceMax.toFixed(2))
             .replace('{currentPrice}', currentPrice.toFixed(2));
 
-        logger.info('[信息] 使用增强 Prompt (含图表上下文)');
+        logger.info(`[信息] 正在使用 '${config.openai.promptName}.md' Prompt`);
         logger.info('[信息] 等待响应...\n');
 
         let decision;
@@ -299,16 +376,20 @@ async function main() {
         logger.info(`理由: ${decision.reason}`);
         logger.info(`画图指令数: ${decision.drawInstructions.length}`);
 
-        // 保存决策 JSON
+        // 保存决策数据
+        chartData.decision = decision.toDict();
+
         const outputJson = join(outputDir, 'vlm_decision.json');
-        writeFileSync(outputJson, JSON.stringify(decision.toDict(), null, 2), 'utf-8');
-        logger.info(`\n[成功] 决策已保存: ${outputJson}`);
+        if (!opts.skipPng && !opts.sessionId) {
+            writeFileSync(outputJson, JSON.stringify(chartData.decision, null, 2), 'utf-8');
+            logger.info(`\n[成功] 决策已保存: ${outputJson}`);
+        }
 
-        // 生成带标注的图片
+        // 生成带标注的图表数据
+        const overlays = [];
         if (decision.drawInstructions.length) {
-            logger.info('\n[步骤4] 生成带 VLM 标注的图片...');
+            logger.info('\n[步骤4] 处理 VLM 标注...');
 
-            const overlays = [];
             for (const instr of decision.drawInstructions) {
                 try {
                     const overlay = drawInstructionToOverlay(instr, bars);
@@ -318,21 +399,49 @@ async function main() {
                 }
             }
 
-            const annotatedInput = new ChartInput({
-                bars,
+            // 收集VLM标注图表数据
+            chartData.vlm = {
                 symbol: opts.symbol,
                 timeframe: opts.timeframe,
-                overlays,
-            });
+                bars: bars.map(b => b.toDict()),
+                overlays: overlays.map(o => ({
+                    type: o.type,
+                    color: o.color,
+                    width: o.width,
+                    text: o.text,
+                    price: o.price,
+                    start: o.start ? { barIndex: o.start.barIndex, price: o.start.price } : undefined,
+                    end: o.end ? { barIndex: o.end.barIndex, price: o.end.price } : undefined,
+                    shape: o.shape,
+                    position: o.position,
+                    channelWidth: o.channelWidth,
+                })),
+            };
 
-            const decisionPng = join(outputDir, `${opts.symbol}_${opts.timeframe}_with_vlm_decision.png`);
-            let imgBuffer = await builder.buildAndExport(annotatedInput, decisionPng, { waitMs: opts.wait });
+            // 生成PNG（如果需要）
+            if (!opts.skipPng && !opts.sessionId) {
+                const annotatedInput = new ChartInput({
+                    bars,
+                    symbol: opts.symbol,
+                    timeframe: opts.timeframe,
+                    overlays,
+                });
 
-            // 添加文本标注
-            imgBuffer = await builder.addTextAnnotations(imgBuffer);
-            writeFileSync(decisionPng, imgBuffer);
+                const decisionPng = join(outputDir, `${opts.symbol}_${opts.timeframe}_with_vlm_decision.png`);
+                let imgBuffer = await builder.buildAndExport(annotatedInput, decisionPng, { waitMs: opts.wait });
 
-            logger.info(`[成功] 带 VLM 标注图片已保存: ${decisionPng}`);
+                // 添加文本标注
+                imgBuffer = await builder.addTextAnnotations(imgBuffer);
+                writeFileSync(decisionPng, imgBuffer);
+
+                logger.info(`[成功] 带 VLM 标注图片已保存: ${decisionPng}`);
+            }
+        }
+
+        // 发送数据到服务器
+        if (opts.sessionId) {
+            logger.info('\n[步骤5] 发送图表数据到服务器...');
+            await sendChartDataToServer(opts.sessionId, chartData);
         }
 
         return 0;

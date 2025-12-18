@@ -23,7 +23,7 @@ import {
     formatMinutesAsTimeframe,
 } from '../src/data/index.js';
 import { ChartBuilder, ChartInput } from '../src/chart/index.js';
-import { VLMClient } from '../src/vlm/index.js';
+import { VLMClient, ENHANCED_USER_PROMPT_TEMPLATE } from '../src/vlm/index.js';
 import logger from '../src/utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -78,10 +78,15 @@ function resolveAuxTimeframe(baseTimeframe, auxTimeframe) {
     throw new Error(`无法找到 ${targetMinutes} 分钟对应的 timeframe`);
 }
 
-function buildAuto4xAuxLabel(baseTimeframe) {
+function buildAuto4xAux({ baseTimeframe, baseBars, desiredBarsCount }) {
     const baseMinutes = TIMEFRAME_MINUTES[baseTimeframe];
     if (!baseMinutes) throw new Error(`不支持的主 timeframe: ${baseTimeframe}`);
-    return formatMinutesAsTimeframe(baseMinutes * 4, TIMEFRAME_MINUTES);
+
+    const targetMinutes = baseMinutes * 4;
+    const auxTimeframe = formatMinutesAsTimeframe(targetMinutes, TIMEFRAME_MINUTES);
+    const aggregated = aggregateBarsToHigherTimeframe(baseBars, baseMinutes, 4, { requireFullBucket: true });
+    const auxBars = Number.isFinite(Number(desiredBarsCount)) ? aggregated.slice(-Number(desiredBarsCount)) : aggregated;
+    return { auxTimeframe, auxBars };
 }
 
 /**
@@ -106,6 +111,32 @@ async function analyzeWithVlm(sem, task, client, chartsDir, maxRetries = 3) {
                 writeFileSync(tmpAuxPath, task.auxImageBuffer);
             }
 
+            // 构建增强版 prompt（和 main.js 保持一致）
+            const bars = task.histBars;
+            const priceMin = Math.min(...bars.map((b) => b.low));
+            const priceMax = Math.max(...bars.map((b) => b.high));
+            const currentPrice = bars[bars.length - 1].close;
+            const maxBarIndex = bars.length - 1;
+            const halfBarIndex = Math.floor(maxBarIndex / 2);
+            const quarterBarIndex = Math.floor(maxBarIndex / 4);
+            const threeQuarterBarIndex = Math.floor((maxBarIndex * 3) / 4);
+            const exampleBar1 = Math.floor(maxBarIndex * 0.1);
+            const exampleBar3 = Math.floor(maxBarIndex * 0.9);
+
+            const enhancedPrompt = ENHANCED_USER_PROMPT_TEMPLATE
+                .replace('{symbol}', task.symbol)
+                .replace('{timeframe}', task.primaryTimeframe)
+                .replace('{barsCount}', String(bars.length))
+                .replace(/{maxBarIndex}/g, String(maxBarIndex))
+                .replace(/{halfBarIndex}/g, String(halfBarIndex))
+                .replace(/{quarterBarIndex}/g, String(quarterBarIndex))
+                .replace(/{threeQuarterBarIndex}/g, String(threeQuarterBarIndex))
+                .replace(/{exampleBar1}/g, String(exampleBar1))
+                .replace(/{exampleBar3}/g, String(exampleBar3))
+                .replace('{priceMin}', priceMin.toFixed(2))
+                .replace('{priceMax}', priceMax.toFixed(2))
+                .replace('{currentPrice}', currentPrice.toFixed(2));
+
             let decision;
             if (task.auxImageBuffer && task.auxTimeframe) {
                 decision = await client.analyzeChartPair({
@@ -113,9 +144,10 @@ async function analyzeWithVlm(sem, task, client, chartsDir, maxRetries = 3) {
                     auxImagePath: tmpAuxPath,
                     primaryTimeframe: task.primaryTimeframe,
                     auxTimeframe: task.auxTimeframe,
+                    primaryUserPrompt: enhancedPrompt,
                 });
             } else {
-                decision = await client.analyzeChart(tmpPrimaryPath);
+                decision = await client.analyzeChart(tmpPrimaryPath, { userPrompt: enhancedPrompt });
             }
 
             const analysisTimeMs = Date.now() - startTime;
@@ -237,6 +269,11 @@ async function main() {
         const repo = new KlinesRepository();
         const builder = new ChartBuilder();
         const client = new VLMClient();
+        
+        logger.info(`VLM 配置:`);
+        logger.info(`       Base URL: ${client.baseUrl}`);
+        logger.info(`       Model: ${client.model}`);
+        logger.info(`       Prompt: ${config.openai.promptName}.md`);
 
         const startTime = parseTime(opts.startTime);
         const endTime = opts.endTime ? parseTime(opts.endTime) : new Date();
@@ -247,11 +284,13 @@ async function main() {
             try {
                 if (opts.auxTimeframe) {
                     auxTimeframe = resolveAuxTimeframe(opts.timeframe, opts.auxTimeframe);
-                    logger.info(`辅助周期: ${auxTimeframe} (主周期: ${opts.timeframe})`);
+                    logger.info(`[信息] 辅助周期: ${auxTimeframe} (主周期: ${opts.timeframe})`);
                 } else {
-                    auxTimeframe = buildAuto4xAuxLabel(opts.timeframe);
+                    const baseMinutes = TIMEFRAME_MINUTES[opts.timeframe];
+                    if (!baseMinutes) throw new Error(`不支持的主 timeframe: ${opts.timeframe}`);
+                    auxTimeframe = formatMinutesAsTimeframe(baseMinutes * 4, TIMEFRAME_MINUTES);
                     useAggregatedAux = true;
-                    logger.info(`辅助周期(自动聚合): ${auxTimeframe} (主周期: ${opts.timeframe})`);
+                    logger.info(`[信息] 辅助周期(自动聚合): ${auxTimeframe} (主周期: ${opts.timeframe})`);
                 }
             } catch (e) {
                 logger.warn(`[警告] ${e.message}，将回退为单图回测`);
@@ -432,10 +471,12 @@ async function main() {
                 barIndex: idx,
                 timestamp: targetBar.ts,
                 barData,
+                symbol: opts.symbol,
                 primaryTimeframe: opts.timeframe,
                 primaryImageBuffer: primaryImgBuffer,
                 auxTimeframe,
                 auxImageBuffer: auxImgBuffer,
+                histBars,
             });
 
             logger.debug(`[${idx}/${backtestIndices[backtestIndices.length - 1]}] 图表已渲染: ${targetBar.ts.toISOString()}`);
@@ -446,7 +487,9 @@ async function main() {
             return 1;
         }
 
-        logger.info(`[步骤3] 并发发送 VLM 请求 (${tasks.length} 个任务)...`);
+        logger.info(`\n[步骤3] 并发发送 VLM 请求 (${tasks.length} 个任务)...`);
+        logger.info(`[信息] 正在使用 '${config.openai.promptName}.md' Prompt`);
+        logger.info('[信息] 等待响应...\n');
 
         // 并发调用 VLM
         const sem = new Semaphore(opts.workers);

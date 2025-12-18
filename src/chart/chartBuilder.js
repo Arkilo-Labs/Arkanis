@@ -130,6 +130,21 @@ export class ChartBuilder {
             }
         }
 
+        if (overlay.type === OverlayType.POLYLINE) {
+            if (overlay.points && overlay.points.length >= 2) {
+                const resolvedPoints = [];
+                for (const point of overlay.points) {
+                    const resolved = this._resolveAnchor(point, overlay.mode, mapper);
+                    if (resolved) {
+                        resolvedPoints.push(resolved);
+                    }
+                }
+                if (resolvedPoints.length >= 2) {
+                    return { ...base, points: resolvedPoints };
+                }
+            }
+        }
+
         if (overlay.type === OverlayType.RAY_LINE) {
             const start = this._resolveAnchor(overlay.start, overlay.mode, mapper);
             if (start) {

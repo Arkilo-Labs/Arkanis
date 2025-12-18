@@ -1,6 +1,7 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import LogTerminal from './LogTerminal.vue';
+import CustomSelect from './CustomSelect.vue';
 import { useSocket } from '../composables/useSocket';
 
 const { socket } = useSocket();
@@ -9,17 +10,52 @@ const config = ref({
   symbol: 'BTCUSDT',
   timeframe: '5m',
   bars: 200,
-  startTime: '2024-12-01',
-  endTime: '2024-12-02',
+  startDate: '2024-12-01',
+  startHour: '00',
+  startMinute: '00',
+  endDate: '2024-12-02',
+  endHour: '23',
+  endMinute: '59',
   workers: 4,
   enable4x: false
 });
+
+// 补零函数
+const padZero = (val) => String(val).padStart(2, '0');
+
+// 计算完整时间字符串
+const startTime = computed(() => 
+  `${config.value.startDate} ${padZero(config.value.startHour)}:${padZero(config.value.startMinute)}`
+);
+
+const endTime = computed(() => 
+  `${config.value.endDate} ${padZero(config.value.endHour)}:${padZero(config.value.endMinute)}`
+);
+
+// 时间输入校验和格式化
+function normalizeHour(event, key) {
+  let val = parseInt(event.target.value) || 0;
+  if (val < 0) val = 0;
+  if (val > 23) val = 23;
+  config.value[key] = padZero(val);
+}
+
+function normalizeMinute(event, key) {
+  let val = parseInt(event.target.value) || 0;
+  if (val < 0) val = 0;
+  if (val > 59) val = 59;
+  config.value[key] = padZero(val);
+}
 
 const isRunning = ref(false);
 const logs = ref([]);
 const pid = ref(null);
 
 const timeframes = ['5m', '15m', '1h', '4h'];
+
+const timeframeOptions = computed(() => 
+  timeframes.map(tf => ({ value: tf, label: tf }))
+);
 
 function addLog(type, data) {
   logs.value.push({ type, data, timestamp: Date.now() });
@@ -34,12 +70,12 @@ function runBacktest() {
     '--symbol', config.value.symbol,
     '--timeframe', config.value.timeframe,
     '--bars', config.value.bars.toString(),
-    '--start-time', config.value.startTime,
+    '--start-time', startTime.value,
     '--workers', config.value.workers.toString(),
     '--wait', '500'
   ];
 
-  if (config.value.endTime) args.push('--end-time', config.value.endTime);
+  if (endTime.value) args.push('--end-time', endTime.value);
   if (config.value.enable4x) args.push('--enable-4x-chart');
 
   addLog('stdout', `Starting backtest.js with args: ${args.join(' ')}`);
@@ -154,9 +190,10 @@ onUnmounted(() => {
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="text-label block mb-2">周期 Timeframe</label>
-              <select v-model="config.timeframe" class="input-glass select-glass">
-                <option v-for="tf in timeframes" :key="tf" :value="tf">{{ tf }}</option>
-              </select>
+              <CustomSelect 
+                v-model="config.timeframe" 
+                :options="timeframeOptions"
+              />
             </div>
             <div>
               <label class="text-label block mb-2">K线数 Bars</label>
@@ -166,11 +203,48 @@ onUnmounted(() => {
 
           <!-- Date Range -->
           <div>
-            <label class="text-label block mb-2">时间范围 Date Range</label>
-            <div class="flex items-center gap-3">
-              <input v-model="config.startTime" type="date" class="input-glass text-sm flex-1" />
-              <i class="fas fa-arrow-right text-white/30"></i>
-              <input v-model="config.endTime" type="date" class="input-glass text-sm flex-1" />
+            <label class="text-label block mb-2">开始时间 Start Time</label>
+            <div class="grid grid-cols-[1fr_auto_auto] gap-2">
+              <input v-model="config.startDate" type="date" class="input-glass text-sm" />
+              <input 
+                v-model="config.startHour" 
+                type="text" 
+                maxlength="2"
+                placeholder="00" 
+                @blur="(e) => normalizeHour(e, 'startHour')"
+                class="input-glass text-sm w-16 text-center font-mono" 
+              />
+              <input 
+                v-model="config.startMinute" 
+                type="text" 
+                maxlength="2"
+                placeholder="00" 
+                @blur="(e) => normalizeMinute(e, 'startMinute')"
+                class="input-glass text-sm w-16 text-center font-mono" 
+              />
+            </div>
+          </div>
+
+          <div>
+            <label class="text-label block mb-2">结束时间 End Time</label>
+            <div class="grid grid-cols-[1fr_auto_auto] gap-2">
+              <input v-model="config.endDate" type="date" class="input-glass text-sm" />
+              <input 
+                v-model="config.endHour" 
+                type="text" 
+                maxlength="2"
+                placeholder="23" 
+                @blur="(e) => normalizeHour(e, 'endHour')"
+                class="input-glass text-sm w-16 text-center font-mono" 
+              />
+              <input 
+                v-model="config.endMinute" 
+                type="text" 
+                maxlength="2"
+                placeholder="59" 
+                @blur="(e) => normalizeMinute(e, 'endMinute')"
+                class="input-glass text-sm w-16 text-center font-mono" 
+              />
             </div>
           </div>
 

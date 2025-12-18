@@ -7,6 +7,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { readFile, writeFile } from 'fs/promises';
 import bodyParser from 'body-parser';
+import chokidar from 'chokidar';
 import PromptManager from '../src/vlm/promptManager.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -28,8 +29,9 @@ app.use(bodyParser.json());
 // Serve static files from 'outputs' directory
 app.use('/outputs', express.static(join(PROJECT_ROOT, 'outputs')));
 
-// Store active processes
+// Store active processes and session data
 const activeProcesses = new Map();
+const sessionChartData = new Map();
 
 io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
@@ -87,7 +89,7 @@ app.post('/api/run-script', (req, res) => {
 
         child.on('close', (code) => {
             console.log(`Process exited with code ${code}`);
-            io.emit('process-exit', { code });
+            io.emit('process-exit', { code, pid });
             if (pid) activeProcesses.delete(pid);
         });
 
@@ -108,6 +110,46 @@ app.get('/api/prompts', (req, res) => {
         const prompts = PromptManager.listPrompts();
         res.json(prompts);
     } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 获取图表数据
+app.get('/api/chart-data/:sessionId', async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const data = sessionChartData.get(sessionId);
+        
+        if (!data) {
+            return res.status(404).json({ error: 'Chart data not found' });
+        }
+        
+        res.json(data);
+    } catch (error) {
+        console.error('Get chart data error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// 保存图表数据（由脚本调用）
+app.post('/api/chart-data', async (req, res) => {
+    try {
+        const { sessionId, data } = req.body;
+        
+        if (!sessionId || !data) {
+            return res.status(400).json({ error: 'Missing sessionId or data' });
+        }
+        
+        sessionChartData.set(sessionId, data);
+        
+        // 5分钟后清理数据
+        setTimeout(() => {
+            sessionChartData.delete(sessionId);
+        }, 5 * 60 * 1000);
+        
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Save chart data error:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -223,7 +265,40 @@ app.post('/api/config', async (req, res) => {
     }
 });
 
+// 配置文件热重载
+function setupConfigWatcher() {
+    const envPath = join(PROJECT_ROOT, '.env');
+    const bridgeConfigPath = join(PROJECT_ROOT, 'bridge.config.json');
+
+    const watcher = chokidar.watch([envPath, bridgeConfigPath], {
+        persistent: true,
+        ignoreInitial: true,
+        awaitWriteFinish: {
+            stabilityThreshold: 300,
+            pollInterval: 100
+        }
+    });
+
+    watcher.on('change', (path) => {
+        const filename = path.split(/[/\\]/).pop();
+        console.log(`[Config Hot Reload] 检测到配置文件变更: ${filename}`);
+        
+        io.emit('config-reload', { 
+            file: filename,
+            timestamp: Date.now()
+        });
+    });
+
+    watcher.on('error', (error) => {
+        console.error(`[Config Watcher] Error: ${error.message}`);
+    });
+
+    return watcher;
+}
+
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    setupConfigWatcher();
+    console.log('[Config Hot Reload] 配置文件监听已启动');
 });

@@ -24,3 +24,9 @@ npm-debug.log*
 # 临时文件
 tmp/
 temp/
+
+# Windows 保留设备名
+nul
+
+CLAUDE.MD
+docs
