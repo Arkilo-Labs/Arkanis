@@ -1,225 +1,412 @@
 <!doctype html>
-<html lang="zh">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>VLM Bridge 控制台</title>
+    <title>VLM Bridge - Redis 配置控制台</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
     <style>
       :root {
-        /* 与主 Web UI 一致：深色底 + 玻璃层次（避免蓝紫渐变背景） */
-        --bg: #0a0a0f;
-        --panel: rgba(255,255,255,.06);
-        --border: rgba(255,255,255,.10);
-        --text: rgba(255,255,255,.92);
-        --muted: rgba(255,255,255,.55);
-        --muted2: rgba(255,255,255,.35);
-        --accent: rgba(255, 255, 255, .92);
-        --radius: 18px;
+        --bg-primary: #fafafa;
+        --bg-secondary: #ffffff;
+        --bg-elevated: #ffffff;
+        
+        --text-primary: #1a1a1a;
+        --text-secondary: rgba(0, 0, 0, 0.7);
+        --text-tertiary: rgba(0, 0, 0, 0.5);
+        --text-muted: rgba(0, 0, 0, 0.3);
+        
+        --glass-bg: rgba(255, 255, 255, 0.85);
+        --glass-border: rgba(0, 0, 0, 0.08);
+        --glass-shadow: rgba(0, 0, 0, 0.04);
+        
+        --accent-blue: #007aff;
+        --accent-green: #34c759;
+        --accent-red: #ff3b30;
+        --accent-orange: #ff9500;
+        
+        --radius-sm: 12px;
+        --radius-md: 16px;
+        --radius-lg: 20px;
+        
+        --duration-fast: 150ms;
+        --duration-normal: 300ms;
+        --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+        --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.4);
       }
 
-      * { box-sizing: border-box; }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
       body {
-        margin: 0;
-        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto;
-        background:
-          radial-gradient(1200px 800px at 50% -10%, rgba(255,255,255,.06), transparent 60%),
-          radial-gradient(900px 600px at 15% 0%, rgba(255,255,255,.03), transparent 55%),
-          var(--bg);
-        color: var(--text);
+        font-family: 'Inter', -apple-system, 'Noto Sans SC', sans-serif;
+        background: var(--bg-primary);
+        color: var(--text-primary);
         min-height: 100vh;
+        overflow-x: hidden;
+        -webkit-font-smoothing: antialiased;
       }
 
-      a { color: inherit; }
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
 
-      .container { max-width: 1800px; margin: 0 auto; padding: 20px 16px 28px; }
+      @keyframes slideUp {
+        from { 
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to { 
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
+      .animate-fade-in {
+        animation: fadeIn 0.4s var(--ease-smooth);
+      }
+
+      .animate-slide-up {
+        animation: slideUp 0.5s var(--ease-smooth);
+      }
+
+      .stagger-1 { animation-delay: 0.1s; }
+      .stagger-2 { animation-delay: 0.2s; }
+      .stagger-3 { animation-delay: 0.3s; }
 
       header {
-        position: sticky;
+        position: fixed;
         top: 0;
-        z-index: 10;
-        padding: 14px 16px;
-        background: rgba(10,10,15,.75);
-        backdrop-filter: blur(18px) saturate(180%);
-        border-bottom: 1px solid rgba(255,255,255,.08);
+        left: 0;
+        right: 0;
+        z-index: 100;
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(20px) saturate(180%);
+        border-bottom: 1px solid var(--glass-border);
+        box-shadow: 0 2px 12px var(--glass-shadow);
       }
 
-      .headerRow { max-width: 1800px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-      .brandTitle { font-weight: 800; letter-spacing: -.01em; }
-      .brandSub { font-size: 11px; color: var(--muted2); letter-spacing: .12em; text-transform: uppercase; }
-      .statusDot { width: 8px; height: 8px; border-radius: 999px; background: #22c55e; box-shadow: 0 0 0 6px rgba(34,197,94,.12); }
+      .header-inner {
+        max-width: 1800px;
+        margin: 0 auto;
+        padding: 1rem 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .logo h1 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        letter-spacing: -0.02em;
+      }
+      .logo small {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
 
       .tabs {
         display: flex;
-        gap: 6px;
-        padding: 6px;
-        border: 1px solid rgba(255,255,255,.10);
-        background: rgba(255,255,255,.04);
-        border-radius: 14px;
+        gap: 0.5rem;
+        background: rgba(0, 0, 0, 0.03);
+        padding: 0.25rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid rgba(0, 0, 0, 0.06);
       }
 
-      .tabBtn {
-        border: 1px solid transparent;
-        background: transparent;
-        color: var(--muted);
-        padding: 8px 12px;
-        border-radius: 12px;
-        cursor: pointer;
-        transition: all .15s ease;
+      .tab {
+        padding: 0.5rem 1.25rem;
+        border-radius: 8px;
+        font-size: 0.875rem;
         font-weight: 600;
-      }
-
-      .tabBtn:hover { color: rgba(255,255,255,.82); background: rgba(255,255,255,.05); }
-      .tabBtn.active { color: rgba(255,255,255,.95); background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.10); }
-
-      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-      @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
-
-      .card {
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        padding: 14px;
-        backdrop-filter: blur(18px) saturate(180%);
-      }
-
-      .cardTitle { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 0 0 10px; }
-      .cardTitle h3 { margin: 0; font-size: 14px; font-weight: 800; color: rgba(255,255,255,.92); }
-      .cardTitle small { color: var(--muted2); font-size: 12px; }
-
-      .btnRow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-      .btn {
-        appearance: none;
-        border: 1px solid rgba(255,255,255,.12);
-        background: rgba(255,255,255,.06);
-        color: rgba(255,255,255,.92);
-        padding: 9px 12px;
-        border-radius: 12px;
+        color: var(--text-tertiary);
+        background: transparent;
+        border: none;
         cursor: pointer;
-        transition: all .15s ease;
-        font-weight: 650;
+        transition: all var(--duration-fast) var(--ease-smooth);
       }
-      .btn:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.18); }
-      .btn.primary { border-color: rgba(0,122,255,.35); background: rgba(0,122,255,.20); }
-      .btn.primary:hover { background: rgba(0,122,255,.26); }
-      .btn.danger { border-color: rgba(255,59,48,.35); background: rgba(255,59,48,.14); }
+      .tab:hover {
+        color: var(--text-secondary);
+        background: rgba(0, 0, 0, 0.05);
+      }
+      .tab.active {
+        color: var(--text-primary);
+        background: white;
+        box-shadow: 0 2px 6px var(--glass-shadow);
+      }
 
-      .hint { color: var(--muted2); font-size: 12px; line-height: 1.45; }
-      .msg { color: var(--muted); font-size: 12px; }
-      .msg.err { color: rgba(255, 140, 140, .92); }
+      main {
+        max-width: 1800px;
+        margin: 0 auto;
+        padding: 6rem 2rem 2rem;
+      }
+
+      .panel {
+        display: none;
+        opacity: 0;
+        animation: fadeIn 0.3s ease-out forwards;
+      }
+      
+      .panel[style*="display: block"],
+      .panel[style*="display: "],
+      .panel:not([style*="display: none"]) {
+        opacity: 1;
+      }
+
+      .glass-card {
+        background: var(--glass-bg);
+        backdrop-filter: blur(20px) saturate(180%);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-lg);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 20px var(--glass-shadow);
+        transition: all var(--duration-normal) var(--ease-smooth);
+      }
+
+      .glass-card:hover {
+        box-shadow: 0 6px 30px rgba(0, 0, 0, 0.08);
+        border-color: rgba(0, 0, 0, 0.12);
+      }
+
+      .glass-card h2 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin-bottom: 0.75rem;
+        color: var(--text-primary);
+      }
+
+      .glass-card h3 {
+        font-size: 0.875rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: var(--text-secondary);
+      }
+      .glass-card small {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+      }
+
+      .cols-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+      }
+      @media (max-width: 1024px) {
+        .cols-2 {
+          grid-template-columns: 1fr;
+        }
+      }
 
       textarea {
         width: 100%;
         min-height: 360px;
+        font-family: 'JetBrains Mono', 'SF Mono', monospace;
+        font-size: 0.8125rem;
+        line-height: 1.6;
+        background: rgba(0, 0, 0, 0.03);
+        color: var(--text-primary);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-md);
+        padding: 1rem;
         resize: vertical;
-        padding: 10px 12px;
-        border-radius: 14px;
-        border: 1px solid rgba(255,255,255,.10);
-        background: rgba(10,10,15,.55);
-        color: rgba(255,255,255,.90);
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        line-height: 1.45;
+        outline: none;
+        transition: all var(--duration-fast) var(--ease-smooth);
+      }
+      textarea:focus {
+        border-color: var(--accent-blue);
+        background: white;
+        box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+      }
+      textarea:read-only {
+        cursor: default;
+        opacity: 0.7;
+        background: rgba(0, 0, 0, 0.02);
       }
 
       pre {
-        margin: 0;
-        padding: 12px;
-        border-radius: 14px;
-        border: 1px solid rgba(255,255,255,.08);
-        background: rgba(10,10,15,.65);
-        overflow: auto;
-        max-height: 420px;
-        color: rgba(255,255,255,.90);
-        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-        line-height: 1.45;
+        font-family: 'JetBrains Mono', 'SF Mono', monospace;
+        font-size: 0.8125rem;
+        line-height: 1.6;
+        background: rgba(0, 0, 0, 0.03);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-md);
+        padding: 1rem;
+        overflow-x: auto;
+        color: var(--text-secondary);
+        white-space: pre-wrap;
+        word-wrap: break-word;
       }
 
-      .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-      @media (max-width: 980px) { .split { grid-template-columns: 1fr; } }
+      .btn-row {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        align-items: center;
+      }
 
-      code { color: rgba(255,255,255,.88); background: rgba(255,255,255,.06); padding: 2px 6px; border-radius: 8px; border: 1px solid rgba(255,255,255,.08); }
+      button {
+        position: relative;
+        padding: 0.75rem 1.25rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        background: white;
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: all var(--duration-fast) var(--ease-smooth);
+        box-shadow: 0 2px 8px var(--glass-shadow);
+      }
+      button:hover {
+        background: rgba(0, 0, 0, 0.02);
+        border-color: rgba(0, 0, 0, 0.15);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      }
+      button:active {
+        transform: translateY(0);
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none !important;
+      }
+
+      button i {
+        margin-right: 0.5rem;
+      }
+
+      button.loading i {
+        animation: spin 1s linear infinite;
+      }
+
+      #msg {
+        margin-top: 1rem;
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+        border-radius: var(--radius-sm);
+        background: rgba(0, 122, 255, 0.1);
+        color: var(--accent-blue);
+        border: 1px solid rgba(0, 122, 255, 0.2);
+        min-height: 2.5rem;
+        display: flex;
+        align-items: center;
+      }
+      #msg.err {
+        background: rgba(255, 59, 48, 0.1);
+        color: var(--accent-red);
+        border-color: rgba(255, 59, 48, 0.2);
+      }
+      #msg:empty {
+        display: none;
+      }
+
+      .status-time {
+        font-size: 0.875rem;
+        color: var(--text-tertiary);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .status-time i {
+        color: var(--accent-green);
+      }
     </style>
   </head>
   <body>
-    <header>
-      <div class="headerRow">
-        <div>
-          <div class="brandTitle">VLM Bridge</div>
-          <div class="brandSub">Channel Console</div>
+    <header class="animate-fade-in">
+      <div class="header-inner">
+        <div class="logo">
+          <h1>VLM Bridge</h1>
+          <small>REDIS CONFIG</small>
         </div>
-
-        <nav class="tabs" aria-label="tabs">
-          <button class="tabBtn active" id="tabConfig" type="button">配置</button>
-          <button class="tabBtn" id="tabStatus" type="button">状态</button>
-        </nav>
-
-        <div style="display:flex; align-items:center; gap:8px;">
-          <div class="statusDot" title="在线"></div>
-          <div class="hint" style="display:none;" id="serverInfo"></div>
+        <div class="tabs">
+          <button class="tab" id="tabConfig"><i class="fas fa-cog"></i> 配置</button>
+          <button class="tab" id="tabStatus"><i class="fas fa-chart-line"></i> 状态</button>
         </div>
       </div>
     </header>
 
-    <div class="container">
-      <div class="hint" style="margin: 0 0 12px;">
-        这里直接读写 Redis 的 <code>vlmbridge:config</code>（JSON 字符串）。如果 Redis 里没有配置，会自动用“当前生效配置”填充编辑框，避免你手写空 JSON。
+    <main>
+      <!-- 配置面板 -->
+      <div class="panel" id="panelConfig">
+        <div class="glass-card animate-slide-up">
+          <h2>Redis 配置控制台</h2>
+          <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 1.5rem" id="configKey">key: -</p>
+
+          <div class="cols-2">
+            <div class="animate-slide-up stagger-1">
+              <h3>Redis 覆盖配置（可编辑）</h3>
+              <small>留空则删除 key；有内容则覆盖默认配置</small>
+              <textarea id="config" placeholder='{ "vlm": { "bars": 150 } }'></textarea>
+            </div>
+            <div class="animate-slide-up stagger-2">
+              <h3>当前生效配置（只读）</h3>
+              <small>defaults + file + redis 合并结果</small>
+              <textarea id="effective" readonly></textarea>
+            </div>
+          </div>
+
+          <div class="btn-row animate-slide-up stagger-3" style="margin-top: 1.5rem">
+            <button id="btnLoad"><i class="fas fa-download"></i> 加载配置</button>
+            <button id="btnFillEffective"><i class="fas fa-fill"></i> 用当前生效配置填充</button>
+            <button id="btnFormat"><i class="fas fa-align-left"></i> 格式化</button>
+            <button id="btnSave"><i class="fas fa-save"></i> 保存配置</button>
+            <button id="btnClear"><i class="fas fa-trash"></i> 清空（删除 key）</button>
+          </div>
+        </div>
       </div>
 
-      <section id="panelConfig" class="grid">
-        <div class="card">
-          <div class="cardTitle">
-            <h3>Redis 覆盖配置（可编辑）</h3>
-            <small id="configKey">key: -</small>
+      <!-- 状态面板 -->
+      <div class="panel" id="panelStatus">
+        <div class="glass-card animate-slide-up">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h2>状态监控</h2>
+            <div class="status-time" id="statusTimeDisplay">
+              <i class="fas fa-circle-notch"></i>
+              <span>点击刷新按钮获取最新数据</span>
+            </div>
           </div>
-          <div class="btnRow" style="margin: 0 0 10px;">
-            <button class="btn" id="btnLoad" type="button">加载</button>
-            <button class="btn" id="btnFillEffective" type="button">用当前生效配置填充</button>
-            <button class="btn" id="btnFormat" type="button">格式化</button>
-            <button class="btn primary" id="btnSave" type="button">保存</button>
-            <button class="btn danger" id="btnClear" type="button">清空（删除 Redis key）</button>
-            <span id="msg" class="msg"></span>
-          </div>
-          <textarea id="config" spellcheck="false" placeholder="{ ... }"></textarea>
-        </div>
 
-        <div class="card">
-          <div class="cardTitle">
-            <h3>当前生效配置（只读）</h3>
-            <small>defaults + file(bridge.config.json) + redis</small>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem" class="animate-slide-up stagger-1">
+            <div>
+              <h3>last_signal_json</h3>
+              <small>vlmbridge:last_signal_json</small>
+              <pre id="signal">(null)</pre>
+            </div>
+            <div>
+              <h3>last_decision_json</h3>
+              <small>vlmbridge:last_decision_json</small>
+              <pre id="decision">(null)</pre>
+            </div>
           </div>
-          <pre id="effective"></pre>
-        </div>
-      </section>
 
-      <section id="panelStatus" class="grid" style="display:none;">
-        <div class="card">
-          <div class="cardTitle">
-            <h3>last_signal_json</h3>
-            <small id="statusNow">-</small>
+          <div class="btn-row animate-slide-up stagger-2" style="margin-top: 1.5rem">
+            <button id="btnStatus"><i class="fas fa-sync-alt"></i> 刷新状态</button>
+            <button id="btnAutoRefresh" data-auto="false"><i class="fas fa-clock"></i> 自动刷新（关）</button>
           </div>
-          <pre id="signal"></pre>
         </div>
-        <div class="card">
-          <div class="cardTitle">
-            <h3>last_decision_json</h3>
-            <small>vlmbridge:last_decision_json</small>
-          </div>
-          <pre id="decision"></pre>
-        </div>
+      </div>
 
-        <div class="card" style="grid-column: 1 / -1;">
-          <div class="cardTitle">
-            <h3>操作</h3>
-            <small>刷新状态不会改动 Redis</small>
-          </div>
-          <div class="btnRow">
-            <button class="btn" id="btnStatus" type="button">刷新状态</button>
-            <span class="hint">如果你在跑 bridge:vlm / bridge:tg，这里能看到最新 signal/decision 的 JSON。</span>
-          </div>
-        </div>
-      </section>
-    </div>
+      <div id="msg"></div>
+    </main>
 
-    <script type="module" src="/app.js"></script>
+    <script src="/app.js"></script>
   </body>
 </html>

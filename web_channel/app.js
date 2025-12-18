@@ -4,15 +4,20 @@ const elConfigKey = document.getElementById('configKey');
 const elSignal = document.getElementById('signal');
 const elDecision = document.getElementById('decision');
 const elMsg = document.getElementById('msg');
-const elStatusNow = document.getElementById('statusNow');
+const elStatusTimeDisplay = document.getElementById('statusTimeDisplay');
 
 const elTabConfig = document.getElementById('tabConfig');
 const elTabStatus = document.getElementById('tabStatus');
 const elPanelConfig = document.getElementById('panelConfig');
 const elPanelStatus = document.getElementById('panelStatus');
 
+const elBtnStatus = document.getElementById('btnStatus');
+const elBtnAutoRefresh = document.getElementById('btnAutoRefresh');
+
 const state = {
   lastConfigData: null,
+  autoRefreshInterval: null,
+  lastRefreshTime: null,
 };
 
 function setMsg(text, { isError = false } = {}) {
@@ -57,8 +62,8 @@ function setActiveTab(tab) {
   const isConfig = tab === 'config';
   elTabConfig.classList.toggle('active', isConfig);
   elTabStatus.classList.toggle('active', !isConfig);
-  elPanelConfig.style.display = isConfig ? '' : 'none';
-  elPanelStatus.style.display = isConfig ? 'none' : '';
+  elPanelConfig.style.display = isConfig ? 'block' : 'none';
+  elPanelStatus.style.display = isConfig ? 'none' : 'block';
 }
 
 async function loadConfig({ fillWhenEmpty = true } = {}) {
@@ -101,7 +106,7 @@ async function saveConfig({ clear = false } = {}) {
 function fillFromEffective() {
   const effective = state.lastConfigData?.effectiveConfig;
   if (!effective) {
-    setMsg('还没加载配置，先点“加载”', { isError: true });
+    setMsg('还没加载配置，先点"加载"', { isError: true });
     return;
   }
   elConfig.value = formatJsonText(effective);
@@ -123,12 +128,70 @@ function formatEditor() {
   setMsg('已格式化');
 }
 
-async function refreshStatus() {
-  const data = await apiGet('/api/status');
-  elStatusNow.textContent = data.now || '-';
-  elSignal.textContent = data.last_signal_json ? JSON.stringify(data.last_signal_json, null, 2) : '(null)';
-  elDecision.textContent = data.last_decision_json ? JSON.stringify(data.last_decision_json, null, 2) : '(null)';
-  setMsg('状态已刷新');
+function formatTime(isoString) {
+  if (!isoString) return '-';
+  const d = new Date(isoString);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+}
+
+function updateStatusTimeDisplay() {
+  if (state.lastRefreshTime) {
+    const timeStr = formatTime(state.lastRefreshTime);
+    const isAuto = elBtnAutoRefresh.dataset.auto === 'true';
+    elStatusTimeDisplay.innerHTML = `
+      <i class="fas fa-check-circle"></i>
+      <span>最后更新: ${timeStr}${isAuto ? ' (自动刷新已开启)' : ''}</span>
+    `;
+  } else {
+    elStatusTimeDisplay.innerHTML = `
+      <i class="fas fa-circle-notch"></i>
+      <span>点击刷新按钮获取最新数据</span>
+    `;
+  }
+}
+
+async function refreshStatus({ silent = false } = {}) {
+  const btn = elBtnStatus;
+  const wasDisabled = btn.disabled;
+  btn.disabled = true;
+  btn.classList.add('loading');
+
+  try {
+    const data = await apiGet('/api/status');
+    state.lastRefreshTime = data.now;
+    elSignal.textContent = data.last_signal_json ? JSON.stringify(data.last_signal_json, null, 2) : '(null)';
+    elDecision.textContent = data.last_decision_json ? JSON.stringify(data.last_decision_json, null, 2) : '(null)';
+    updateStatusTimeDisplay();
+    if (!silent) setMsg('状态已刷新');
+  } finally {
+    btn.disabled = wasDisabled;
+    btn.classList.remove('loading');
+  }
+}
+
+function toggleAutoRefresh() {
+  const current = elBtnAutoRefresh.dataset.auto === 'true';
+  const next = !current;
+  elBtnAutoRefresh.dataset.auto = String(next);
+
+  if (next) {
+    elBtnAutoRefresh.innerHTML = '<i class="fas fa-clock"></i> 自动刷新（开）';
+    refreshStatus({ silent: true }).catch(() => {});
+    state.autoRefreshInterval = setInterval(() => {
+      refreshStatus({ silent: true }).catch(() => {});
+    }, 5000);
+    setMsg('自动刷新已开启（每5秒）');
+  } else {
+    elBtnAutoRefresh.innerHTML = '<i class="fas fa-clock"></i> 自动刷新（关）';
+    if (state.autoRefreshInterval) {
+      clearInterval(state.autoRefreshInterval);
+      state.autoRefreshInterval = null;
+    }
+    setMsg('自动刷新已关闭');
+  }
 }
 
 document.getElementById('btnLoad').addEventListener('click', () => loadConfig().catch((e) => setMsg(e.message, { isError: true })));
@@ -137,13 +200,15 @@ document.getElementById('btnFormat').addEventListener('click', () => formatEdito
 document.getElementById('btnSave').addEventListener('click', () => saveConfig().catch((e) => setMsg(e.message, { isError: true })));
 document.getElementById('btnClear').addEventListener('click', () => saveConfig({ clear: true }).catch((e) => setMsg(e.message, { isError: true })));
 document.getElementById('btnStatus').addEventListener('click', () => refreshStatus().catch((e) => setMsg(e.message, { isError: true })));
+document.getElementById('btnAutoRefresh').addEventListener('click', () => toggleAutoRefresh());
 
 elTabConfig.addEventListener('click', () => setActiveTab('config'));
 elTabStatus.addEventListener('click', () => {
   setActiveTab('status');
-  refreshStatus().catch(() => {});
+  if (!state.lastRefreshTime) {
+    refreshStatus().catch(() => {});
+  }
 });
 
 setActiveTab('config');
 loadConfig().catch(() => {});
-refreshStatus().catch(() => {});

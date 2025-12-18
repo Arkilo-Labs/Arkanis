@@ -72,7 +72,7 @@ function buildTradingViewInterval(timeframe) {
 function buildTradingViewUrl(symbol, timeframe) {
     const tvSymbol = `BINANCE:${String(symbol || '').trim()}`;
     const interval = buildTradingViewInterval(timeframe);
-    const url = new URL('https://cn.tradingview.com/chart/');
+    const url = new URL('https://tradingview.com/chart/');
     url.searchParams.set('symbol', tvSymbol);
     if (interval) url.searchParams.set('interval', interval);
     return url.toString();

@@ -19,7 +19,7 @@ import {
     KlinesRepository,
     closePool,
     TIMEFRAME_MINUTES,
-    aggregateBarsByFactor,
+    aggregateBarsToHigherTimeframe,
     formatMinutesAsTimeframe,
 } from '../src/data/index.js';
 import { ChartBuilder, ChartInput } from '../src/chart/index.js';
@@ -260,7 +260,8 @@ async function main() {
 
         // 计算数据范围
         const tfMinutes = TIMEFRAME_MINUTES[opts.timeframe] || 60;
-        const lookbackDelta = opts.bars * tfMinutes * 60 * 1000;
+        const lookbackBars = useAggregatedAux ? opts.bars * 4 + 12 : opts.bars;
+        const lookbackDelta = lookbackBars * tfMinutes * 60 * 1000;
         const dataStartTime = new Date(startTime.getTime() - lookbackDelta);
 
         logger.info('[步骤1] 获取 K 线数据...');
@@ -360,7 +361,16 @@ async function main() {
             // 渲染辅助图
             let auxImgBuffer = null;
             if (useAggregatedAux && auxTimeframe) {
-                const auxHistBars = aggregateBarsByFactor(histBars, 4, { align: 'end' });
+                const baseMinutes = TIMEFRAME_MINUTES[opts.timeframe];
+                if (!baseMinutes) {
+                    throw new Error(`不支持的主 timeframe: ${opts.timeframe}`);
+                }
+
+                const auxBaseStart = Math.max(0, idx - (opts.bars * 4 + 12) + 1);
+                const auxBaseBars = allBars.slice(auxBaseStart, idx + 1);
+                const aggregated = aggregateBarsToHigherTimeframe(auxBaseBars, baseMinutes, 4, { requireFullBucket: true });
+                const auxHistBars = aggregated.slice(-opts.bars);
+
                 if (auxHistBars.length >= 10) {
                     const auxInput = new ChartInput({
                         bars: auxHistBars,

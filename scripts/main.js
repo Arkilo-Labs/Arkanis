@@ -19,7 +19,7 @@ import {
     KlinesRepository,
     closePool,
     TIMEFRAME_MINUTES,
-    aggregateBarsByFactor,
+    aggregateBarsToHigherTimeframe,
     formatMinutesAsTimeframe,
 } from '../src/data/index.js';
 import { ChartBuilder, ChartInput } from '../src/chart/index.js';
@@ -83,13 +83,14 @@ function resolveAuxTimeframe(baseTimeframe, auxTimeframe) {
     throw new Error(`无法找到 ${targetMinutes} 分钟对应的 timeframe`);
 }
 
-function buildAuto4xAux({ baseTimeframe, baseBars }) {
+function buildAuto4xAux({ baseTimeframe, baseBars, desiredBarsCount }) {
     const baseMinutes = TIMEFRAME_MINUTES[baseTimeframe];
     if (!baseMinutes) throw new Error(`不支持的主 timeframe: ${baseTimeframe}`);
 
     const targetMinutes = baseMinutes * 4;
     const auxTimeframe = formatMinutesAsTimeframe(targetMinutes, TIMEFRAME_MINUTES);
-    const auxBars = aggregateBarsByFactor(baseBars, 4, { align: 'end' });
+    const aggregated = aggregateBarsToHigherTimeframe(baseBars, baseMinutes, 4, { requireFullBucket: true });
+    const auxBars = Number.isFinite(Number(desiredBarsCount)) ? aggregated.slice(-Number(desiredBarsCount)) : aggregated;
     return { auxTimeframe, auxBars };
 }
 
@@ -204,7 +205,19 @@ async function main() {
                         endTime: primaryEnd,
                     });
                 } else {
-                    const auto = buildAuto4xAux({ baseTimeframe: opts.timeframe, baseBars: bars });
+                    const desiredAuxBarsCount = bars.length;
+                    const baseBarsForAux = await repo.getBars({
+                        symbol: opts.symbol,
+                        timeframe: opts.timeframe,
+                        endTime: endTime || undefined,
+                        limit: desiredAuxBarsCount * 4 + 12,
+                    });
+
+                    const auto = buildAuto4xAux({
+                        baseTimeframe: opts.timeframe,
+                        baseBars: baseBarsForAux,
+                        desiredBarsCount: desiredAuxBarsCount,
+                    });
                     auxTimeframe = auto.auxTimeframe;
                     auxBars = auto.auxBars;
                     logger.info(`[信息] 辅助周期(自动聚合): ${auxTimeframe} (主周期: ${opts.timeframe})`);

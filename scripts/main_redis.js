@@ -13,7 +13,13 @@ import { fileURLToPath } from 'url';
 import Redis from 'ioredis';
 
 import { defaultConfig } from '../src/config/index.js';
-import { KlinesRepository, closePool, TIMEFRAME_MINUTES, aggregateBarsByFactor, formatMinutesAsTimeframe } from '../src/data/index.js';
+import {
+    KlinesRepository,
+    closePool,
+    TIMEFRAME_MINUTES,
+    aggregateBarsToHigherTimeframe,
+    formatMinutesAsTimeframe,
+} from '../src/data/index.js';
 import { ChartBuilder, ChartInput } from '../src/chart/index.js';
 import { VLMClient, ENHANCED_USER_PROMPT_TEMPLATE } from '../src/vlm/index.js';
 import logger from '../src/utils/logger.js';
@@ -146,13 +152,14 @@ function resolveAuxTimeframe(baseTimeframe, auxTimeframe) {
     throw new Error(`无法找到 ${targetMinutes} 分钟对应的 timeframe`);
 }
 
-function buildAuto4xAux({ baseTimeframe, baseBars }) {
+function buildAuto4xAux({ baseTimeframe, baseBars, desiredBarsCount }) {
     const baseMinutes = TIMEFRAME_MINUTES[baseTimeframe];
     if (!baseMinutes) throw new Error(`不支持的主 timeframe: ${baseTimeframe}`);
 
     const targetMinutes = baseMinutes * 4;
     const auxTimeframe = formatMinutesAsTimeframe(targetMinutes, TIMEFRAME_MINUTES);
-    const auxBars = aggregateBarsByFactor(baseBars, 4, { align: 'end' });
+    const aggregated = aggregateBarsToHigherTimeframe(baseBars, baseMinutes, 4, { requireFullBucket: true });
+    const auxBars = Number.isFinite(Number(desiredBarsCount)) ? aggregated.slice(-Number(desiredBarsCount)) : aggregated;
 
     return { auxTimeframe, auxBars };
 }
@@ -217,7 +224,17 @@ async function handleSignal({ signal, cfg, repo, builder, client, redisPub, outp
                     limit: barsCount,
                 });
             } else {
-                const auto = buildAuto4xAux({ baseTimeframe: timeframe, baseBars: bars });
+                const baseBarsForAux = await repo.getBars({
+                    symbol,
+                    timeframe,
+                    endTime: endTime || undefined,
+                    limit: barsCount * 4 + 12,
+                });
+                const auto = buildAuto4xAux({
+                    baseTimeframe: timeframe,
+                    baseBars: baseBarsForAux,
+                    desiredBarsCount: barsCount,
+                });
                 auxTimeframe = auto.auxTimeframe;
                 auxBars = auto.auxBars;
             }
