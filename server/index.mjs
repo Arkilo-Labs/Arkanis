@@ -6,6 +6,7 @@ import { spawn } from 'child_process';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { readFile, writeFile } from 'fs/promises';
+import { existsSync } from 'fs';
 import bodyParser from 'body-parser';
 import chokidar from 'chokidar';
 import PromptManager from '../src/vlm/promptManager.js';
@@ -265,12 +266,231 @@ app.post('/api/config', async (req, res) => {
     }
 });
 
+// AI Provider 管理
+const PROVIDERS_FILE = join(PROJECT_ROOT, 'ai-providers.json');
+
+function generateProviderId() {
+    return `provider_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+async function readProviders() {
+    try {
+        if (!existsSync(PROVIDERS_FILE)) {
+            return await initDefaultProvider();
+        }
+        const content = await readFile(PROVIDERS_FILE, 'utf-8');
+        return JSON.parse(content);
+    } catch (error) {
+        console.error('读取 Provider 文件失败:', error);
+        return { providers: [], version: 1 };
+    }
+}
+
+async function writeProviders(data) {
+    try {
+        await writeFile(PROVIDERS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+        return true;
+    } catch (error) {
+        console.error('写入 Provider 文件失败:', error);
+        return false;
+    }
+}
+
+async function initDefaultProvider() {
+    const envPath = join(PROJECT_ROOT, '.env');
+    let envConfig = {};
+
+    try {
+        const envContent = await readFile(envPath, 'utf-8');
+        envConfig = parseEnvFile(envContent);
+    } catch (error) {
+        console.warn('无法读取 .env 文件，使用空配置');
+    }
+
+    const defaultProvider = {
+        id: 'default',
+        name: envConfig.OPENAI_MODEL || 'Default Provider',
+        baseUrl: envConfig.OPENAI_BASE_URL || 'https://api.openai.com',
+        modelName: envConfig.OPENAI_MODEL || 'gpt-4',
+        apiKey: envConfig.OPENAI_API_KEY || '',
+        thinkingMode: envConfig.OPENAI_ENABLE_THINKING === 'true' ? 'enabled' : 'disabled',
+        isActive: true,
+        maxTokens: parseInt(envConfig.OPENAI_MAX_TOKENS) || 8192,
+        temperature: parseFloat(envConfig.OPENAI_TEMPERATURE) || 0.2,
+        description: '从 .env 配置迁移的默认 Provider'
+    };
+
+    const data = {
+        providers: [defaultProvider],
+        version: 1
+    };
+
+    await writeProviders(data);
+    return data;
+}
+
+function validateProvider(provider) {
+    const required = ['name', 'baseUrl', 'modelName', 'apiKey'];
+    for (const field of required) {
+        if (!provider[field] || provider[field].trim() === '') {
+            return { valid: false, error: `字段 ${field} 为必填项` };
+        }
+    }
+
+    if (provider.thinkingMode && !['enabled', 'disabled', 'none'].includes(provider.thinkingMode)) {
+        return { valid: false, error: 'thinkingMode 必须是 enabled/disabled/none' };
+    }
+
+    return { valid: true };
+}
+
+// API: 获取所有 Provider
+app.get('/api/ai-providers', async (req, res) => {
+    try {
+        const data = await readProviders();
+        res.json(data.providers);
+    } catch (error) {
+        console.error('获取 Provider 列表失败:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// API: 新增 Provider
+app.post('/api/ai-providers', async (req, res) => {
+    try {
+        const provider = req.body;
+
+        const validation = validateProvider(provider);
+        if (!validation.valid) {
+            return res.status(400).json({ error: validation.error });
+        }
+
+        const data = await readProviders();
+
+        provider.id = generateProviderId();
+        provider.isActive = provider.isActive || false;
+
+        if (provider.isActive) {
+            data.providers.forEach(p => p.isActive = false);
+        }
+
+        data.providers.push(provider);
+
+        const success = await writeProviders(data);
+        if (success) {
+            io.emit('providers-updated');
+            res.json(provider);
+        } else {
+            res.status(500).json({ error: '保存失败' });
+        }
+    } catch (error) {
+        console.error('创建 Provider 失败:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// API: 更新 Provider
+app.put('/api/ai-providers/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const updates = req.body;
+
+        const validation = validateProvider(updates);
+        if (!validation.valid) {
+            return res.status(400).json({ error: validation.error });
+        }
+
+        const data = await readProviders();
+        const index = data.providers.findIndex(p => p.id === id);
+
+        if (index === -1) {
+            return res.status(404).json({ error: 'Provider 不存在' });
+        }
+
+        if (updates.isActive) {
+            data.providers.forEach(p => p.isActive = false);
+        }
+
+        data.providers[index] = { ...data.providers[index], ...updates, id };
+
+        const success = await writeProviders(data);
+        if (success) {
+            io.emit('providers-updated');
+            res.json(data.providers[index]);
+        } else {
+            res.status(500).json({ error: '保存失败' });
+        }
+    } catch (error) {
+        console.error('更新 Provider 失败:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// API: 删除 Provider
+app.delete('/api/ai-providers/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const data = await readProviders();
+
+        const index = data.providers.findIndex(p => p.id === id);
+        if (index === -1) {
+            return res.status(404).json({ error: 'Provider 不存在' });
+        }
+
+        const isActive = data.providers[index].isActive;
+        data.providers.splice(index, 1);
+
+        if (isActive && data.providers.length > 0) {
+            data.providers[0].isActive = true;
+        }
+
+        const success = await writeProviders(data);
+        if (success) {
+            io.emit('providers-updated');
+            res.json({ success: true });
+        } else {
+            res.status(500).json({ error: '保存失败' });
+        }
+    } catch (error) {
+        console.error('删除 Provider 失败:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// API: 激活 Provider
+app.post('/api/ai-providers/:id/activate', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const data = await readProviders();
+
+        const provider = data.providers.find(p => p.id === id);
+        if (!provider) {
+            return res.status(404).json({ error: 'Provider 不存在' });
+        }
+
+        data.providers.forEach(p => p.isActive = false);
+        provider.isActive = true;
+
+        const success = await writeProviders(data);
+        if (success) {
+            io.emit('providers-updated');
+            res.json(provider);
+        } else {
+            res.status(500).json({ error: '保存失败' });
+        }
+    } catch (error) {
+        console.error('激活 Provider 失败:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // 配置文件热重载
 function setupConfigWatcher() {
     const envPath = join(PROJECT_ROOT, '.env');
     const bridgeConfigPath = join(PROJECT_ROOT, 'bridge.config.json');
+    const providersPath = PROVIDERS_FILE;
 
-    const watcher = chokidar.watch([envPath, bridgeConfigPath], {
+    const watcher = chokidar.watch([envPath, bridgeConfigPath, providersPath], {
         persistent: true,
         ignoreInitial: true,
         awaitWriteFinish: {

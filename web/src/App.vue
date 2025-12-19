@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import MainTab from './components/MainTab.vue';
 import BacktestTab from './components/BacktestTab.vue';
 import ConfigTab from './components/ConfigTab.vue';
+import AIProvidersTab from './components/AIProvidersTab.vue';
 import { useSocket } from './composables/useSocket';
 
 const { socket } = useSocket();
@@ -14,6 +15,7 @@ const CurrentComponent = computed(() => {
     case 'main': return MainTab;
     case 'backtest': return BacktestTab;
     case 'config': return ConfigTab;
+    case 'ai-providers': return AIProvidersTab;
     default: return MainTab;
   }
 });
@@ -21,7 +23,8 @@ const CurrentComponent = computed(() => {
 const tabs = [
   { id: 'main', label: '策略', labelEn: 'Strategy', icon: 'fas fa-chart-line' },
   { id: 'backtest', label: '回测', labelEn: 'Backtest', icon: 'fas fa-history' },
-  { id: 'config', label: '配置', labelEn: 'Config', icon: 'fas fa-cog' }
+  { id: 'config', label: '配置', labelEn: 'Config', icon: 'fas fa-cog' },
+  { id: 'ai-providers', label: 'AI Provider', labelEn: 'AI Models', icon: 'fas fa-brain' }
 ];
 
 function showToast(message, type = 'info') {
