@@ -110,6 +110,11 @@
     "stop_loss_price": 数值,
     "take_profit_price": 数值,
     "reason": "详细的专业分析理由（包含入场价格的设置逻辑）",
+    "indicator_views": {
+        "bollinger": { "bias": "bullish/bearish/neutral", "note": "你对布林带的看法（可简短）" },
+        "macd": { "bias": "bullish/bearish/neutral", "note": "你对 MACD 的看法（可简短）" },
+        "trend_strength": { "level": "below_average/average/above_average", "bias": "bullish/bearish/neutral", "note": "你对趋势强度(ADX)的看法（可简短）" }
+    },
     "draw_instructions": [...]
 }
 
@@ -124,6 +129,11 @@
     "stop_loss_price": 86600,  // 支撑下方 200 点
     "take_profit_price": 87600,  // 风险回报比 1:3
     "reason": "上升趋势完好，价格在支撑位上方整理。设置限价单在 86850 等待回调入场，止损设在结构低点下方，止盈设在前高位置。",
+    "indicator_views": {
+        "bollinger": { "bias": "neutral", "note": "价格在中轨附近震荡，带宽一般，暂无明显扩张信号" },
+        "macd": { "bias": "bullish", "note": "MACD 线在信号线上方，动能柱转正，偏多" },
+        "trend_strength": { "level": "average", "bias": "neutral", "note": "ADX 中等，趋势强度一般，优先等关键位确认" }
+    },
     "draw_instructions": [
         // 趋势结构线（第一优先）
         {"type": "polyline", "points": [

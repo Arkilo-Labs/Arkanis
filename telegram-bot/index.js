@@ -96,6 +96,27 @@ function buildBinanceUrl(symbol, { market = 'futures' } = {}) {
     return `https://www.binance.com/zh-CN/futures/${s}?type=perpetual`;
 }
 
+function fmtIndicatorViews(decision) {
+    try {
+        const raw = JSON.parse(decision.raw_decision_json || '{}');
+        const views = raw.indicator_views;
+        if (!views || typeof views !== 'object') return [];
+
+        const boll = views.bollinger?.bias || '-';
+        const macd = views.macd?.bias || '-';
+        const strengthLevel = views.trend_strength?.level || '-';
+        const strengthBias = views.trend_strength?.bias || '-';
+
+        return [
+            `BOLL   ${String(boll)}`,
+            `MACD   ${String(macd)}`,
+            `ADX    ${String(strengthLevel)} / ${String(strengthBias)}`,
+        ];
+    } catch {
+        return [];
+    }
+}
+
 function buildMessageHtml(decision) {
     const enter = Boolean(decision.enter);
     const dir = (decision.direction || '').toUpperCase();
@@ -119,6 +140,7 @@ function buildMessageHtml(decision) {
         infoLines.push(`止损   ${slText}`);
         infoLines.push(`止盈   ${tpText}`);
     }
+    infoLines.push(...fmtIndicatorViews(decision));
 
     const mainInfo = `<pre>${escapeHtml(infoLines.join('\n'))}</pre>`;
 

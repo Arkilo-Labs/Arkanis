@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import LogTerminal from './LogTerminal.vue';
 import CustomSelect from './CustomSelect.vue';
+import IndicatorViewsCard from './IndicatorViewsCard.vue';
 import { useSocket } from '../composables/useSocket';
 
 const { socket } = useSocket();
@@ -466,6 +467,10 @@ function formatPrice(value) {
 
             <div v-if="item.reason" class="text-xs text-white/40 mt-2 line-clamp-2">
               {{ item.reason }}
+            </div>
+
+            <div v-if="item.indicator_views" class="mt-3">
+              <IndicatorViewsCard :views="item.indicator_views" title="指标观点（本次）" />
             </div>
           </div>
 

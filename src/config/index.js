@@ -76,6 +76,8 @@ export const chartConfig = {
     width: getEnvInt('CHART_WIDTH', 1280),
     height: getEnvInt('CHART_HEIGHT', 720),
     volumePaneHeight: getEnvFloat('CHART_VOLUME_PANE_HEIGHT', 0.2),
+    macdPaneHeight: getEnvFloat('CHART_MACD_PANE_HEIGHT', 0.15),
+    trendStrengthPaneHeight: getEnvFloat('CHART_TREND_STRENGTH_PANE_HEIGHT', 0.15),
 };
 
 /**

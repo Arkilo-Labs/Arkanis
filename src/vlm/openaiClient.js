@@ -32,7 +32,8 @@ export const DEFAULT_USER_PROMPT = `请仔细分析这张 K 线图，根据 Syst
 9. 请尽可能的保守来降低风险
 10. 要顺势交易，不要试图抄底
 11. 警惕假突破
-12. 入场晚了就别入，出场晚了就极速出`;
+12. 入场晚了就别入，出场晚了就极速出
+13. 图表包含 BOLL(20,2) / MACD(12,26,9) / ADX(14)，必须在 JSON 中输出 indicator_views，给出你对每个指标的看法（偏多/偏空/中性、强弱/是否低于平均等）`;
 
 export const ENHANCED_USER_PROMPT_TEMPLATE = `请仔细分析这张 K 线图。
 
@@ -45,6 +46,7 @@ export const ENHANCED_USER_PROMPT_TEMPLATE = `请仔细分析这张 K 线图。
 - **定位方法**: 将图表宽度分为 {barsCount} 等份，第 n 根 K 线位于 n/{maxBarIndex} 处
 - 价格范围: {priceMin} ~ {priceMax}
 - 当前价格 (最新收盘): {currentPrice}
+- 图表指标: BOLL(20,2) / MACD(12,26,9) / ADX(14)（已绘制在截图内）
 
 # bar_index 精确定位指南
 1. **横向定位**: 图表从左到右线性分布，使用以下公式计算 bar_index
@@ -137,6 +139,11 @@ export const ENHANCED_USER_PROMPT_TEMPLATE = `请仔细分析这张 K 线图。
   "leverage": 5,
   "confidence": 0.75,
   "reason": "上升趋势完好，价格回调至支撑位上方形成买入机会。设置限价单在86850等待回调入场。",
+  "indicator_views": {{
+    "bollinger": {{ "bias": "neutral", "note": "价格在中轨附近，带宽一般" }},
+    "macd": {{ "bias": "bullish", "note": "MACD 上穿信号线，动能转强" }},
+    "trend_strength": {{ "level": "average", "bias": "neutral", "note": "ADX 中等，趋势强度一般" }}
+  }},
   "draw_instructions": [
     {{
       "type": "polyline",
@@ -405,7 +412,7 @@ export class VLMClient {
 
         const mainText = `【主图：${primaryTimeframe}】
 ${primaryUserPrompt || DEFAULT_USER_PROMPT}
-补充：draw_instructions 只针对主图（${primaryTimeframe}）。`;
+补充：draw_instructions 只针对主图（${primaryTimeframe}），indicator_views 则基于图中 BOLL/MACD/ADX 的显示来判断。`;
 
         const auxText =
             auxUserPrompt ||

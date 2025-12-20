@@ -164,6 +164,7 @@ const ALLOWED_CONFIG_KEYS = [
     'DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_DATABASE', 'DB_POOL_MIN', 'DB_POOL_MAX',
     'PROMPT_NAME',
     'CHART_WIDTH', 'CHART_HEIGHT', 'CHART_VOLUME_PANE_HEIGHT',
+    'CHART_MACD_PANE_HEIGHT', 'CHART_TREND_STRENGTH_PANE_HEIGHT',
     'LOG_LEVEL',
     'DEFAULT_SYMBOL', 'DEFAULT_TIMEFRAME', 'DEFAULT_BARS'
 ];
@@ -569,6 +570,22 @@ function buildBinanceUrl(symbol, { market = 'futures' } = {}) {
     return `https://www.binance.com/zh-CN/futures/${s}?type=perpetual`;
 }
 
+function fmtIndicatorViews(decision) {
+    const views = decision?.indicator_views;
+    if (!views || typeof views !== 'object') return [];
+
+    const boll = views.bollinger?.bias || '-';
+    const macd = views.macd?.bias || '-';
+    const strengthLevel = views.trend_strength?.level || '-';
+    const strengthBias = views.trend_strength?.bias || '-';
+
+    return [
+        `BOLL   ${String(boll)}`,
+        `MACD   ${String(macd)}`,
+        `ADX    ${String(strengthLevel)} / ${String(strengthBias)}`,
+    ];
+}
+
 function buildMessageHtml(decision) {
     const enter = Boolean(decision.enter);
     const dir = (decision.direction || '').toUpperCase();
@@ -592,6 +609,7 @@ function buildMessageHtml(decision) {
         infoLines.push(`止损   ${slText}`);
         infoLines.push(`止盈   ${tpText}`);
     }
+    infoLines.push(...fmtIndicatorViews(decision));
 
     const mainInfo = `<pre>${escapeHtml(infoLines.join('\n'))}</pre>`;
 

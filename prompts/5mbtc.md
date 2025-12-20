@@ -112,6 +112,11 @@
     "stop_loss_price": 数值,
     "take_profit_price": 数值,
     "reason": "详细的专业分析理由（包含入场价格的设置逻辑，说明为什么选择这个入场价）",
+    "indicator_views": {
+        "bollinger": { "bias": "bullish/bearish/neutral", "note": "你对布林带的看法（可简短）" },
+        "macd": { "bias": "bullish/bearish/neutral", "note": "你对 MACD 的看法（可简短）" },
+        "trend_strength": { "level": "below_average/average/above_average", "bias": "bullish/bearish/neutral", "note": "你对趋势强度(ADX)的看法（可简短）" }
+    },
     "draw_instructions": [...]
 }
 
@@ -126,6 +131,11 @@
     "stop_loss_price": 87550,  // 阻力上方 150 点止损
     "take_profit_price": 87150,  // 目标 200 点利润
     "reason": "5分钟级别下降趋势，价格反弹至关键阻力位 87400 附近。设置限价卖单在 87350（阻力下方 50 点）等待反弹到位。止损 150 点，止盈 200 点，盈亏比 1:1.33。",
+    "indicator_views": {
+        "bollinger": { "bias": "bearish", "note": "价格贴近下轨运行，中轨下压，偏空" },
+        "macd": { "bias": "bearish", "note": "MACD 位于零轴下方且弱势，反弹动能不足" },
+        "trend_strength": { "level": "above_average", "bias": "bearish", "note": "ADX 偏高，趋势强度较强，优先顺势" }
+    },
     "draw_instructions": [
         // 趋势结构线（第一优先）- 5分钟下降趋势
         {"type": "polyline", "points": [

@@ -24,15 +24,32 @@ export class ChartBuilder {
      * @param {number} [options.width] 图表宽度
      * @param {number} [options.height] 图表高度
      * @param {number} [options.volumePaneHeight] 成交量面板高度占比
+     * @param {number} [options.macdPaneHeight] MACD 面板高度占比
+     * @param {number} [options.trendStrengthPaneHeight] 趋势强度(ADX)面板高度占比
      */
-    constructor({ width = null, height = null, volumePaneHeight = null } = {}) {
+    constructor({ width = null, height = null, volumePaneHeight = null, macdPaneHeight = null, trendStrengthPaneHeight = null } = {}) {
         this.width = width || chartConfig.width;
         this.height = height || chartConfig.height;
         this.volumePaneHeight = volumePaneHeight || chartConfig.volumePaneHeight;
+        this.macdPaneHeight = macdPaneHeight || chartConfig.macdPaneHeight;
+        this.trendStrengthPaneHeight = trendStrengthPaneHeight || chartConfig.trendStrengthPaneHeight;
         this._coordMapper = null;
         this._browser = null;
         this._page = null;
         this._textAnnotations = [];
+    }
+
+    /**
+     * 主图高度占比（剩余用于成交量/MACD/ADX）
+     * @private
+     */
+    _getMainPaneHeightRatio() {
+        const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));
+        const volume = clamp01(this.volumePaneHeight);
+        const macd = clamp01(this.macdPaneHeight);
+        const strength = clamp01(this.trendStrengthPaneHeight);
+        const sum = volume + macd + strength;
+        return Math.max(0.35, 1 - Math.min(0.65, sum));
     }
 
     /**
@@ -204,10 +221,11 @@ export class ChartBuilder {
         }
 
         // 创建坐标映射器
+        const mainPaneHeightRatio = this._getMainPaneHeightRatio();
         this._coordMapper = new CoordMapper({
             bars: input.bars,
             width: this.width,
-            height: Math.floor(this.height * (1 - this.volumePaneHeight)),
+            height: Math.floor(this.height * mainPaneHeightRatio),
         });
 
         // 准备图表数据
@@ -223,6 +241,8 @@ export class ChartBuilder {
         html = this._replaceToken(html, 'WIDTH', String(this.width));
         html = this._replaceToken(html, 'HEIGHT', String(this.height));
         html = this._replaceToken(html, 'VOLUME_HEIGHT', String(this.volumePaneHeight));
+        html = this._replaceToken(html, 'MACD_HEIGHT', String(this.macdPaneHeight));
+        html = this._replaceToken(html, 'TREND_STRENGTH_HEIGHT', String(this.trendStrengthPaneHeight));
         html = this._replaceToken(html, 'CHART_DATA', this._safeJson(chartData));
         html = this._replaceToken(html, 'OVERLAYS', this._safeJson(overlays));
         html = this._replaceToken(html, 'WATERMARK_JSON', this._safeJson(watermark));
@@ -333,7 +353,9 @@ export class ChartBuilder {
 
             // 计算主图区域
             const volumeHeight = Math.floor(imgHeight * this.volumePaneHeight);
-            const mainHeight = imgHeight - volumeHeight;
+            const macdHeight = Math.floor(imgHeight * this.macdPaneHeight);
+            const trendStrengthHeight = Math.floor(imgHeight * this.trendStrengthPaneHeight);
+            const mainHeight = imgHeight - volumeHeight - macdHeight - trendStrengthHeight;
 
             // lightweight-charts 的边距
             const chartTopMargin = 20;

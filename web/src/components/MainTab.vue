@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, computed } from 'vue';
 import LogTerminal from './LogTerminal.vue';
 import CustomSelect from './CustomSelect.vue';
 import ChartView from './ChartView.vue';
+import IndicatorViewsCard from './IndicatorViewsCard.vue';
 import { useSocket } from '../composables/useSocket';
 
 const { socket } = useSocket();
@@ -397,6 +398,10 @@ function formatPrice(value) {
             <p class="text-sm text-white/60 leading-relaxed max-h-32 overflow-y-auto scrollbar-glass">
               {{ resultJson.reason }}
             </p>
+          </div>
+
+          <div v-if="resultJson.indicator_views" class="mt-6 pt-6 border-t border-white/10">
+            <IndicatorViewsCard :views="resultJson.indicator_views" />
           </div>
         </div>
       </div>

@@ -88,6 +88,59 @@ export const DrawInstructionSchema = z.object({
 });
 
 /**
+ * 指标倾向（尽量结构化，但允许一定自由度）
+ */
+const IndicatorBiasSchema = z.preprocess((val) => {
+    if (val === null || val === undefined) return 'neutral';
+    const raw = String(val).trim().toLowerCase();
+    if (!raw) return 'neutral';
+
+    if (['bullish', 'long', 'buy', '看多', '多', '偏多', '多头'].includes(raw)) return 'bullish';
+    if (['bearish', 'short', 'sell', '看空', '空', '偏空', '空头'].includes(raw)) return 'bearish';
+    if (['neutral', 'none', 'wait', 'hold', '中性', '观望'].includes(raw)) return 'neutral';
+    return raw;
+}, z.string());
+
+const TrendStrengthLevelSchema = z.preprocess((val) => {
+    if (val === null || val === undefined) return 'average';
+    const raw = String(val).trim().toLowerCase();
+    if (!raw) return 'average';
+
+    if (['below_average', 'below', 'weak', 'low', '低于平均', '偏弱', '弱'].includes(raw)) return 'below_average';
+    if (['above_average', 'above', 'strong', 'high', '高于平均', '偏强', '强'].includes(raw)) return 'above_average';
+    if (['average', 'mid', 'normal', '中等', '平均', '一般'].includes(raw)) return 'average';
+    return raw;
+}, z.string());
+
+export const IndicatorViewsSchema = z
+    .object({
+        bollinger: z
+            .object({
+                bias: IndicatorBiasSchema.default('neutral'),
+                note: z.string().optional().nullable().default(''),
+            })
+            .default({ bias: 'neutral', note: '' }),
+        macd: z
+            .object({
+                bias: IndicatorBiasSchema.default('neutral'),
+                note: z.string().optional().nullable().default(''),
+            })
+            .default({ bias: 'neutral', note: '' }),
+        trend_strength: z
+            .object({
+                level: TrendStrengthLevelSchema.default('average'),
+                bias: IndicatorBiasSchema.optional().nullable().default('neutral'),
+                note: z.string().optional().nullable().default(''),
+            })
+            .default({ level: 'average', bias: 'neutral', note: '' }),
+    })
+    .default({
+        bollinger: { bias: 'neutral', note: '' },
+        macd: { bias: 'neutral', note: '' },
+        trend_strength: { level: 'average', bias: 'neutral', note: '' },
+    });
+
+/**
  * VLM 决策 Schema
  */
 export const VLMDecisionSchema = z.object({
@@ -129,6 +182,11 @@ export const VLMDecisionSchema = z.object({
     stop_loss_price: z.number().nullable().optional(),
     take_profit_price: z.number().nullable().optional(),
     reason: z.string().default(''),
+    indicator_views: IndicatorViewsSchema.optional().default({
+        bollinger: { bias: 'neutral', note: '' },
+        macd: { bias: 'neutral', note: '' },
+        trend_strength: { level: 'average', bias: 'neutral', note: '' },
+    }),
     draw_instructions: z.array(DrawInstructionSchema).default([]),
 });
 
@@ -146,6 +204,11 @@ export class VLMDecision {
         this.stopLossPrice = data.stop_loss_price ?? null;
         this.takeProfitPrice = data.take_profit_price ?? null;
         this.reason = data.reason ?? '';
+        this.indicatorViews = data.indicator_views ?? {
+            bollinger: { bias: 'neutral', note: '' },
+            macd: { bias: 'neutral', note: '' },
+            trend_strength: { level: 'average', bias: 'neutral', note: '' },
+        };
         this.drawInstructions = (data.draw_instructions ?? []).map((d) => new DrawInstruction(d));
     }
 
@@ -160,6 +223,7 @@ export class VLMDecision {
             stop_loss_price: this.stopLossPrice,
             take_profit_price: this.takeProfitPrice,
             reason: this.reason,
+            indicator_views: this.indicatorViews,
             draw_instructions: this.drawInstructions.map((d) => d.toDict()),
         };
     }
@@ -233,4 +297,5 @@ export default {
     VLMDecisionSchema,
     DrawInstructionSchema,
     AnchorPointSchema,
+    IndicatorViewsSchema,
 };
