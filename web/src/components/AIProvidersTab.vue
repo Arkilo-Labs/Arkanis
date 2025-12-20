@@ -195,21 +195,30 @@ onMounted(() => {
     </div>
 
     <!-- Provider List -->
-    <div v-else-if="providers.length > 0" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <transition-group 
+      v-if="providers.length > 0" 
+      name="provider-list"
+      tag="div"
+      class="provider-list-grid"
+    >
       <ProviderCard
-        v-for="provider in providers"
+        v-for="(provider, index) in providers"
         :key="provider.id"
         :provider="provider"
+        :style="{ 'animation-delay': `${index * 0.05}s` }"
+        class="animate-slide-up"
         @update="updateProvider"
         @delete="deleteProvider"
         @activate="activateProvider"
       />
-    </div>
+    </transition-group>
 
     <!-- Empty State -->
-    <div v-else class="glass-card p-12 text-center">
-      <i class="fas fa-inbox text-6xl text-white/20 mb-4"></i>
-      <h3 class="text-xl text-white/70 mb-2">暂无 Provider</h3>
+    <div v-else class="glass-card p-12 text-center animate-slide-up">
+      <div class="empty-state-icon">
+        <i class="fas fa-brain"></i>
+      </div>
+      <h3 class="text-xl text-white/70 mb-2 font-semibold">暂无 Provider</h3>
       <p class="text-sm text-white/50 mb-6">点击上方按钮添加您的第一个 AI Provider</p>
       <button @click="openAddModal" class="btn-glass">
         <i class="fas fa-plus"></i>
@@ -243,22 +252,34 @@ onMounted(() => {
           <div class="space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label class="text-label block mb-2">显示名称 *</label>
+                <label class="text-label block mb-2">
+                  <i class="fas fa-tag text-xs mr-1"></i>
+                  显示名称 *
+                </label>
                 <input v-model="newProvider.name" type="text" class="input-glass" placeholder="Claude Sonnet 4.5" required />
               </div>
 
               <div>
-                <label class="text-label block mb-2">API Base URL *</label>
+                <label class="text-label block mb-2">
+                  <i class="fas fa-link text-xs mr-1"></i>
+                  API Base URL *
+                </label>
                 <input v-model="newProvider.baseUrl" type="text" class="input-glass" placeholder="https://api.example.com" required />
               </div>
 
               <div>
-                <label class="text-label block mb-2">模型名称 *</label>
+                <label class="text-label block mb-2">
+                  <i class="fas fa-cube text-xs mr-1"></i>
+                  模型名称 *
+                </label>
                 <input v-model="newProvider.modelName" type="text" class="input-glass" placeholder="claude-sonnet-4-5" required />
               </div>
 
               <div>
-                <label class="text-label block mb-2">API Key *</label>
+                <label class="text-label block mb-2">
+                  <i class="fas fa-key text-xs mr-1"></i>
+                  API Key *
+                </label>
                 <input v-model="newProvider.apiKey" type="password" class="input-glass" placeholder="sk-..." required />
               </div>
 
@@ -328,6 +349,76 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.provider-list-grid {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .provider-list-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1536px) {
+  .provider-list-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.provider-list-enter-active,
+.provider-list-leave-active {
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.provider-list-enter-from {
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
+}
+
+.provider-list-leave-to {
+  opacity: 0;
+  transform: translateX(-20px) scale(0.95);
+}
+
+.provider-list-move {
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.empty-state-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 1.5rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 2rem;
+  color: rgba(255, 255, 255, 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.08),
+    0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.empty-state-icon:hover {
+  transform: translateY(-4px) scale(1.05);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.5);
+  box-shadow: 
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 8px 24px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
 .input-glass {
   width: 100%;
   padding: 0.75rem;
@@ -337,12 +428,28 @@ onMounted(() => {
   color: white;
   font-size: 0.875rem;
   transition: all 0.2s;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.05),
+    0 2px 6px rgba(0, 0, 0, 0.08);
 }
 
 .input-glass:focus {
   outline: none;
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 4px 12px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.input-glass:hover:not(:focus) {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .input-glass::placeholder {

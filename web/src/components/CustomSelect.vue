@@ -63,9 +63,19 @@ function handleScroll() {
   }
 }
 
+function handleMouseMove(e) {
+  if (!triggerRef.value) return;
+  const rect = triggerRef.value.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  triggerRef.value.style.setProperty('--mouse-x', `${x}px`);
+  triggerRef.value.style.setProperty('--mouse-y', `${y}px`);
+}
+
 onMounted(() => {
   document.addEventListener('click', handleClickOutside);
   document.addEventListener('keydown', handleKeydown);
+  document.addEventListener('mousemove', handleMouseMove);
   window.addEventListener('scroll', handleScroll, true);
   window.addEventListener('resize', handleScroll);
 });
@@ -73,6 +83,7 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside);
   document.removeEventListener('keydown', handleKeydown);
+  document.removeEventListener('mousemove', handleMouseMove);
   window.removeEventListener('scroll', handleScroll, true);
   window.removeEventListener('resize', handleScroll);
 });
@@ -140,9 +151,14 @@ onUnmounted(() => {
   justify-content: space-between;
   text-align: left;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   isolation: isolate;
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  box-shadow: 
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.08),
+    0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .select-trigger::before {
@@ -155,7 +171,7 @@ onUnmounted(() => {
     radial-gradient(
       300px circle at var(--mouse-x) var(--mouse-y),
       rgba(255, 255, 255, 0.6),
-      rgba(255, 255, 255, 0.1) 40%,
+      rgba(255, 255, 255, 0.15) 40%,
       transparent 100%
     );
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
@@ -164,14 +180,51 @@ onUnmounted(() => {
   opacity: 0;
   transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
+  z-index: 1;
+}
+
+.select-trigger::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: calc(var(--radius-md) + 4px);
+  background: 
+    radial-gradient(
+      200px circle at var(--mouse-x) var(--mouse-y), 
+      rgba(255, 255, 255, 0.15), 
+      transparent 70%
+    );
+  opacity: 0;
+  filter: blur(12px);
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: -1;
+  pointer-events: none;
 }
 
 .select-trigger:hover {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 4px 12px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
 }
 
-.select-trigger:hover::before {
+.select-trigger:hover::before,
+.select-trigger:hover::after {
   opacity: 1;
+}
+
+.select-trigger.is-open,
+.custom-select.is-open .select-trigger {
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
+    0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 6px 16px rgba(0, 0, 0, 0.2);
 }
 
 .selected-value {
@@ -193,17 +246,20 @@ onUnmounted(() => {
 
 .dropdown-menu {
   /* Position is now controlled by inline styles */
-  background: rgba(26, 26, 36, 0.98);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(18, 18, 26, 0.95);
+  backdrop-filter: blur(32px) saturate(180%);
+  -webkit-backdrop-filter: blur(32px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 1rem;
   overflow: hidden;
   box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(255, 255, 255, 0.05);
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 12px 48px rgba(0, 0, 0, 0.5),
+    0 4px 16px rgba(0, 0, 0, 0.3);
   max-height: 300px;
   overflow-y: auto;
+  padding: 0.5rem;
 }
 
 .dropdown-item {
@@ -213,27 +269,66 @@ onUnmounted(() => {
   padding: 0.75rem 1rem;
   font-family: 'Inter', monospace;
   font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.65);
   cursor: pointer;
-  transition: all 0.15s ease;
-  border-left: 2px solid transparent;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 0.625rem;
+  position: relative;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  margin-bottom: 0.25rem;
+}
+
+.dropdown-item:last-child {
+  margin-bottom: 0;
+}
+
+.dropdown-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.4));
+  border-radius: 0 2px 2px 0;
+  transition: height 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .dropdown-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.95);
-  border-left-color: rgba(0, 122, 255, 0.6);
+  box-shadow: 
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.1),
+    0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: translateX(2px);
+}
+
+.dropdown-item:hover::before {
+  height: 60%;
 }
 
 .dropdown-item.is-selected {
-  background: linear-gradient(90deg, rgba(0, 122, 255, 0.15), transparent);
+  background: rgba(255, 255, 255, 0.12);
   color: white;
-  border-left-color: rgba(0, 122, 255, 0.8);
+  font-weight: 500;
+  box-shadow: 
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 2px 12px rgba(255, 255, 255, 0.08);
+}
+
+.dropdown-item.is-selected::before {
+  height: 70%;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.6));
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
 }
 
 .dropdown-item i {
   font-size: 0.75rem;
-  color: rgba(0, 122, 255, 0.8);
+  color: rgba(255, 255, 255, 0.9);
+  margin-left: 0.5rem;
 }
 
 .dropdown-menu::-webkit-scrollbar {
