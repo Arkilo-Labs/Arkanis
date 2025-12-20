@@ -11,7 +11,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update', 'delete', 'activate']);
 
-const isExpanded = ref(false);
+const showDetailModal = ref(false);
 const isEditing = ref(false);
 const editForm = ref({ ...props.provider });
 
@@ -25,12 +25,16 @@ const activeClass = computed(() =>
   props.provider.isActive ? 'border-green-500/50 bg-green-500/5' : ''
 );
 
-function toggleExpand() {
-  isExpanded.value = !isExpanded.value;
-  if (!isExpanded.value) {
-    isEditing.value = false;
-    editForm.value = { ...props.provider };
-  }
+function openDetailModal() {
+  showDetailModal.value = true;
+  isEditing.value = false;
+  editForm.value = { ...props.provider };
+}
+
+function closeDetailModal() {
+  showDetailModal.value = false;
+  isEditing.value = false;
+  editForm.value = { ...props.provider };
 }
 
 function startEdit() {
@@ -51,6 +55,7 @@ function saveEdit() {
 function handleDelete() {
   if (confirm(`确定删除 Provider "${props.provider.name}"？`)) {
     emit('delete', props.provider.id);
+    closeDetailModal();
   }
 }
 
@@ -64,12 +69,13 @@ function handleActivate() {
 <template>
   <div 
     :class="[
-      'provider-card glass-card p-6 transition-all duration-300',
+      'provider-card glass-card p-6 transition-all duration-300 cursor-pointer',
       { 'provider-card-active': provider.isActive }
     ]" 
+    @click="openDetailModal"
   >
     <div class="flex items-start justify-between">
-      <div class="flex-1 cursor-pointer" @click="toggleExpand">
+      <div class="flex-1">
         <!-- Header -->
         <div class="flex items-center gap-3 mb-3">
           <div class="provider-icon">
@@ -116,7 +122,7 @@ function handleActivate() {
       </div>
 
       <!-- Actions -->
-      <div class="flex flex-col items-end gap-2 ml-4">
+      <div class="flex items-center gap-2 ml-4">
         <button
           v-if="!provider.isActive"
           @click.stop="handleActivate"
@@ -125,32 +131,53 @@ function handleActivate() {
         >
           <i class="fas fa-check-circle"></i>
         </button>
-        <button
-          @click.stop="toggleExpand"
-          class="action-btn"
-          :title="isExpanded ? '收起' : '展开'"
-        >
-          <i :class="[
-            'fas transition-transform duration-300',
-            isExpanded ? 'fa-chevron-up' : 'fa-chevron-down'
-          ]"></i>
-        </button>
       </div>
     </div>
+  </div>
 
-    <transition
-      enter-active-class="transition-all duration-300 ease-out"
-      enter-from-class="opacity-0 max-h-0"
-      enter-to-class="opacity-100 max-h-[800px]"
-      leave-active-class="transition-all duration-200 ease-in"
-      leave-from-class="opacity-100 max-h-[800px]"
-      leave-to-class="opacity-0 max-h-0"
+  <!-- Detail Modal -->
+  <transition
+    enter-active-class="transition duration-200 ease-out"
+    leave-active-class="transition duration-150 ease-in"
+    enter-from-class="opacity-0"
+    leave-to-class="opacity-0"
+  >
+    <div
+      v-if="showDetailModal"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      @click.self="closeDetailModal"
     >
-      <div v-if="isExpanded" class="mt-6 pt-6 border-t border-white/10 overflow-hidden" @click.stop>
+      <div class="glass-card max-w-3xl w-full max-h-[90vh] overflow-y-auto p-8 animate-modal-in" @click.stop>
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h2 class="text-2xl font-bold text-white mb-1">{{ provider.name }}</h2>
+            <p class="text-sm text-white/50 font-mono">{{ provider.modelName }}</p>
+          </div>
+          <button
+            @click="closeDetailModal"
+            class="p-2 rounded-lg hover:bg-white/10 text-white/60 transition-colors"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
         <div v-if="!isEditing" class="space-y-4">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label class="text-label block mb-2">API Key</label>
+              <label class="text-label block mb-2">
+                <i class="fas fa-link text-xs mr-1"></i>
+                API Base URL
+              </label>
+              <div class="font-mono text-sm text-white/70 bg-white/5 p-3 rounded-lg">
+                {{ provider.baseUrl }}
+              </div>
+            </div>
+
+            <div>
+              <label class="text-label block mb-2">
+                <i class="fas fa-key text-xs mr-1"></i>
+                API Key
+              </label>
               <div class="font-mono text-sm text-white/70 bg-white/5 p-3 rounded-lg">
                 {{ provider.apiKey.substring(0, 20) }}...
               </div>
@@ -258,14 +285,13 @@ function handleActivate() {
           </div>
         </div>
       </div>
-    </transition>
-  </div>
+    </div>
+  </transition>
 </template>
 
 <style scoped>
 .provider-card {
   position: relative;
-  cursor: default;
   backdrop-filter: blur(24px) saturate(180%);
   -webkit-backdrop-filter: blur(24px) saturate(180%);
   box-shadow: 
@@ -479,5 +505,20 @@ function handleActivate() {
     inset 0 1px 0 0 rgba(52, 199, 89, 0.25),
     0 0 0 1px rgba(52, 199, 89, 0.2),
     0 6px 20px rgba(52, 199, 89, 0.25);
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-modal-in {
+  animation: modal-in 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 </style>
