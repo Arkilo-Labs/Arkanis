@@ -3,7 +3,19 @@
  */
 
 export { Bar, RawBar } from './models.js';
-export { createPool, getPool, closePool, query, withConnection } from './pgClient.js';
+export {
+    createPool,
+    getMarketPool,
+    getCorePool,
+    closePool,
+    closePools,
+    queryMarket,
+    queryCore,
+    query,
+    withMarketConnection,
+    withCoreConnection,
+    withConnection,
+} from './pgClient.js';
 export { KlinesRepository, TIMEFRAME_MINUTES } from './klinesRepository.js';
 export {
     aggregateBarsByFactor,

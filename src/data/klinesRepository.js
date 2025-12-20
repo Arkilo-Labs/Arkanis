@@ -5,7 +5,7 @@
 
 import { marketDataConfig } from '../config/index.js';
 import { Bar, RawBar } from './models.js';
-import { query, withConnection } from './pgClient.js';
+import { queryMarket, withMarketConnection } from './pgClient.js';
 import { getExchangeClient } from './exchangeClient.js';
 import logger from '../utils/logger.js';
 
@@ -35,9 +35,13 @@ export class KlinesRepository {
      * @param {boolean} [options.autoFill] 是否自动从交易所补全数据
      */
     constructor({ tableName = null, autoFill = true } = {}) {
-        this.tableName = tableName || marketDataConfig.tableName;
         this.cfg = marketDataConfig;
         this.autoFill = autoFill;
+        this.instrumentsTable = this.cfg.instrumentsTable;
+        this.klines1mTable = tableName || this.cfg.klines1mTable;
+        this.exchange = (this.cfg.exchange || 'binance').trim().toLowerCase();
+        this.market = (this.cfg.market || 'futures').trim().toLowerCase();
+        this.instrumentIdCache = new Map();
     }
 
     /**
@@ -152,32 +156,43 @@ export class KlinesRepository {
     async _saveBarsToDb(symbol, bars) {
         if (!bars.length) return;
 
-        const cfg = this.cfg;
         const intervalMs = 60 * 1000; // 1分钟
+        const instrumentId = await this._getOrCreateInstrumentId(symbol);
 
         // 使用事务批量插入
-        await withConnection(async (client) => {
-            const sql = `
-        INSERT INTO ${this.tableName} 
-          (${cfg.symbolCol}, ${cfg.timeCol}, kline_close_time, 
-           ${cfg.openCol}, ${cfg.highCol}, ${cfg.lowCol}, ${cfg.closeCol}, 
-           ${cfg.volumeCol}, is_kline_closed)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        ON CONFLICT (${cfg.symbolCol}, ${cfg.timeCol}) DO NOTHING
-      `;
+        await withMarketConnection(async (client) => {
+            const chunkSize = 500;
+            for (let i = 0; i < bars.length; i += chunkSize) {
+                const chunk = bars.slice(i, i + chunkSize);
 
-            for (const bar of bars) {
-                await client.query(sql, [
-                    symbol.toUpperCase(),
-                    bar.tsMs,
-                    bar.tsMs + intervalMs - 1,
-                    bar.open,
-                    bar.high,
-                    bar.low,
-                    bar.close,
-                    bar.volume,
-                    1,
-                ]);
+                const values = [];
+                const params = [];
+
+                for (const bar of chunk) {
+                    const baseIndex = params.length;
+                    params.push(
+                        instrumentId,
+                        bar.tsMs,
+                        bar.tsMs + intervalMs - 1,
+                        bar.open,
+                        bar.high,
+                        bar.low,
+                        bar.close,
+                        bar.volume
+                    );
+                    values.push(
+                        `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}, $${baseIndex + 7}, $${baseIndex + 8})`
+                    );
+                }
+
+                const sql = `
+          INSERT INTO ${this.klines1mTable}
+            (instrument_id, open_time_ms, close_time_ms, open, high, low, close, volume)
+          VALUES ${values.join(',')}
+          ON CONFLICT (instrument_id, open_time_ms) DO NOTHING
+        `;
+
+                await client.query(sql, params);
             }
         });
     }
@@ -187,31 +202,30 @@ export class KlinesRepository {
      * @private
      */
     async _fetchRawBarsByRange(symbol, startTime, endTime) {
-        const cfg = this.cfg;
         const startTsMs = startTime.getTime();
         const endTsMs = endTime.getTime();
+        const instrumentId = await this._getOrCreateInstrumentId(symbol);
 
         const sql = `
-      SELECT ${cfg.timeCol}, ${cfg.openCol}, ${cfg.highCol}, 
-             ${cfg.lowCol}, ${cfg.closeCol}, ${cfg.volumeCol}
-      FROM ${this.tableName}
-      WHERE ${cfg.symbolCol} = $1 
-        AND ${cfg.timeCol} >= $2 
-        AND ${cfg.timeCol} <= $3
-      ORDER BY ${cfg.timeCol} ASC
+      SELECT open_time_ms, open, high, low, close, volume
+      FROM ${this.klines1mTable}
+      WHERE instrument_id = $1
+        AND open_time_ms >= $2
+        AND open_time_ms <= $3
+      ORDER BY open_time_ms ASC
     `;
 
-        const result = await query(sql, [symbol, startTsMs, endTsMs]);
+        const result = await queryMarket(sql, [instrumentId, startTsMs, endTsMs]);
 
         return result.rows.map(
             (row) =>
                 new RawBar({
-                    tsMs: parseInt(row[cfg.timeCol], 10),
-                    open: parseFloat(row[cfg.openCol]),
-                    high: parseFloat(row[cfg.highCol]),
-                    low: parseFloat(row[cfg.lowCol]),
-                    close: parseFloat(row[cfg.closeCol]),
-                    volume: parseFloat(row[cfg.volumeCol]),
+                    tsMs: parseInt(row.open_time_ms, 10),
+                    open: parseFloat(row.open),
+                    high: parseFloat(row.high),
+                    low: parseFloat(row.low),
+                    close: parseFloat(row.close),
+                    volume: parseFloat(row.volume),
                 })
         );
     }
@@ -272,17 +286,42 @@ export class KlinesRepository {
      * @returns {Promise<string[]>}
      */
     async getAvailableSymbols(limit = 100) {
-        const cfg = this.cfg;
         const sql = `
-      SELECT ${cfg.symbolCol}, COUNT(*) as cnt
-      FROM ${this.tableName}
-      GROUP BY ${cfg.symbolCol}
+      SELECT i.symbol, COUNT(k.*) as cnt
+      FROM ${this.instrumentsTable} i
+      JOIN ${this.klines1mTable} k ON k.instrument_id = i.id
+      WHERE i.exchange = $2 AND i.market = $3
+      GROUP BY i.symbol
       ORDER BY cnt DESC
       LIMIT $1
     `;
 
-        const result = await query(sql, [limit]);
-        return result.rows.map((row) => row[cfg.symbolCol]);
+        const result = await queryMarket(sql, [limit, this.exchange, this.market]);
+        return result.rows.map((row) => row.symbol);
+    }
+
+    async _getOrCreateInstrumentId(symbol) {
+        const normalizedSymbol = String(symbol || '').trim().toUpperCase();
+        if (!normalizedSymbol) {
+            throw new Error('symbol 不能为空');
+        }
+
+        const cacheKey = `${this.exchange}:${this.market}:${normalizedSymbol}`;
+        if (this.instrumentIdCache.has(cacheKey)) {
+            return this.instrumentIdCache.get(cacheKey);
+        }
+
+        const sql = `
+      INSERT INTO ${this.instrumentsTable} (exchange, market, symbol, updated_at)
+      VALUES ($1, $2, $3, now())
+      ON CONFLICT (exchange, market, symbol)
+      DO UPDATE SET updated_at = now()
+      RETURNING id
+    `;
+        const res = await queryMarket(sql, [this.exchange, this.market, normalizedSymbol]);
+        const id = Number.parseInt(res.rows[0].id, 10);
+        this.instrumentIdCache.set(cacheKey, id);
+        return id;
     }
 }
 

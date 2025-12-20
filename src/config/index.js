@@ -55,17 +55,54 @@ function getEnvBool(key, defaultValue = false) {
 /**
  * 数据库配置
  */
+function buildPostgresDsn({ host, port, user, password, database }) {
+    const u = encodeURIComponent(String(user ?? ''));
+    const p = encodeURIComponent(String(password ?? ''));
+    const db = encodeURIComponent(String(database ?? ''));
+    return `postgresql://${u}:${p}@${host}:${port}/${db}`;
+}
+
 export const databaseConfig = {
     host: getEnv('DB_HOST', 'localhost'),
     port: getEnvInt('DB_PORT', 5432),
     user: getEnv('DB_USER', 'postgres'),
     password: getEnv('DB_PASSWORD', 'skeet'),
-    database: getEnv('DB_DATABASE', 'market_signals'),
+
+    adminDatabase: getEnv('DB_ADMIN_DATABASE', 'postgres'),
+    coreDatabase: getEnv('DB_CORE_DATABASE', 'arkilo_core'),
+    marketDatabase: getEnv('DB_MARKET_DATABASE', getEnv('DB_DATABASE', 'arkilo_market_data')),
+
     minPoolSize: getEnvInt('DB_POOL_MIN', 2),
     maxPoolSize: getEnvInt('DB_POOL_MAX', 10),
 
-    get dsn() {
-        return `postgresql://${this.user}:${this.password}@${this.host}:${this.port}/${this.database}`;
+    get adminDsn() {
+        return buildPostgresDsn({
+            host: this.host,
+            port: this.port,
+            user: this.user,
+            password: this.password,
+            database: this.adminDatabase,
+        });
+    },
+
+    get coreDsn() {
+        return buildPostgresDsn({
+            host: this.host,
+            port: this.port,
+            user: this.user,
+            password: this.password,
+            database: this.coreDatabase,
+        });
+    },
+
+    get marketDsn() {
+        return buildPostgresDsn({
+            host: this.host,
+            port: this.port,
+            user: this.user,
+            password: this.password,
+            database: this.marketDatabase,
+        });
     },
 };
 
@@ -91,14 +128,10 @@ export const vlmConfig = {
  * 市场数据表配置
  */
 export const marketDataConfig = {
-    tableName: getEnv('MARKET_DATA_TABLE', 'market_data'),
-    symbolCol: 'symbol',
-    timeCol: 'kline_start_time',
-    openCol: 'open_price',
-    highCol: 'high_price',
-    lowCol: 'low_price',
-    closeCol: 'close_price',
-    volumeCol: 'volume',
+    exchange: getEnv('MARKET_EXCHANGE', 'binance'),
+    market: getEnv('BINANCE_MARKET', 'futures'),
+    instrumentsTable: getEnv('MARKET_INSTRUMENTS_TABLE', 'instruments'),
+    klines1mTable: getEnv('MARKET_KLINES_1M_TABLE', 'klines_1m'),
 };
 
 /**

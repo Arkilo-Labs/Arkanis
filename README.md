@@ -24,6 +24,19 @@ pnpm rebuild puppeteer sharp
 cp .env.example .env
 ```
 
+### 初始化数据库（首次必做）
+
+项目默认使用两个 PostgreSQL 数据库：
+
+- `arkilo_core`：核心业务（用户/组织/订阅等）
+- `arkilo_market_data`：市场数据（K 线等）
+
+执行一次：
+
+```bash
+pnpm db:setup
+```
+
 ### 运行主脚本
 
 ```bash

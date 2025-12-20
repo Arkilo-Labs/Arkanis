@@ -7,6 +7,9 @@
     "scripts": {
         "main": "node scripts/main.js",
         "backtest": "node scripts/backtest.js",
+        "db:setup": "node scripts/db/setup.js",
+        "db:migrate:core": "node scripts/db/migrate.js core",
+        "db:migrate:market": "node scripts/db/migrate.js market",
         "lint": "eslint src scripts",
         "format": "prettier --write \"src/**/*.js\" \"scripts/**/*.js\"",
         "test": "node --test",
@@ -28,6 +31,7 @@
         "commander": "^11.1.0",
         "dotenv": "^16.3.1",
         "lightweight-charts": "4.1.0",
+        "node-pg-migrate": "^8.0.4",
         "node-telegram-bot-api": "^0.66.0",
         "pg": "^8.11.3",
         "puppeteer": "^21.6.0",

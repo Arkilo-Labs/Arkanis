@@ -7,80 +7,97 @@ import { databaseConfig } from '../config/index.js';
 
 const { Pool } = pg;
 
-/** @type {pg.Pool | null} */
-let pool = null;
+/** @type {Map<string, pg.Pool>} */
+const pools = new Map();
 
 /**
  * 创建数据库连接池
- * @param {string} [dsn] 数据库连接字符串
+ * @param {string} key 连接池标识
+ * @param {string} dsn 数据库连接字符串
  * @returns {Promise<pg.Pool>}
  */
-export async function createPool(dsn = null) {
-    if (pool !== null) {
-        return pool;
+export async function createPool(key, dsn) {
+    if (pools.has(key)) {
+        return pools.get(key);
     }
 
-    const config = dsn
-        ? { connectionString: dsn }
-        : {
-            host: databaseConfig.host,
-            port: databaseConfig.port,
-            user: databaseConfig.user,
-            password: databaseConfig.password,
-            database: databaseConfig.database,
-            min: databaseConfig.minPoolSize,
-            max: databaseConfig.maxPoolSize,
-        };
+    const pool = new Pool({
+        connectionString: dsn,
+        min: databaseConfig.minPoolSize,
+        max: databaseConfig.maxPoolSize,
+    });
 
-    pool = new Pool(config);
-
-    // 测试连接
     const client = await pool.connect();
     client.release();
 
+    pools.set(key, pool);
     return pool;
 }
 
 /**
- * 获取全局连接池
- * @returns {Promise<pg.Pool>}
+ * 获取 Market Data 连接池
  */
-export async function getPool() {
-    if (pool === null) {
-        await createPool();
-    }
-    return pool;
+export async function getMarketPool() {
+    return createPool('market', databaseConfig.marketDsn);
 }
 
 /**
- * 关闭连接池
+ * 获取 Core 连接池
+ */
+export async function getCorePool() {
+    return createPool('core', databaseConfig.coreDsn);
+}
+
+/**
+ * 关闭全部连接池
+ */
+export async function closePools() {
+    const active = Array.from(pools.entries());
+    pools.clear();
+    await Promise.all(active.map(([, p]) => p.end()));
+}
+
+/**
+ * 兼容旧调用：关闭连接池
  */
 export async function closePool() {
-    if (pool !== null) {
-        await pool.end();
-        pool = null;
-    }
+    await closePools();
 }
 
 /**
- * 执行查询
+ * 在 Market Data 执行查询
  * @param {string} sql SQL 语句
  * @param {any[]} params 参数
  * @returns {Promise<pg.QueryResult>}
  */
-export async function query(sql, params = []) {
-    const p = await getPool();
+export async function queryMarket(sql, params = []) {
+    const p = await getMarketPool();
     return p.query(sql, params);
 }
 
 /**
- * 获取连接并执行回调
+ * 在 Core 执行查询
+ */
+export async function queryCore(sql, params = []) {
+    const p = await getCorePool();
+    return p.query(sql, params);
+}
+
+/**
+ * 兼容旧调用：默认走 Market Data
+ */
+export async function query(sql, params = []) {
+    return queryMarket(sql, params);
+}
+
+/**
+ * 获取 Market 连接并执行回调
  * @template T
  * @param {(client: pg.PoolClient) => Promise<T>} callback
  * @returns {Promise<T>}
  */
-export async function withConnection(callback) {
-    const p = await getPool();
+export async function withMarketConnection(callback) {
+    const p = await getMarketPool();
     const client = await p.connect();
     try {
         return await callback(client);
@@ -89,10 +106,39 @@ export async function withConnection(callback) {
     }
 }
 
+/**
+ * 获取 Core 连接并执行回调
+ * @template T
+ * @param {(client: pg.PoolClient) => Promise<T>} callback
+ * @returns {Promise<T>}
+ */
+export async function withCoreConnection(callback) {
+    const p = await getCorePool();
+    const client = await p.connect();
+    try {
+        return await callback(client);
+    } finally {
+        client.release();
+    }
+}
+
+/**
+ * 兼容旧调用：默认走 Market Data
+ */
+export async function withConnection(callback) {
+    return withMarketConnection(callback);
+}
+
 export default {
     createPool,
-    getPool,
+    getMarketPool,
+    getCorePool,
     closePool,
+    closePools,
+    queryMarket,
+    queryCore,
     query,
+    withMarketConnection,
+    withCoreConnection,
     withConnection,
 };

@@ -123,13 +123,22 @@ export class ExchangeClient {
 // 全局客户端实例
 let exchangeClient = null;
 
+function resolveBinanceApiConfig() {
+    const market = String(process.env.BINANCE_MARKET || 'futures').trim().toLowerCase();
+    if (market === 'spot') {
+        return { baseUrl: 'https://api.binance.com', klinesEndpoint: '/api/v3/klines' };
+    }
+    return { baseUrl: 'https://fapi.binance.com', klinesEndpoint: '/fapi/v1/klines' };
+}
+
 /**
  * 获取全局交易所客户端
  * @returns {ExchangeClient}
  */
 export function getExchangeClient() {
     if (exchangeClient === null) {
-        exchangeClient = new ExchangeClient();
+        const { baseUrl, klinesEndpoint } = resolveBinanceApiConfig();
+        exchangeClient = new ExchangeClient({ baseUrl, klinesEndpoint });
     }
     return exchangeClient;
 }

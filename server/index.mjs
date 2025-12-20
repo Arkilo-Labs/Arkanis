@@ -11,6 +11,10 @@ import bodyParser from 'body-parser';
 import chokidar from 'chokidar';
 import { config as dotenvConfig } from 'dotenv';
 import PromptManager from '../src/vlm/promptManager.js';
+import { z } from 'zod';
+import { queryCore, withCoreConnection } from '../src/data/index.js';
+import { hashPassword, verifyPassword } from '../src/services/auth/password.js';
+import { generateSessionToken, tokenToHash } from '../src/services/auth/session.js';
 import {
     buildBinanceUrl,
     buildDecisionMessageHtml,
@@ -38,10 +42,37 @@ app.use(bodyParser.json());
 
 // Serve static files from 'outputs' directory
 app.use('/outputs', express.static(join(PROJECT_ROOT, 'outputs')));
+app.use('/verify-test', express.static(join(PROJECT_ROOT, 'web_verify_test')));
 
 // Store active processes and session data
 const activeProcesses = new Map();
 const sessionChartData = new Map();
+
+function getBearerToken(req) {
+    const header = String(req.headers.authorization || '').trim();
+    if (header.toLowerCase().startsWith('bearer ')) return header.slice(7).trim();
+    const fromHeader = String(req.headers['x-session-token'] || '').trim();
+    return fromHeader || '';
+}
+
+async function getAuthedUser(req) {
+    const token = getBearerToken(req);
+    if (!token) return null;
+
+    const tokenHash = tokenToHash(token);
+    const sql = `
+      SELECT u.id, u.email, u.display_name, u.status, u.email_verified_at
+      FROM user_sessions s
+      JOIN users u ON u.id = s.user_id
+      WHERE s.refresh_token_hash = $1
+        AND s.revoked_at IS NULL
+        AND s.expires_at > now()
+      LIMIT 1
+    `;
+    const res = await queryCore(sql, [tokenHash]);
+    if (!res.rowCount) return null;
+    return res.rows[0];
+}
 
 io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
@@ -124,6 +155,140 @@ app.get('/api/prompts', (req, res) => {
     }
 });
 
+// Auth: 注册
+app.post('/api/auth/register', async (req, res) => {
+    const schema = z.object({
+        email: z.string().email().max(320),
+        password: z.string().min(8).max(200),
+        displayName: z.string().trim().min(1).max(80).optional(),
+    });
+
+    try {
+        const input = schema.parse(req.body || {});
+        const email = input.email.trim();
+        const passwordHash = await hashPassword(input.password);
+
+        const token = generateSessionToken();
+        const tokenHash = tokenToHash(token);
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+        const user = await withCoreConnection(async (client) => {
+            await client.query('BEGIN');
+            try {
+                const insertUserSql = `
+                  INSERT INTO users (email, password_hash, display_name)
+                  VALUES ($1, $2, $3)
+                  RETURNING id, email, display_name, status, email_verified_at
+                `;
+                const u = await client.query(insertUserSql, [email, passwordHash, input.displayName || null]);
+
+                const createOrgSql = `
+                  INSERT INTO organizations (name, slug)
+                  VALUES ($1, $2)
+                  RETURNING id
+                `;
+                const slugBase = email.split('@')[0].replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 24) || 'user';
+                const slug = `${slugBase}-${Date.now().toString(36)}`;
+                const org = await client.query(createOrgSql, [`${slugBase} workspace`, slug]);
+
+                const memberSql = `
+                  INSERT INTO organization_members (organization_id, user_id, role)
+                  VALUES ($1, $2, 'owner')
+                `;
+                await client.query(memberSql, [org.rows[0].id, u.rows[0].id]);
+
+                const sessionSql = `
+                  INSERT INTO user_sessions (user_id, refresh_token_hash, expires_at)
+                  VALUES ($1, $2, $3)
+                `;
+                await client.query(sessionSql, [u.rows[0].id, tokenHash, expiresAt.toISOString()]);
+
+                await client.query('COMMIT');
+                return u.rows[0];
+            } catch (e) {
+                await client.query('ROLLBACK');
+                throw e;
+            }
+        });
+
+        res.json({ token, user });
+    } catch (error) {
+        const msg = error?.message || String(error);
+        if (msg.toLowerCase().includes('duplicate key') || msg.toLowerCase().includes('unique')) {
+            return res.status(409).json({ error: '该邮箱已注册' });
+        }
+        res.status(400).json({ error: msg });
+    }
+});
+
+// Auth: 登录
+app.post('/api/auth/login', async (req, res) => {
+    const schema = z.object({
+        email: z.string().email().max(320),
+        password: z.string().min(1).max(200),
+    });
+
+    try {
+        const input = schema.parse(req.body || {});
+        const email = input.email.trim();
+
+        const found = await queryCore(
+            'SELECT id, email, password_hash, display_name, status, email_verified_at FROM users WHERE email = $1 LIMIT 1',
+            [email]
+        );
+        if (!found.rowCount) return res.status(401).json({ error: '邮箱或密码错误' });
+
+        const userRow = found.rows[0];
+        const ok = await verifyPassword(input.password, userRow.password_hash);
+        if (!ok) return res.status(401).json({ error: '邮箱或密码错误' });
+
+        const token = generateSessionToken();
+        const tokenHash = tokenToHash(token);
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+        await queryCore(
+            'INSERT INTO user_sessions (user_id, refresh_token_hash, expires_at) VALUES ($1, $2, $3)',
+            [userRow.id, tokenHash, expiresAt.toISOString()]
+        );
+
+        const user = {
+            id: userRow.id,
+            email: userRow.email,
+            display_name: userRow.display_name,
+            status: userRow.status,
+            email_verified_at: userRow.email_verified_at,
+        };
+        res.json({ token, user });
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Auth: 当前用户
+app.get('/api/auth/me', async (req, res) => {
+    try {
+        const user = await getAuthedUser(req);
+        if (!user) return res.status(401).json({ error: '未登录' });
+        res.json({ user });
+    } catch (error) {
+        res.status(500).json({ error: error?.message || String(error) });
+    }
+});
+
+// Auth: 登出（撤销会话）
+app.post('/api/auth/logout', async (req, res) => {
+    try {
+        const token = getBearerToken(req);
+        if (!token) return res.json({ success: true });
+
+        const tokenHash = tokenToHash(token);
+        await queryCore('UPDATE user_sessions SET revoked_at = now() WHERE refresh_token_hash = $1', [tokenHash]);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
 // 获取图表数据
 app.get('/api/chart-data/:sessionId', async (req, res) => {
     try {
@@ -166,19 +331,41 @@ app.post('/api/chart-data', async (req, res) => {
 
 // 允许修改的配置项白名单
 const ALLOWED_CONFIG_KEYS = [
-    'DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_DATABASE', 'DB_POOL_MIN', 'DB_POOL_MAX',
+    'DB_HOST',
+    'DB_PORT',
+    'DB_USER',
+    'DB_PASSWORD',
+    'DB_ADMIN_DATABASE',
+    'DB_CORE_DATABASE',
+    'DB_MARKET_DATABASE',
+    'DB_DATABASE',
+    'DB_POOL_MIN',
+    'DB_POOL_MAX',
     'PROMPT_NAME',
     'CHART_WIDTH', 'CHART_HEIGHT', 'CHART_VOLUME_PANE_HEIGHT',
     'CHART_MACD_PANE_HEIGHT', 'CHART_TREND_STRENGTH_PANE_HEIGHT',
     'LOG_LEVEL',
-    'DEFAULT_SYMBOL', 'DEFAULT_TIMEFRAME', 'DEFAULT_BARS'
+    'DEFAULT_SYMBOL', 'DEFAULT_TIMEFRAME', 'DEFAULT_BARS',
+    'MARKET_EXCHANGE',
+    'BINANCE_MARKET'
 ];
 
 // 配置项分组和描述
 const CONFIG_SCHEMA = {
     database: {
         label: 'PostgreSQL 数据库',
-        items: ['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_DATABASE', 'DB_POOL_MIN', 'DB_POOL_MAX']
+        items: [
+            'DB_HOST',
+            'DB_PORT',
+            'DB_USER',
+            'DB_PASSWORD',
+            'DB_ADMIN_DATABASE',
+            'DB_CORE_DATABASE',
+            'DB_MARKET_DATABASE',
+            'DB_DATABASE',
+            'DB_POOL_MIN',
+            'DB_POOL_MAX',
+        ]
     },
     vlm: {
         label: 'VLM 配置',
@@ -194,7 +381,7 @@ const CONFIG_SCHEMA = {
     },
     defaults: {
         label: '默认参数',
-        items: ['DEFAULT_SYMBOL', 'DEFAULT_TIMEFRAME', 'DEFAULT_BARS']
+        items: ['DEFAULT_SYMBOL', 'DEFAULT_TIMEFRAME', 'DEFAULT_BARS', 'MARKET_EXCHANGE', 'BINANCE_MARKET']
     }
 };
 
