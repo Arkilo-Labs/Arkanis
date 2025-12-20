@@ -9,6 +9,7 @@ import { openaiConfig } from '../config/index.js';
 import { VLMDecision, VLMDecisionSchema } from './schema.js';
 import logger from '../utils/logger.js';
 import PromptManager from './promptManager.js';
+import providerService from '../services/providerService.js';
 
 // VLM 系统提示词
 export const DEFAULT_SYSTEM_PROMPT = PromptManager.getPrompt('default');
@@ -318,6 +319,26 @@ export class VLMClient {
         if (!this.apiKey) {
             throw new Error('未配置 OPENAI_API_KEY');
         }
+    }
+
+    /**
+     * 从激活的 AI Provider 创建客户端
+     * @returns {Promise<VLMClient>}
+     */
+    static async fromActiveProvider() {
+        const provider = await providerService.getActiveProvider();
+        if (!provider) {
+            throw new Error('未找到激活的 AI Provider，请在 ai-providers.json 中配置并激活一个 provider');
+        }
+
+        const thinkingEnabled = provider.thinkingMode === 'enabled';
+        
+        return new VLMClient({
+            apiKey: provider.apiKey,
+            baseUrl: provider.baseUrl,
+            model: provider.modelName,
+            enableThinking: thinkingEnabled,
+        });
     }
 
     /**

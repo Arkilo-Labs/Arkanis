@@ -316,7 +316,7 @@ async function main() {
 
         // 调用 VLM API
         logger.info('\n[步骤3] 调用 VLM API...');
-        const client = new VLMClient();
+        const client = await VLMClient.fromActiveProvider();
         logger.info(`       Base URL: ${client.baseUrl}`);
         logger.info(`       Model: ${client.model}`);
 

@@ -268,7 +268,7 @@ async function main() {
     try {
         const repo = new KlinesRepository();
         const builder = new ChartBuilder();
-        const client = new VLMClient();
+        const client = await VLMClient.fromActiveProvider();
         
         logger.info(`VLM 配置:`);
         logger.info(`       Base URL: ${client.baseUrl}`);

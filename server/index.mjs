@@ -9,11 +9,15 @@ import { readFile, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import bodyParser from 'body-parser';
 import chokidar from 'chokidar';
+import TelegramBot from 'node-telegram-bot-api';
+import { config as dotenvConfig } from 'dotenv';
 import PromptManager from '../src/vlm/promptManager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PROJECT_ROOT = join(__dirname, '..');
+
+dotenvConfig({ path: join(PROJECT_ROOT, '.env') });
 
 const app = express();
 const httpServer = createServer(app);
@@ -502,8 +506,8 @@ function setupConfigWatcher() {
     watcher.on('change', (path) => {
         const filename = path.split(/[/\\]/).pop();
         console.log(`[Config Hot Reload] 检测到配置文件变更: ${filename}`);
-        
-        io.emit('config-reload', { 
+
+        io.emit('config-reload', {
             file: filename,
             timestamp: Date.now()
         });
@@ -515,6 +519,169 @@ function setupConfigWatcher() {
 
     return watcher;
 }
+
+// Telegram 消息发送
+function escapeHtml(text) {
+    return String(text)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;');
+}
+
+function fmtNum(v, digits = 4) {
+    if (v === null || v === undefined) return '-';
+    const n = Number(v);
+    if (!Number.isFinite(n) || n === 0) return '-';
+    return n.toFixed(digits);
+}
+
+function fmtPct(v, digits = 1) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return '-';
+    return `${(n * 100).toFixed(digits)}%`;
+}
+
+function extractEntryPriceText(decision) {
+    const ep = decision.entry_price;
+    if (ep === 'market') return '市价';
+    if (typeof ep === 'number') return fmtNum(ep, 6);
+    if (decision.entry_price && Number(decision.entry_price) !== 0) return fmtNum(decision.entry_price, 6);
+    return '-';
+}
+
+function buildTradingViewInterval(timeframe) {
+    const tf = String(timeframe || '').trim().toLowerCase();
+    const m = tf.match(/^([0-9]+)([mhdw])$/);
+    if (!m) return null;
+
+    const value = Number(m[1]);
+    const unit = m[2];
+    if (!Number.isFinite(value) || value <= 0) return null;
+
+    if (unit === 'm') return String(value);
+    if (unit === 'h') return String(value * 60);
+    if (unit === 'd') return 'D';
+    if (unit === 'w') return 'W';
+    return null;
+}
+
+function buildTradingViewUrl(symbol, timeframe) {
+    const tvSymbol = `BINANCE:${String(symbol || '').trim()}`;
+    const interval = buildTradingViewInterval(timeframe);
+    const url = new URL('https://tradingview.com/chart/');
+    url.searchParams.set('symbol', tvSymbol);
+    if (interval) url.searchParams.set('interval', interval);
+    return url.toString();
+}
+
+function buildBinanceUrl(symbol, { market = 'futures' } = {}) {
+    const s = String(symbol || '').trim().toUpperCase();
+    const quotes = ['USDT', 'USDC', 'BUSD', 'TUSD', 'FDUSD', 'BTC', 'ETH', 'BNB', 'TRY', 'EUR'];
+
+    if (market === 'spot') {
+        let formatted = s;
+        for (const q of quotes) {
+            if (s.endsWith(q) && s.length > q.length) {
+                formatted = `${s.slice(0, -q.length)}_${q}`;
+                break;
+            }
+        }
+        return `https://www.binance.com/zh-CN/trade/${formatted}?type=spot`;
+    }
+
+    return `https://www.binance.com/zh-CN/futures/${s}?type=perpetual`;
+}
+
+function buildMessageHtml(decision) {
+    const enter = Boolean(decision.enter);
+    const dir = (decision.direction || '').toUpperCase();
+    const symbol = decision.symbol || '-';
+    const tf = decision.timeframe || '-';
+
+    const entryText = extractEntryPriceText(decision);
+    const slText = decision.stop_loss_price ? fmtNum(decision.stop_loss_price, 6) : '-';
+    const tpText = decision.take_profit_price ? fmtNum(decision.take_profit_price, 6) : '-';
+
+    const header = `<b>${escapeHtml(`【VLM 入场计划】${symbol} (${tf})`)}</b>`;
+
+    const infoLines = [];
+    infoLines.push(`入场   ${enter ? '是' : '否'}`);
+    if (enter) {
+        infoLines.push(`方向   ${dir || '-'}`);
+        infoLines.push(`仓位   ${fmtPct(decision.position_size)}`);
+        infoLines.push(`杠杆   ${decision.leverage || 1}x`);
+        infoLines.push(`置信度 ${fmtPct(decision.confidence)}`);
+        infoLines.push(`入场价 ${entryText}`);
+        infoLines.push(`止损   ${slText}`);
+        infoLines.push(`止盈   ${tpText}`);
+    }
+
+    const mainInfo = `<pre>${escapeHtml(infoLines.join('\n'))}</pre>`;
+
+    const reason = decision.reason ? `\n\n<b>理由</b>:\n${escapeHtml(decision.reason)}` : '';
+
+    const ts = new Date();
+    const tsText = `${ts.toISOString().replace('T', ' ').slice(0, 19)} UTC`;
+    const footer = `\n\n<i>${escapeHtml(`${tsText} · 来源: web_auto_run`)}</i>`;
+
+    return `${header}\n${mainInfo}${reason}${footer}`;
+}
+
+let telegramBot = null;
+
+function getTelegramBot() {
+    if (!telegramBot) {
+        const token = (process.env.TG_BOT_TOKEN || '').trim();
+        if (!token) {
+            throw new Error('缺少环境变量 TG_BOT_TOKEN');
+        }
+        telegramBot = new TelegramBot(token, { polling: false });
+    }
+    return telegramBot;
+}
+
+app.post('/api/send-telegram', async (req, res) => {
+    try {
+        const { decision } = req.body;
+
+        if (!decision || typeof decision !== 'object') {
+            return res.status(400).json({ error: '无效的 decision 数据' });
+        }
+
+        const chatId = (process.env.TG_CHAT_ID || '').trim();
+        if (!chatId) {
+            return res.status(500).json({ error: '缺少环境变量 TG_CHAT_ID' });
+        }
+
+        const bot = getTelegramBot();
+
+        const binanceMarket = (process.env.BINANCE_MARKET || '').trim().toLowerCase();
+        const market = binanceMarket === 'spot' ? 'spot' : 'futures';
+
+        const tvUrl = buildTradingViewUrl(decision.symbol, decision.timeframe);
+        const binanceUrl = buildBinanceUrl(decision.symbol, { market });
+
+        const reply_markup = {
+            inline_keyboard: [[
+                { text: '查看TradingView图表', url: tvUrl },
+                { text: '打开币安行情', url: binanceUrl },
+            ]],
+        };
+
+        const text = buildMessageHtml(decision);
+        await bot.sendMessage(chatId, text, {
+            parse_mode: 'HTML',
+            reply_markup,
+            disable_web_page_preview: true,
+        });
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('发送 Telegram 消息失败:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
 
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => {

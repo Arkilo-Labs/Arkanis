@@ -345,7 +345,7 @@ async function main() {
 
     const repo = new KlinesRepository();
     const builder = new ChartBuilder();
-    const client = new VLMClient();
+    const client = await VLMClient.fromActiveProvider();
 
     const outputDir = join(PROJECT_ROOT, 'outputs', 'redis_bridge');
     mkdirSync(outputDir, { recursive: true });
