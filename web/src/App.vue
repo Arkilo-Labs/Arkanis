@@ -139,7 +139,7 @@ onUnmounted(() => {
     <!-- Main Content -->
     <main class="max-w-[1800px] mx-auto pt-24 px-4 pb-8">
       <KeepAlive>
-        <component :is="CurrentComponent" />
+        <component :is="CurrentComponent" @switchTab="currentTab = $event" />
       </KeepAlive>
     </main>
 

@@ -273,7 +273,7 @@ async function main() {
         logger.info(`VLM 配置:`);
         logger.info(`       Base URL: ${client.baseUrl}`);
         logger.info(`       Model: ${client.model}`);
-        logger.info(`       Prompt: ${config.openai.promptName}.md`);
+        logger.info(`       Prompt: ${config.vlm.promptName}.md`);
 
         const startTime = parseTime(opts.startTime);
         const endTime = opts.endTime ? parseTime(opts.endTime) : new Date();
@@ -488,7 +488,7 @@ async function main() {
         }
 
         logger.info(`\n[步骤3] 并发发送 VLM 请求 (${tasks.length} 个任务)...`);
-        logger.info(`[信息] 正在使用 '${config.openai.promptName}.md' Prompt`);
+        logger.info(`[信息] 正在使用 '${config.vlm.promptName}.md' Prompt`);
         logger.info('[信息] 等待响应...\n');
 
         // 并发调用 VLM

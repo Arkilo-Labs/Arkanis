@@ -79,16 +79,9 @@ export const chartConfig = {
 };
 
 /**
- * OpenAI API 配置
+ * VLM 配置（仅保留 Prompt 名称，其他配置使用 AI Provider）
  */
-export const openaiConfig = {
-    apiKey: getEnv('OPENAI_API_KEY', ''),
-    baseUrl: getEnv('OPENAI_BASE_URL', 'https://api.ohmygpt.com'),
-    model: getEnv('OPENAI_MODEL', 'ark-doubao-seed-1.6-flash-250715'),
-    maxTokens: getEnvInt('OPENAI_MAX_TOKENS', 8192),
-    temperature: getEnvFloat('OPENAI_TEMPERATURE', 0.2),
-    timeout: getEnvFloat('OPENAI_TIMEOUT', 240),
-    enableThinking: getEnvBool('OPENAI_ENABLE_THINKING', true),
+export const vlmConfig = {
     promptName: getEnv('PROMPT_NAME', 'default'),
 };
 
@@ -121,7 +114,7 @@ export const defaultConfig = {
 export const config = {
     db: databaseConfig,
     chart: chartConfig,
-    openai: openaiConfig,
+    vlm: vlmConfig,
     marketData: marketDataConfig,
     default: defaultConfig,
 };

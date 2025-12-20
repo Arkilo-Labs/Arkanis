@@ -162,7 +162,6 @@ app.post('/api/chart-data', async (req, res) => {
 // 允许修改的配置项白名单
 const ALLOWED_CONFIG_KEYS = [
     'DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_DATABASE', 'DB_POOL_MIN', 'DB_POOL_MAX',
-    'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'OPENAI_MODEL', 'OPENAI_MAX_TOKENS', 'OPENAI_TEMPERATURE', 'OPENAI_TIMEOUT', 'OPENAI_ENABLE_THINKING',
     'PROMPT_NAME',
     'CHART_WIDTH', 'CHART_HEIGHT', 'CHART_VOLUME_PANE_HEIGHT',
     'LOG_LEVEL',
@@ -175,9 +174,9 @@ const CONFIG_SCHEMA = {
         label: 'PostgreSQL 数据库',
         items: ['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_DATABASE', 'DB_POOL_MIN', 'DB_POOL_MAX']
     },
-    openai: {
-        label: 'OpenAI API',
-        items: ['OPENAI_API_KEY', 'OPENAI_BASE_URL', 'OPENAI_MODEL', 'OPENAI_MAX_TOKENS', 'OPENAI_TEMPERATURE', 'OPENAI_TIMEOUT', 'OPENAI_ENABLE_THINKING', 'PROMPT_NAME']
+    vlm: {
+        label: 'VLM 配置',
+        items: ['PROMPT_NAME']
     },
     chart: {
         label: '图表配置',
@@ -301,31 +300,8 @@ async function writeProviders(data) {
 }
 
 async function initDefaultProvider() {
-    const envPath = join(PROJECT_ROOT, '.env');
-    let envConfig = {};
-
-    try {
-        const envContent = await readFile(envPath, 'utf-8');
-        envConfig = parseEnvFile(envContent);
-    } catch (error) {
-        console.warn('无法读取 .env 文件，使用空配置');
-    }
-
-    const defaultProvider = {
-        id: 'default',
-        name: envConfig.OPENAI_MODEL || 'Default Provider',
-        baseUrl: envConfig.OPENAI_BASE_URL || 'https://api.openai.com',
-        modelName: envConfig.OPENAI_MODEL || 'gpt-4',
-        apiKey: envConfig.OPENAI_API_KEY || '',
-        thinkingMode: envConfig.OPENAI_ENABLE_THINKING === 'true' ? 'enabled' : 'disabled',
-        isActive: true,
-        maxTokens: parseInt(envConfig.OPENAI_MAX_TOKENS) || 8192,
-        temperature: parseFloat(envConfig.OPENAI_TEMPERATURE) || 0.2,
-        description: '从 .env 配置迁移的默认 Provider'
-    };
-
     const data = {
-        providers: [defaultProvider],
+        providers: [],
         version: 1
     };
 

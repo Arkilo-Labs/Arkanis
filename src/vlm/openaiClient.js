@@ -5,7 +5,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import axios from 'axios';
-import { openaiConfig } from '../config/index.js';
+import { vlmConfig } from '../config/index.js';
 import { VLMDecision, VLMDecisionSchema } from './schema.js';
 import logger from '../utils/logger.js';
 import PromptManager from './promptManager.js';
@@ -300,25 +300,32 @@ function sanitizeJson(jsonStr) {
  */
 export class VLMClient {
     constructor({
-        apiKey = null,
-        baseUrl = null,
-        model = null,
-        timeout = null,
-        enableThinking = null,
+        apiKey,
+        baseUrl,
+        model,
+        timeout = 240,
+        enableThinking = false,
+        maxTokens = 8192,
+        temperature = 0.2,
     } = {}) {
-        this.apiKey = apiKey || openaiConfig.apiKey;
-        this.baseUrl = (baseUrl || openaiConfig.baseUrl || 'https://api.openai.com/v1').replace(
-            /\/+$/,
-            ''
-        );
-        this.model = model || openaiConfig.model;
-        this.timeout = timeout ?? openaiConfig.timeout;
-        this.enableThinking = enableThinking ?? openaiConfig.enableThinking;
-        this.promptName = openaiConfig.promptName;
-
-        if (!this.apiKey) {
-            throw new Error('未配置 OPENAI_API_KEY');
+        if (!apiKey) {
+            throw new Error('未提供 API Key，请使用 VLMClient.fromActiveProvider() 创建实例');
         }
+        if (!baseUrl) {
+            throw new Error('未提供 Base URL');
+        }
+        if (!model) {
+            throw new Error('未提供模型名称');
+        }
+
+        this.apiKey = apiKey;
+        this.baseUrl = baseUrl.replace(/\/+$/, '');
+        this.model = model;
+        this.timeout = timeout;
+        this.enableThinking = enableThinking;
+        this.maxTokens = maxTokens;
+        this.temperature = temperature;
+        this.promptName = vlmConfig.promptName;
     }
 
     /**
@@ -331,13 +338,13 @@ export class VLMClient {
             throw new Error('未找到激活的 AI Provider，请在 ai-providers.json 中配置并激活一个 provider');
         }
 
-        const thinkingEnabled = provider.thinkingMode === 'enabled';
-        
         return new VLMClient({
             apiKey: provider.apiKey,
             baseUrl: provider.baseUrl,
             model: provider.modelName,
-            enableThinking: thinkingEnabled,
+            enableThinking: provider.thinkingMode === 'enabled',
+            maxTokens: provider.maxTokens || 8192,
+            temperature: provider.temperature || 0.2,
         });
     }
 
@@ -446,8 +453,8 @@ ${primaryUserPrompt || DEFAULT_USER_PROMPT}
         const payload = {
             model: this.model,
             messages,
-            max_tokens: openaiConfig.maxTokens,
-            temperature: openaiConfig.temperature,
+            max_tokens: this.maxTokens,
+            temperature: this.temperature,
         };
 
         try {

@@ -10,23 +10,23 @@ const saveStatus = ref(null);
 
 const groupIcons = { 
   database: 'fas fa-database', 
-  openai: 'fas fa-key', 
+  vlm: 'fas fa-magic', 
   chart: 'fas fa-chart-bar', 
   log: 'fas fa-file-alt', 
   defaults: 'fas fa-sliders-h' 
 };
 
+const emit = defineEmits(['switchTab']);
+
 const inputTypes = {
   DB_PORT: 'number', DB_POOL_MIN: 'number', DB_POOL_MAX: 'number', DB_PASSWORD: 'password',
-  OPENAI_API_KEY: 'password', OPENAI_MAX_TOKENS: 'number', OPENAI_TEMPERATURE: 'number', OPENAI_TIMEOUT: 'number',
   CHART_WIDTH: 'number', CHART_HEIGHT: 'number', CHART_VOLUME_PANE_HEIGHT: 'number', DEFAULT_BARS: 'number'
 };
 
 const selectOptions = ref({
-  OPENAI_ENABLE_THINKING: ['true', 'false'],
   LOG_LEVEL: ['debug', 'info', 'warn', 'error', 'silent'],
   DEFAULT_TIMEFRAME: ['1m', '5m', '15m', '30m', '1h', '4h', '1d'],
-  PROMPT_NAME: ['default'] // Default, will be updated from API
+  PROMPT_NAME: ['default']
 });
 
 async function loadConfig() {

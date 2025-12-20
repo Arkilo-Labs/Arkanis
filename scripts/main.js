@@ -344,7 +344,7 @@ async function main() {
             .replace('{priceMax}', priceMax.toFixed(2))
             .replace('{currentPrice}', currentPrice.toFixed(2));
 
-        logger.info(`[信息] 正在使用 '${config.openai.promptName}.md' Prompt`);
+        logger.info(`[信息] 正在使用 '${config.vlm.promptName}.md' Prompt`);
         logger.info('[信息] 等待响应...\n');
 
         let decision;
