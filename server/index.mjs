@@ -15,6 +15,13 @@ import { z } from 'zod';
 import { queryCore, withCoreConnection } from '../src/data/index.js';
 import { hashPassword, verifyPassword } from '../src/services/auth/password.js';
 import { generateSessionToken, tokenToHash } from '../src/services/auth/session.js';
+import { getPrimaryOrganizationForUserId } from '../src/data/orgRepository.js';
+import { listActivationCodes, revokeActivationCodeById } from '../src/data/activationCodeRepository.js';
+import {
+    createActivationCodes,
+    getCurrentSubscriptionForOrganizationId,
+    redeemActivationCode,
+} from '../src/services/billing/activationCodeService.js';
 import {
     buildBinanceUrl,
     buildDecisionMessageHtml,
@@ -72,6 +79,46 @@ async function getAuthedUser(req) {
     const res = await queryCore(sql, [tokenHash]);
     if (!res.rowCount) return null;
     return res.rows[0];
+}
+
+function getClientIp(req) {
+    const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    if (forwarded) return forwarded;
+    return req.socket?.remoteAddress || null;
+}
+
+function parseAdminEmailSet() {
+    const raw = String(process.env.ARKILO_ADMIN_EMAILS || '')
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+    return new Set(raw);
+}
+
+function isAdminUser(user) {
+    if (!user?.email) return false;
+    const admins = parseAdminEmailSet();
+    if (!admins.size) return false;
+    return admins.has(String(user.email).trim().toLowerCase());
+}
+
+async function requireAuth(req, res) {
+    const user = await getAuthedUser(req);
+    if (!user) {
+        res.status(401).json({ error: '未登录' });
+        return null;
+    }
+    return user;
+}
+
+async function requireAdmin(req, res) {
+    const user = await requireAuth(req, res);
+    if (!user) return null;
+    if (!isAdminUser(user)) {
+        res.status(403).json({ error: '无权限' });
+        return null;
+    }
+    return user;
 }
 
 io.on('connection', (socket) => {
@@ -284,6 +331,128 @@ app.post('/api/auth/logout', async (req, res) => {
         const tokenHash = tokenToHash(token);
         await queryCore('UPDATE user_sessions SET revoked_at = now() WHERE refresh_token_hash = $1', [tokenHash]);
         res.json({ success: true });
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Console: 当前用户 + 主组织 + 订阅（用于 SaaS Console）
+app.get('/api/console/overview', async (req, res) => {
+    try {
+        const user = await requireAuth(req, res);
+        if (!user) return;
+
+        const organization = await getPrimaryOrganizationForUserId(user.id);
+        if (!organization) return res.status(404).json({ error: '未找到组织' });
+
+        const subscription = await getCurrentSubscriptionForOrganizationId(organization.id);
+        res.json({ user, organization, subscription });
+    } catch (error) {
+        res.status(500).json({ error: error?.message || String(error) });
+    }
+});
+
+// Billing: 当前订阅
+app.get('/api/billing/subscription', async (req, res) => {
+    try {
+        const user = await requireAuth(req, res);
+        if (!user) return;
+
+        const organization = await getPrimaryOrganizationForUserId(user.id);
+        if (!organization) return res.status(404).json({ error: '未找到组织' });
+
+        const subscription = await getCurrentSubscriptionForOrganizationId(organization.id);
+        res.json({ organization, subscription });
+    } catch (error) {
+        res.status(500).json({ error: error?.message || String(error) });
+    }
+});
+
+// Billing: 兑换激活码（落库 + 审计）
+app.post('/api/billing/redeem-activation-code', async (req, res) => {
+    const schema = z.object({ code: z.string().trim().min(8).max(200) });
+    try {
+        const user = await requireAuth(req, res);
+        if (!user) return;
+
+        const input = schema.parse(req.body || {});
+        const result = await redeemActivationCode({
+            userId: user.id,
+            code: input.code,
+            ip: getClientIp(req),
+            userAgent: String(req.headers['user-agent'] || '').slice(0, 500) || null,
+        });
+        res.json(result);
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Admin: 创建激活码（只返回一次明文）
+app.post('/api/admin/activation-codes', async (req, res) => {
+    const schema = z.object({
+        planCode: z.string().trim().min(1).max(64),
+        durationDays: z.number().int().positive().max(3650),
+        count: z.number().int().positive().max(100).optional(),
+        maxRedemptions: z.number().int().positive().max(1000).optional(),
+        expiresAt: z.string().datetime().optional(),
+        note: z.string().trim().max(2000).optional(),
+    });
+
+    try {
+        const admin = await requireAdmin(req, res);
+        if (!admin) return;
+
+        const input = schema.parse(req.body || {});
+        const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
+        const codes = await createActivationCodes({
+            createdByUserId: admin.id,
+            planCode: input.planCode,
+            durationDays: input.durationDays,
+            count: input.count ?? 1,
+            maxRedemptions: input.maxRedemptions ?? 1,
+            expiresAt: expiresAt ? expiresAt.toISOString() : null,
+            note: input.note ?? null,
+        });
+        res.json({ codes });
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Admin: 激活码列表（不返回明文）
+app.get('/api/admin/activation-codes', async (req, res) => {
+    const schema = z.object({
+        limit: z.coerce.number().int().min(1).max(200).optional(),
+        offset: z.coerce.number().int().min(0).optional(),
+    });
+
+    try {
+        const admin = await requireAdmin(req, res);
+        if (!admin) return;
+
+        const input = schema.parse(req.query || {});
+        const rows = await withCoreConnection(async (client) =>
+            listActivationCodes(client, { limit: input.limit ?? 50, offset: input.offset ?? 0 })
+        );
+        res.json({ items: rows });
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Admin: 撤销激活码
+app.post('/api/admin/activation-codes/:id/revoke', async (req, res) => {
+    try {
+        const admin = await requireAdmin(req, res);
+        if (!admin) return;
+
+        const id = String(req.params.id || '').trim();
+        if (!id) return res.status(400).json({ error: '缺少 id' });
+
+        const row = await withCoreConnection(async (client) => revokeActivationCodeById(client, id));
+        if (!row) return res.status(404).json({ error: '激活码不存在或已撤销' });
+        res.json({ activationCode: row });
     } catch (error) {
         res.status(400).json({ error: error?.message || String(error) });
     }

@@ -77,13 +77,26 @@ pnpm main -- --symbol BTCUSDT --timeframe 5m --bars 200
 
 ```bash
 # 终端 A：启动 server（默认 3000）
-pnpm server
+pnpm dev:server
 
 # 终端 B：启动 web（Vite dev server）
 pnpm web
 ```
 
 Web 通过 Socket.IO 订阅日志；server 负责派生脚本进程并转发 stdout/stderr。
+
+如果你要跑 SaaS 终端（`web_console/`，含登录/订阅/激活码），启动方式：
+
+```bash
+# 终端 C：启动 SaaS Console（Vite dev server，默认 5174）
+pnpm dev:console
+```
+
+Windows PowerShell 里不要用 `&&`，请用两行命令或用 `;` 分隔。
+
+如果安装依赖时看到 `Ignored build scripts: esbuild`，执行一次 `pnpm rebuild --pending`。
+
+管理员账号白名单通过环境变量配置：`ARKILO_ADMIN_EMAILS=admin@yourdomain.com,other@yourdomain.com`（用于激活码管理）。
 
 ## 3. 运行方式清单（按场景）
 

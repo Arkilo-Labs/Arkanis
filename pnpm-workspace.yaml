@@ -1,6 +1,8 @@
 packages:
   - '.'
+  - 'web_console'
 
 onlyBuiltDependencies:
+  - esbuild
   - puppeteer
   - sharp

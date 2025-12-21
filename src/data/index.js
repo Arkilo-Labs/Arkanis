@@ -28,3 +28,20 @@ export {
     closeExchangeClient,
     TIMEFRAME_TO_INTERVAL,
 } from './exchangeClient.js';
+
+export { getPrimaryOrganizationForUserId } from './orgRepository.js';
+export {
+    insertActivationCode,
+    lockActivationCodeByHash,
+    incrementActivationCodeRedeemedCount,
+    insertActivationCodeRedemption,
+    listActivationCodes,
+    revokeActivationCodeById,
+} from './activationCodeRepository.js';
+export {
+    lockActivationCodeSubscriptionForOrg,
+    insertActivationCodeSubscription,
+    updateSubscriptionPeriodEnd,
+    getSubscriptionById,
+    getLatestSubscriptionForOrganizationId,
+} from './subscriptionRepository.js';

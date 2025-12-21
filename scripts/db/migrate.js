@@ -1,24 +1,34 @@
 import { spawn } from 'child_process';
-import { existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+import { config as dotenvConfig } from 'dotenv';
 
 function getRootDir() {
     const __filename = fileURLToPath(import.meta.url);
     return join(dirname(__filename), '..', '..');
 }
 
-function getNodePgMigrateBin() {
+let envLoaded = false;
+function ensureEnvLoaded() {
+    if (envLoaded) return;
     const root = getRootDir();
-    const binName = process.platform === 'win32' ? 'node-pg-migrate.cmd' : 'node-pg-migrate';
-    const binPath = join(root, 'node_modules', '.bin', binName);
-    if (!existsSync(binPath)) {
-        throw new Error(`未找到 node-pg-migrate 可执行文件: ${binPath}，请先运行 pnpm install`);
+    dotenvConfig({ path: join(root, '.env') });
+    envLoaded = true;
+}
+
+function getNodePgMigrateBin() {
+    const require = createRequire(import.meta.url);
+    try {
+        return require.resolve('node-pg-migrate/bin/node-pg-migrate');
+    } catch (e) {
+        const root = getRootDir();
+        throw new Error(`未找到 node-pg-migrate（请在 ${root} 执行 pnpm install）：${e?.message || String(e)}`);
     }
-    return binPath;
 }
 
 function getDbEnv() {
+    ensureEnvLoaded();
     const host = process.env.DB_HOST || 'localhost';
     const port = Number.parseInt(process.env.DB_PORT || '5432', 10);
     const user = process.env.DB_USER || 'postgres';
@@ -32,8 +42,12 @@ function getDbEnv() {
 
 function buildPostgresDsn({ host, port, user, password, database }) {
     const u = encodeURIComponent(String(user ?? ''));
-    const p = encodeURIComponent(String(password ?? ''));
     const db = encodeURIComponent(String(database ?? ''));
+    const plainPassword = String(password ?? '');
+    if (!plainPassword) {
+        return `postgresql://${u}@${host}:${port}/${db}`;
+    }
+    const p = encodeURIComponent(plainPassword);
     return `postgresql://${u}:${p}@${host}:${port}/${db}`;
 }
 
@@ -49,19 +63,15 @@ export async function runMigrations({ role }) {
     const database = role === 'core' ? coreDb : marketDb;
     const dsn = buildPostgresDsn({ host, port, user, password, database });
 
-    const binPath = getNodePgMigrateBin();
+    const entryScriptPath = getNodePgMigrateBin();
     const migrationsDir = resolveMigrationsDir(role);
 
     await new Promise((resolve, reject) => {
-        const child = spawn(
-            binPath,
-            ['--migrations-dir', migrationsDir, 'up'],
-            {
-                stdio: 'inherit',
-                shell: process.platform === 'win32',
-                env: { ...process.env, DATABASE_URL: dsn },
-            }
-        );
+        const child = spawn(process.execPath, [entryScriptPath, '--migrations-dir', migrationsDir, 'up'], {
+            stdio: 'inherit',
+            shell: false,
+            env: { ...process.env, DATABASE_URL: dsn },
+        });
 
         child.on('error', reject);
         child.on('exit', (code) => {
