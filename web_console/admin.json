@@ -1,0 +1,16 @@
+{
+    "admins": [
+        {
+            "username": "admin",
+            "email": "admin@arkilo.ai",
+            "password": "admin123"
+        }
+    ],
+    "settings": {
+        "defaultSubscriptionDays": {
+            "monthly": 30,
+            "yearly": 365
+        },
+        "codeExpirationDays": 90
+    }
+}
