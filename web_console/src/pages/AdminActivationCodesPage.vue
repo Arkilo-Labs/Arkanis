@@ -5,30 +5,30 @@
             <form class="card-content" @submit.prevent="onCreate">
                 <div class="grid grid-3">
                     <div class="form-group">
-                        <label class="form-label">planCode</label>
+                        <label class="form-label">套餐代码</label>
                         <input v-model="form.planCode" class="form-input" placeholder="monthly / yearly" required />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">durationDays</label>
+                        <label class="form-label">有效天数</label>
                         <input v-model.number="form.durationDays" class="form-input" type="number" min="1" required />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">count</label>
+                        <label class="form-label">生成数量</label>
                         <input v-model.number="form.count" class="form-input" type="number" min="1" max="100" />
                     </div>
                 </div>
 
                 <div class="grid grid-3">
                     <div class="form-group">
-                        <label class="form-label">maxRedemptions</label>
+                        <label class="form-label">最大兑换次数</label>
                         <input v-model.number="form.maxRedemptions" class="form-input" type="number" min="1" max="1000" />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">expiresAt（可选，ISO）</label>
+                        <label class="form-label">过期时间</label>
                         <input v-model="form.expiresAt" class="form-input" placeholder="2026-01-01T00:00:00.000Z" />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">note（可选）</label>
+                        <label class="form-label">备注</label>
                         <input v-model="form.note" class="form-input" maxlength="2000" />
                     </div>
                 </div>
@@ -43,11 +43,11 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>code</th>
-                                <th>plan</th>
-                                <th>days</th>
-                                <th>max</th>
-                                <th>expires</th>
+                                <th>激活码</th>
+                                <th>套餐</th>
+                                <th>天数</th>
+                                <th>最大次数</th>
+                                <th>过期时间</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -76,15 +76,15 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>id</th>
-                                <th>plan</th>
-                                <th>days</th>
-                                <th>redeemed</th>
-                                <th>max</th>
-                                <th>expires</th>
-                                <th>revoked</th>
-                                <th>created</th>
-                                <th>op</th>
+                                <th>ID</th>
+                                <th>套餐</th>
+                                <th>天数</th>
+                                <th>已兑换</th>
+                                <th>最大次数</th>
+                                <th>过期时间</th>
+                                <th>已撤销</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
                             </tr>
                         </thead>
                         <tbody>

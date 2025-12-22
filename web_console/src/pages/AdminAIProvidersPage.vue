@@ -1,37 +1,37 @@
 <template>
-    <AppShell title="Provider 管理" subtitle="管理员：新增 Provider 与设置倍率">
+    <AppShell title="服务商管理" subtitle="管理员：新增服务商与配置倍率">
         <div class="card">
-            <h2 class="card-title">新增 Provider</h2>
+            <h2 class="card-title">新增服务商</h2>
             <form class="card-content" @submit.prevent="create">
                 <div class="grid grid-3">
                     <div class="form-group">
-                        <label class="form-label">code</label>
+                        <label class="form-label">代码</label>
                         <input v-model="form.code" class="form-input" placeholder="openai_gpt4o" required />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">displayName</label>
+                        <label class="form-label">显示名称</label>
                         <input v-model="form.displayName" class="form-input" placeholder="OpenAI GPT-4o" required />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">modelName</label>
+                        <label class="form-label">模型名称</label>
                         <input v-model="form.modelName" class="form-input" placeholder="gpt-4o-mini" required />
                     </div>
                 </div>
 
                 <div class="grid grid-3">
                     <div class="form-group">
-                        <label class="form-label">baseUrl（可选）</label>
+                        <label class="form-label">API 基础地址</label>
                         <input v-model="form.baseUrl" class="form-input" placeholder="https://api.openai.com/v1" />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">倍率 multiplier</label>
+                        <label class="form-label">消耗倍率</label>
                         <input v-model.number="form.multiplier" class="form-input" type="number" min="0.01" step="0.01" />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">isActive</label>
+                        <label class="form-label">是否启用</label>
                         <select v-model="form.isActive" class="form-input">
-                            <option :value="true">true</option>
-                            <option :value="false">false</option>
+                            <option :value="true">是</option>
+                            <option :value="false">否</option>
                         </select>
                     </div>
                 </div>
@@ -44,7 +44,7 @@
         </div>
 
         <div class="card">
-            <h2 class="card-title">列表</h2>
+            <h2 class="card-title">服务商列表</h2>
             <div class="card-content">
                 <button class="btn btn-secondary" type="button" @click="load" :disabled="loading">
                     {{ loading ? '刷新中...' : '刷新' }}
@@ -55,20 +55,20 @@
                     <table class="data-table">
                         <thead>
                             <tr>
-                                <th>code</th>
-                                <th>name</th>
-                                <th>model</th>
-                                <th>multiplier</th>
-                                <th>active</th>
-                                <th>op</th>
+                                <th>代码</th>
+                                <th>名称</th>
+                                <th>模型</th>
+                                <th>倍率</th>
+                                <th>启用</th>
+                                <th>操作</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="p in items" :key="p.id">
-                                <td><code>{{ p.code }}</code></td>
+                                <td>{{ p.code }}</td>
                                 <td>{{ p.display_name }}</td>
-                                <td><code>{{ p.model_name }}</code></td>
-                                <td><code>{{ (p.multiplier_x100 / 100).toFixed(2) }}</code></td>
+                                <td>{{ p.model_name }}</td>
+                                <td>{{ (p.multiplier_x100 / 100).toFixed(2) }}x</td>
                                 <td>{{ p.is_active ? '是' : '否' }}</td>
                                 <td>
                                     <button class="btn btn-secondary btn-sm" type="button" @click="edit(p)">编辑</button>
@@ -81,32 +81,32 @@
         </div>
 
         <div v-if="editing" class="card">
-            <h2 class="card-title">编辑 Provider</h2>
+            <h2 class="card-title">编辑服务商</h2>
             <form class="card-content" @submit.prevent="saveEdit">
                 <div class="grid grid-3">
                     <div class="form-group">
-                        <label class="form-label">displayName</label>
+                        <label class="form-label">显示名称</label>
                         <input v-model="editForm.displayName" class="form-input" required />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">modelName</label>
+                        <label class="form-label">模型名称</label>
                         <input v-model="editForm.modelName" class="form-input" required />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">baseUrl</label>
+                        <label class="form-label">API 基础地址</label>
                         <input v-model="editForm.baseUrl" class="form-input" />
                     </div>
                 </div>
                 <div class="grid grid-3">
                     <div class="form-group">
-                        <label class="form-label">multiplier</label>
+                        <label class="form-label">消耗倍率</label>
                         <input v-model.number="editForm.multiplier" class="form-input" type="number" min="0.01" step="0.01" />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">isActive</label>
+                        <label class="form-label">是否启用</label>
                         <select v-model="editForm.isActive" class="form-input">
-                            <option :value="true">true</option>
-                            <option :value="false">false</option>
+                            <option :value="true">是</option>
+                            <option :value="false">否</option>
                         </select>
                     </div>
                 </div>

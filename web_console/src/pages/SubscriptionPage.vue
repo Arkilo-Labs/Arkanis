@@ -1,60 +1,70 @@
 <template>
-    <AppShell title="订阅" subtitle="查看当前订阅并兑换激活码">
-        <div class="card">
+    <AppShell title="订阅" subtitle="选择适合您的套餐">
+        <!-- 当前订阅状态 -->
+        <div v-if="subscription" class="card">
             <h2 class="card-title">当前订阅</h2>
             <div class="card-content">
-                <div v-if="subscription">
-                    <div class="stat-row">
-                        <span class="stat-label">计划</span>
-                        <span class="stat-value">{{ subscription.plan_code }}</span>
-                    </div>
-                    <div class="stat-row">
-                        <span class="stat-label">状态</span>
-                        <span class="stat-value">{{ subscription.status }}</span>
-                    </div>
-                    <div class="stat-row">
-                        <span class="stat-label">到期</span>
-                        <span class="stat-value">{{ formatDate(subscription.current_period_end) }}</span>
-                    </div>
+                <div class="stat-row">
+                    <span class="stat-label">套餐</span>
+                    <span class="stat-value">{{ formatPlanCode(subscription.plan_code) }}</span>
                 </div>
-                <p v-else class="text-muted">暂无订阅</p>
+                <div class="stat-row">
+                    <span class="stat-label">状态</span>
+                    <span class="stat-value">{{ formatStatus(subscription.status) }}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">有效期至</span>
+                    <span class="stat-value">{{ formatDate(subscription.current_period_end) }}</span>
+                </div>
             </div>
         </div>
 
+        <!-- 定价卡片 -->
         <div class="card">
-            <h2 class="card-title">Stripe 订阅</h2>
+            <h2 class="card-title">选择套餐</h2>
             <div class="card-content">
-                <p class="text-muted">选择套餐后跳转到 Stripe 托管结账页完成支付（测试环境）。</p>
-
                 <div v-if="stripeError" class="form-error">{{ stripeError }}</div>
                 <p v-if="stripeMsg" class="form-success">{{ stripeMsg }}</p>
 
-                <div v-if="stripeConfig" class="grid grid-2">
-                    <div v-for="p in stripeConfig.plans" :key="p.code" class="card" style="padding: 1rem">
-                        <div class="stat-row">
-                            <span class="stat-label">套餐</span>
-                            <span class="stat-value">{{ p.displayName }}</span>
+                <div v-if="stripeConfig" class="pricing-grid">
+                    <div 
+                        v-for="(p, index) in stripeConfig.plans" 
+                        :key="p.code" 
+                        class="pricing-card"
+                        :class="{ featured: index === 1 }"
+                    >
+                        <span v-if="index === 1" class="pricing-badge">推荐</span>
+                        <div class="pricing-header">
+                            <div class="pricing-name">{{ p.displayName }}</div>
+                            <div class="pricing-price">
+                                <span class="pricing-amount">{{ formatPrice(p) }}</span>
+                                <span class="pricing-period">/月</span>
+                            </div>
                         </div>
-                        <div class="stat-row">
-                            <span class="stat-label">每月额度</span>
-                            <span class="stat-value"><code>{{ Number(p.allowanceCreditsPerMonth).toFixed(2) }}</code></span>
-                        </div>
+                        <p class="pricing-desc">{{ getPlanDesc(p.code) }}</p>
+                        <ul class="pricing-features">
+                            <li v-for="feature in getPlanFeatures(p.code)" :key="feature">{{ feature }}</li>
+                        </ul>
                         <button
-                            class="btn btn-primary mt-16"
+                            class="btn"
+                            :class="index === 1 ? 'btn-primary' : 'btn-secondary'"
                             type="button"
                             :disabled="creatingStripe || !p.available"
                             @click="startCheckout(p.code)"
                         >
-                            {{ p.available ? (creatingStripe ? '创建中...' : '跳转支付') : '未配置' }}
+                            {{ p.available ? (creatingStripe ? '处理中...' : '立即订阅') : '暂不可用' }}
                         </button>
                     </div>
                 </div>
+                <p v-else class="text-muted">加载套餐信息...</p>
             </div>
         </div>
 
+        <!-- 激活码兑换 -->
         <div class="card">
-            <h2 class="card-title">兑换激活码</h2>
+            <h2 class="card-title">激活码兑换</h2>
             <form class="card-content" @submit.prevent="onRedeem">
+                <p class="text-muted" style="margin-bottom: 1rem;">如果您有激活码，可以在此处兑换</p>
                 <div class="input-with-button">
                     <input v-model="code" class="form-input" placeholder="输入激活码" required />
                     <button class="btn btn-primary" type="submit" :disabled="redeeming">
@@ -94,6 +104,55 @@ function formatDate(value) {
     } catch {
         return String(value);
     }
+}
+
+function formatPlanCode(code) {
+    const planMap = { monthly: '月度版', yearly: '年度版', free: '免费版' };
+    return planMap[code] || code;
+}
+
+function formatStatus(status) {
+    const statusMap = { active: '有效', canceled: '已取消', expired: '已过期', trialing: '试用中' };
+    return statusMap[status] || status;
+}
+
+function formatPrice(plan) {
+    const price = Number(plan.pricePerMonth || plan.allowanceCreditsPerMonth || 0);
+    if (price <= 0) return '免费';
+    return `$${price.toFixed(0)}`;
+}
+
+function getPlanDesc(code) {
+    const descMap = {
+        monthly: '按月付费，灵活选择',
+        yearly: '年付享优惠，性价比之选',
+        free: '基础功能体验',
+    };
+    return descMap[code] || '专业级 AI 分析服务';
+}
+
+function getPlanFeatures(code) {
+    const featuresMap = {
+        monthly: [
+            '每月 100 次 AI 策略分析',
+            '支持所有主流交易对',
+            '实时行情图表',
+            '优先客服支持',
+        ],
+        yearly: [
+            '每月 150 次 AI 策略分析',
+            '所有月度版功能',
+            '专属高级模型',
+            '优先体验新功能',
+            '年付节省 20%',
+        ],
+        free: [
+            '每月 10 次 AI 策略分析',
+            '基础图表功能',
+            '社区支持',
+        ],
+    };
+    return featuresMap[code] || ['专业 AI 分析', '高级图表工具'];
 }
 
 async function load() {

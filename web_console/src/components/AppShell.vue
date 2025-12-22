@@ -11,10 +11,10 @@
             <nav class="nav-menu">
                 <RouterLink class="nav-item" to="/app">概览</RouterLink>
                 <RouterLink class="nav-item" to="/app/ai">AI 策略</RouterLink>
-                <RouterLink class="nav-item" to="/app/providers">AI Provider</RouterLink>
+                <RouterLink class="nav-item" to="/app/providers">AI 服务商</RouterLink>
                 <RouterLink class="nav-item" to="/app/subscription">订阅</RouterLink>
                 <RouterLink v-if="isAdmin" class="nav-item" to="/app/admin/codes">激活码</RouterLink>
-                <RouterLink v-if="isAdmin" class="nav-item" to="/app/admin/providers">Provider 管理</RouterLink>
+                <RouterLink v-if="isAdmin" class="nav-item" to="/app/admin/providers">服务商管理</RouterLink>
             </nav>
 
             <div class="sidebar-footer">
@@ -29,10 +29,7 @@
                     <p v-if="subtitle">{{ subtitle }}</p>
                 </div>
                 <div class="topbar-user">
-                    <div class="user-info">
-                        <span class="user-name">{{ userLabel }}</span>
-                        <span class="user-email">{{ email }}</span>
-                    </div>
+                    <span class="user-name">{{ userLabel }}</span>
                 </div>
             </header>
 

@@ -1,5 +1,5 @@
 <template>
-    <AppShell title="AI 策略" subtitle="SaaS：按订阅与 credit 执行策略分析">
+    <AppShell title="AI 策略" subtitle="智能分析交易信号">
         <div v-if="loading" class="card">
             <p class="text-muted">加载中...</p>
         </div>
@@ -24,23 +24,23 @@
                 <div class="card-content">
                     <div class="grid grid-3">
                         <div class="stat-row">
-                            <span class="stat-label">credit 剩余</span>
-                            <span class="stat-value"><code>{{ (state.credit?.remainingCredits ?? 0).toFixed(2) }}</code></span>
+                            <span class="stat-label">剩余额度</span>
+                            <span class="stat-value">{{ (state.credit?.remainingCredits ?? 0).toFixed(2) }}</span>
                         </div>
                         <div class="stat-row">
-                            <span class="stat-label">下次重置</span>
+                            <span class="stat-label">重置日期</span>
                             <span class="stat-value">{{ formatDate(state.credit?.periodEnd) }}</span>
                         </div>
                         <div class="stat-row">
-                            <span class="stat-label">Provider</span>
+                            <span class="stat-label">服务商</span>
                             <span class="stat-value">
-                                <code v-if="selectedProvider">{{ selectedProvider.display_name }}</code>
+                                <span v-if="selectedProvider">{{ selectedProvider.display_name }}</span>
                                 <span v-else class="text-muted">未选择</span>
                             </span>
                         </div>
                     </div>
-                    <p v-if="!selectedProvider" class="form-error">请先在「AI Provider」页面选择并设置 apiKey</p>
-                    <p v-else-if="!selectedProvider.hasKey" class="form-error">当前 Provider 未设置 apiKey</p>
+                    <p v-if="!selectedProvider" class="form-error">请先在「AI 服务商」页面选择并配置密钥</p>
+                    <p v-else-if="!selectedProvider.hasKey" class="form-error">当前服务商未配置密钥</p>
                 </div>
             </div>
 
@@ -48,19 +48,19 @@
                 <h2 class="card-title">参数</h2>
                 <div class="card-content">
                     <div class="form-group">
-                        <label class="form-label">symbol</label>
+                        <label class="form-label">交易对</label>
                         <input v-model="config.symbol" class="form-input" placeholder="BTCUSDT" :disabled="isRunning" />
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label">timeframe</label>
+                        <label class="form-label">时间周期</label>
                         <select v-model="config.timeframe" class="form-input" :disabled="isRunning">
                             <option v-for="tf in timeframes" :key="tf" :value="tf">{{ tf }}</option>
                         </select>
                     </div>
 
                     <div class="form-group">
-                        <label class="form-label">bars</label>
+                        <label class="form-label">K线数量</label>
                         <input v-model.number="config.bars" class="form-input" type="number" min="50" max="2000" :disabled="isRunning" />
                     </div>
 
@@ -75,9 +75,9 @@
                     </div>
 
                     <div v-if="config.enable4x" class="form-group">
-                        <label class="form-label">aux timeframe</label>
+                        <label class="form-label">辅助周期</label>
                         <select v-model="config.auxTimeframe" class="form-input" :disabled="isRunning">
-                            <option value="">Auto</option>
+                            <option value="">自动</option>
                             <option v-for="tf in timeframes" :key="tf" :value="tf">{{ tf }}</option>
                         </select>
                     </div>
@@ -98,35 +98,35 @@
                 <div class="card-content">
                     <div v-if="decision" class="grid grid-2" style="gap: 0.75rem;">
                         <div class="stat-row">
-                            <span class="stat-label">enter</span>
-                            <span class="stat-value">{{ decision.enter ? 'ENTER' : 'WAIT' }}</span>
+                            <span class="stat-label">入场信号</span>
+                            <span class="stat-value">{{ decision.enter ? '建议入场' : '等待观望' }}</span>
                         </div>
                         <div class="stat-row">
-                            <span class="stat-label">confidence</span>
+                            <span class="stat-label">置信度</span>
                             <span class="stat-value">{{ Math.round((decision.confidence || 0) * 100) }}%</span>
                         </div>
                         <div v-if="decision.enter" class="stat-row">
-                            <span class="stat-label">direction</span>
-                            <span class="stat-value">{{ String(decision.direction || '').toUpperCase() }}</span>
+                            <span class="stat-label">方向</span>
+                            <span class="stat-value">{{ formatDirection(decision.direction) }}</span>
                         </div>
                         <div v-if="decision.enter" class="stat-row">
-                            <span class="stat-label">entry</span>
-                            <span class="stat-value"><code>{{ formatPrice(decision.entry_price) }}</code></span>
+                            <span class="stat-label">入场价</span>
+                            <span class="stat-value">{{ formatPrice(decision.entry_price) }}</span>
                         </div>
                         <div v-if="decision.enter" class="stat-row">
-                            <span class="stat-label">stop</span>
-                            <span class="stat-value"><code>{{ formatPrice(decision.stop_loss_price) }}</code></span>
+                            <span class="stat-label">止损价</span>
+                            <span class="stat-value">{{ formatPrice(decision.stop_loss_price) }}</span>
                         </div>
                         <div v-if="decision.enter" class="stat-row">
-                            <span class="stat-label">take</span>
-                            <span class="stat-value"><code>{{ formatPrice(decision.take_profit_price) }}</code></span>
+                            <span class="stat-label">止盈价</span>
+                            <span class="stat-value">{{ formatPrice(decision.take_profit_price) }}</span>
                         </div>
                     </div>
                     <p v-else class="text-muted">等待分析结果</p>
 
                     <div v-if="decision?.reason" class="mt-16">
                         <div class="stat-row">
-                            <span class="stat-label">reason</span>
+                            <span class="stat-label">分析理由</span>
                             <span class="stat-value" style="text-align:right;max-width:70%;">{{ decision.reason }}</span>
                         </div>
                     </div>
@@ -233,6 +233,11 @@ function formatDate(value) {
     } catch {
         return String(value);
     }
+}
+
+function formatDirection(dir) {
+    const dirMap = { long: '做多', short: '做空', buy: '买入', sell: '卖出' };
+    return dirMap[String(dir).toLowerCase()] || dir;
 }
 
 async function loadState() {
