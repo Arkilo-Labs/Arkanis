@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { queryCore, withCoreConnection } from '../src/data/index.js';
 import { hashPassword, verifyPassword } from '../src/services/auth/password.js';
 import { generateSessionToken, tokenToHash } from '../src/services/auth/session.js';
+import { sendEmailVerification, verifyEmailByToken } from '../src/services/auth/emailVerificationService.js';
 import { getPrimaryOrganizationForUserId } from '../src/data/orgRepository.js';
 import { listActivationCodes, revokeActivationCodeById } from '../src/data/activationCodeRepository.js';
 import {
@@ -22,6 +23,28 @@ import {
     getCurrentSubscriptionForOrganizationId,
     redeemActivationCode,
 } from '../src/services/billing/activationCodeService.js';
+import {
+    getOrganizationProviderSecretEncrypted,
+    getOrganizationSelectedProviderId,
+    getProviderDefinitionById,
+    insertProviderDefinition,
+    listActiveProviderDefinitions,
+    listAllProviderDefinitions,
+    updateProviderDefinitionById,
+    upsertOrganizationProviderSecretEncrypted,
+    upsertOrganizationSelectedProvider,
+    hasOrganizationProviderSecret,
+} from '../src/data/aiProviderRepository.js';
+import { getCreditStatus, chargeCredits } from '../src/services/billing/aiCreditService.js';
+import { unitsToCredits } from '../src/services/billing/credits.js';
+import {
+    createEmbeddedStripeSubscription,
+    createStripeCheckoutSession,
+    completeStripeCheckoutSession,
+    getStripePublicConfig,
+    handleStripeWebhook,
+    syncStripeSubscriptionForOrganization,
+} from '../src/services/billing/stripe/stripeService.js';
 import {
     buildBinanceUrl,
     buildDecisionMessageHtml,
@@ -45,6 +68,20 @@ const io = new Server(httpServer, {
 });
 
 app.use(cors());
+
+// Stripe webhook 必须在 json parser 之前注册，否则签名校验会失败
+app.post('/api/stripe/webhook', bodyParser.raw({ type: 'application/json' }), async (req, res) => {
+    try {
+        const sig = String(req.headers['stripe-signature'] || '').trim();
+        await handleStripeWebhook({ rawBody: req.body, signature: sig, env: process.env });
+        res.json({ received: true });
+    } catch (e) {
+        const msg = e?.message || String(e);
+        console.error('[stripe:webhook] error:', msg);
+        res.status(400).send(`Webhook Error: ${msg}`);
+    }
+});
+
 app.use(bodyParser.json());
 
 // Serve static files from 'outputs' directory
@@ -54,6 +91,9 @@ app.use('/verify-test', express.static(join(PROJECT_ROOT, 'web_verify_test')));
 // Store active processes and session data
 const activeProcesses = new Map();
 const sessionChartData = new Map();
+const sessionOwners = new Map(); // sessionId -> { userId, createdAt }
+const sessionWriteTokens = new Map(); // sessionId -> writeToken
+const saasProcesses = new Map(); // pid -> { userId, sessionId }
 
 function getBearerToken(req) {
     const header = String(req.headers.authorization || '').trim();
@@ -67,6 +107,25 @@ async function getAuthedUser(req) {
     if (!token) return null;
 
     const tokenHash = tokenToHash(token);
+    const sql = `
+      SELECT u.id, u.email, u.display_name, u.status, u.email_verified_at
+      FROM user_sessions s
+      JOIN users u ON u.id = s.user_id
+      WHERE s.refresh_token_hash = $1
+        AND s.revoked_at IS NULL
+        AND s.expires_at > now()
+      LIMIT 1
+    `;
+    const res = await queryCore(sql, [tokenHash]);
+    if (!res.rowCount) return null;
+    return res.rows[0];
+}
+
+async function getAuthedUserFromToken(token) {
+    const value = String(token || '').trim();
+    if (!value) return null;
+
+    const tokenHash = tokenToHash(value);
     const sql = `
       SELECT u.id, u.email, u.display_name, u.status, u.email_verified_at
       FROM user_sessions s
@@ -121,6 +180,65 @@ async function requireAdmin(req, res) {
     return user;
 }
 
+function isSubscriptionActive(subscription) {
+    if (!subscription) return false;
+    if (subscription.status !== 'active') return false;
+    if (!subscription.current_period_end) return false;
+    const end = new Date(subscription.current_period_end).getTime();
+    return Number.isFinite(end) && end > Date.now();
+}
+
+function getPublicAppUrl(req) {
+    const fromEnv = String(process.env.APP_PUBLIC_URL || '').trim();
+    if (fromEnv) return fromEnv;
+
+    const origin = String(req.headers.origin || '').trim();
+    if (/^https?:\/\//i.test(origin)) return origin;
+    return '';
+}
+
+async function requireActiveSubscription(req, res) {
+    const user = await requireAuth(req, res);
+    if (!user) return null;
+
+    if (!user.email_verified_at) {
+        res.status(403).json({ error: '请先验证邮箱' });
+        return null;
+    }
+
+    const organization = await getPrimaryOrganizationForUserId(user.id);
+    if (!organization) {
+        res.status(404).json({ error: '未找到组织' });
+        return null;
+    }
+
+    const subscription = await getCurrentSubscriptionForOrganizationId(organization.id);
+    if (!isSubscriptionActive(subscription)) {
+        res.status(402).json({ error: '订阅未激活' });
+        return null;
+    }
+
+    return { user, organization, subscription };
+}
+
+function getProviderSecretKey() {
+    return String(process.env.PROVIDER_SECRET || '').trim();
+}
+
+async function decryptApiKeyFromDb(client, encrypted) {
+    const secret = getProviderSecretKey();
+    if (!secret) throw new Error('缺少 PROVIDER_SECRET，无法解密 apiKey');
+    const res = await client.query('SELECT pgp_sym_decrypt($1::bytea, $2)::text AS api_key', [encrypted, secret]);
+    return String(res.rows?.[0]?.api_key || '');
+}
+
+async function encryptApiKeyForDb(client, apiKey) {
+    const secret = getProviderSecretKey();
+    if (!secret) throw new Error('缺少 PROVIDER_SECRET，无法保存 apiKey');
+    const res = await client.query('SELECT pgp_sym_encrypt($1::text, $2)::bytea AS api_key_enc', [apiKey, secret]);
+    return res.rows?.[0]?.api_key_enc;
+}
+
 io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
 
@@ -136,6 +254,40 @@ io.on('connection', (socket) => {
             socket.emit('process-killed', pid);
             console.log(`Killed process ${pid}`);
         }
+    });
+});
+
+const saasIo = io.of('/saas');
+
+saasIo.use(async (socket, next) => {
+    try {
+        const token =
+            socket.handshake.auth?.token ||
+            String(socket.handshake.headers?.authorization || '').replace(/^bearer\s+/i, '') ||
+            '';
+        const user = await getAuthedUserFromToken(token);
+        if (!user) return next(new Error('未登录'));
+        socket.data.user = user;
+        return next();
+    } catch (e) {
+        return next(new Error(e?.message || '鉴权失败'));
+    }
+});
+
+saasIo.on('connection', (socket) => {
+    const user = socket.data.user;
+    socket.join(`user:${user.id}`);
+
+    socket.on('disconnect', () => {});
+
+    socket.on('kill-process', (pid) => {
+        const meta = saasProcesses.get(pid);
+        if (!meta || meta.userId !== user.id) return;
+        const child = activeProcesses.get(pid);
+        if (child) child.kill();
+        activeProcesses.delete(pid);
+        saasProcesses.delete(pid);
+        socket.emit('process-killed', pid);
     });
 });
 
@@ -190,6 +342,144 @@ app.post('/api/run-script', (req, res) => {
     } catch (error) {
         console.error('Spawn error:', error);
         res.status(500).json({ error: error.message });
+    }
+});
+
+// SaaS: 受控执行（需要登录 + 订阅）
+app.post('/api/saas/run-script', async (req, res) => {
+    const schema = z.object({
+        script: z.enum(['main', 'backtest']),
+        args: z.array(z.string()).max(200).default([]),
+        sessionId: z.string().trim().min(8).max(200),
+    });
+
+    try {
+        const ctx = await requireActiveSubscription(req, res);
+        if (!ctx) return;
+
+        const input = schema.parse(req.body || {});
+
+        const organizationId = ctx.organization.id;
+        const userId = ctx.user.id;
+
+        const selectedProviderId = await withCoreConnection((client) =>
+            getOrganizationSelectedProviderId(client, organizationId)
+        );
+        if (!selectedProviderId) return res.status(400).json({ error: '未选择 AI Provider' });
+
+        const providerDefinition = await withCoreConnection((client) =>
+            getProviderDefinitionById(client, selectedProviderId)
+        );
+        if (!providerDefinition || !providerDefinition.is_active) {
+            return res.status(400).json({ error: 'AI Provider 不可用' });
+        }
+
+        const hasKey = await withCoreConnection((client) =>
+            hasOrganizationProviderSecret(client, { organizationId, providerDefinitionId: selectedProviderId })
+        );
+        if (!hasKey) return res.status(400).json({ error: '未设置该 Provider 的 apiKey' });
+
+        // 预扣费：每次策略分析按 1.00 credit 计，再乘以倍率
+        const creditCharge = await chargeCredits({
+            subscription: ctx.subscription,
+            organizationId,
+            userId,
+            providerDefinitionId: selectedProviderId,
+            multiplierX100: Number(providerDefinition.multiplier_x100) || 100,
+            baseUnits: 100,
+            reason: `run:${input.script}`,
+            meta: { sessionId: input.sessionId, script: input.script },
+        });
+
+        const scriptPath = join(PROJECT_ROOT, 'scripts', `${input.script}.js`);
+        const cmdArgs = [scriptPath, ...(input.args || [])];
+
+        // 强制使用服务端 sessionId，避免前端乱传导致越权取图
+        if (!cmdArgs.includes('--session-id')) {
+            cmdArgs.push('--session-id', input.sessionId);
+        }
+
+        const writeToken = generateSessionToken();
+        sessionOwners.set(input.sessionId, { userId: ctx.user.id, createdAt: Date.now() });
+        sessionWriteTokens.set(input.sessionId, writeToken);
+
+        const encrypted = await withCoreConnection((client) =>
+            getOrganizationProviderSecretEncrypted(client, { organizationId, providerDefinitionId: selectedProviderId })
+        );
+        const apiKey = await withCoreConnection((client) => decryptApiKeyFromDb(client, encrypted));
+
+        const providerOverride = {
+            providers: [
+                {
+                    id: providerDefinition.id,
+                    isActive: true,
+                    apiKey,
+                    baseUrl: providerDefinition.base_url,
+                    modelName: providerDefinition.model_name,
+                    thinkingMode: providerDefinition.thinking_mode,
+                    maxTokens: providerDefinition.max_tokens,
+                    temperature: Number(providerDefinition.temperature_x100 || 20) / 100,
+                },
+            ],
+            version: 1,
+        };
+
+        const child = spawn(process.execPath, cmdArgs, {
+            cwd: PROJECT_ROOT,
+            env: {
+                ...process.env,
+                FORCE_COLOR: '1',
+                CHART_WRITE_TOKEN: writeToken,
+                ARKILO_PROVIDER_OVERRIDE_JSON: JSON.stringify(providerOverride),
+            },
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+
+        const pid = child.pid;
+        if (pid) {
+            activeProcesses.set(pid, child);
+            saasProcesses.set(pid, { userId: ctx.user.id, sessionId: input.sessionId });
+        }
+
+        const room = `user:${ctx.user.id}`;
+        child.stdout.on('data', (data) => {
+            saasIo.to(room).emit('log', { type: 'stdout', data: data.toString(), sessionId: input.sessionId });
+        });
+        child.stderr.on('data', (data) => {
+            saasIo.to(room).emit('log', { type: 'stderr', data: data.toString(), sessionId: input.sessionId });
+        });
+        child.on('close', (code) => {
+            saasIo.to(room).emit('process-exit', { code, pid, sessionId: input.sessionId });
+            if (pid) {
+                activeProcesses.delete(pid);
+                saasProcesses.delete(pid);
+            }
+        });
+        child.on('error', (err) => {
+            saasIo.to(room).emit('log', { type: 'error', data: `Failed to start process: ${err.message}` });
+        });
+
+        res.json({
+            pid,
+            charged: {
+                credits: unitsToCredits(creditCharge.chargedUnits),
+                remainingCredits: unitsToCredits(creditCharge.remainingUnits),
+                nextResetAt: creditCharge.periodEnd,
+            },
+        });
+    } catch (error) {
+        if (error?.code === 'INSUFFICIENT_CREDIT') {
+            const d = error.details || {};
+            return res.status(402).json({
+                error: 'credit 不足',
+                details: {
+                    remainingCredits: unitsToCredits(d.remainingUnits),
+                    chargeCredits: unitsToCredits(d.chargeUnits),
+                    nextResetAt: d.periodEnd,
+                },
+            });
+        }
+        res.status(400).json({ error: error?.message || String(error) });
     }
 });
 
@@ -258,7 +548,18 @@ app.post('/api/auth/register', async (req, res) => {
             }
         });
 
-        res.json({ token, user });
+        let emailVerification = null;
+        try {
+            emailVerification = await sendEmailVerification({
+                userId: user.id,
+                publicUrl: getPublicAppUrl(req),
+                logger: console,
+            });
+        } catch (e) {
+            emailVerification = { sent: false, error: e?.message || String(e) };
+        }
+
+        res.json({ token, user, emailVerification });
     } catch (error) {
         const msg = error?.message || String(error);
         if (msg.toLowerCase().includes('duplicate key') || msg.toLowerCase().includes('unique')) {
@@ -336,6 +637,35 @@ app.post('/api/auth/logout', async (req, res) => {
     }
 });
 
+// Auth: 发送邮箱验证邮件
+app.post('/api/auth/email-verifications/send', async (req, res) => {
+    try {
+        const user = await requireAuth(req, res);
+        if (!user) return;
+
+        const out = await sendEmailVerification({
+            userId: user.id,
+            publicUrl: getPublicAppUrl(req),
+            logger: console,
+        });
+        res.json(out);
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Auth: 校验邮箱验证 token（不要求登录）
+app.post('/api/auth/email-verifications/verify', async (req, res) => {
+    const schema = z.object({ token: z.string().trim().min(20).max(500) });
+    try {
+        const input = schema.parse(req.body || {});
+        const out = await verifyEmailByToken({ token: input.token });
+        res.json(out);
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
 // Console: 当前用户 + 主组织 + 订阅（用于 SaaS Console）
 app.get('/api/console/overview', async (req, res) => {
     try {
@@ -365,6 +695,115 @@ app.get('/api/billing/subscription', async (req, res) => {
         res.json({ organization, subscription });
     } catch (error) {
         res.status(500).json({ error: error?.message || String(error) });
+    }
+});
+
+// Stripe: 前端配置（publishableKey + 套餐）
+app.get('/api/stripe/config', async (req, res) => {
+    try {
+        const user = await requireAuth(req, res);
+        if (!user) return;
+        const cfg = getStripePublicConfig({ env: process.env });
+        res.json(cfg);
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Stripe: 创建订阅（返回 Payment Element 的 client_secret）
+app.post('/api/stripe/subscriptions/create', async (req, res) => {
+    const schema = z.object({ planCode: z.enum(['monthly', 'yearly']) });
+    try {
+        const user = await requireAuth(req, res);
+        if (!user) return;
+        if (!user.email_verified_at) return res.status(403).json({ error: '请先验证邮箱' });
+
+        const organization = await getPrimaryOrganizationForUserId(user.id);
+        if (!organization) return res.status(404).json({ error: '未找到组织' });
+
+        const current = await getCurrentSubscriptionForOrganizationId(organization.id);
+        if (isSubscriptionActive(current)) {
+            return res.status(409).json({ error: '当前已有有效订阅' });
+        }
+
+        const input = schema.parse(req.body || {});
+        const out = await createEmbeddedStripeSubscription({
+            organizationId: organization.id,
+            userId: user.id,
+            email: user.email,
+            planCode: input.planCode,
+            env: process.env,
+        });
+        res.json(out);
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Stripe: 创建 Checkout Session（跳转到 Stripe 托管页面）
+app.post('/api/stripe/checkout/create', async (req, res) => {
+    const schema = z.object({ planCode: z.enum(['monthly', 'yearly']) });
+    try {
+        const user = await requireAuth(req, res);
+        if (!user) return;
+        if (!user.email_verified_at) return res.status(403).json({ error: '请先验证邮箱' });
+
+        const organization = await getPrimaryOrganizationForUserId(user.id);
+        if (!organization) return res.status(404).json({ error: '未找到组织' });
+
+        const current = await getCurrentSubscriptionForOrganizationId(organization.id);
+        if (isSubscriptionActive(current)) return res.status(409).json({ error: '当前已有有效订阅' });
+
+        const input = schema.parse(req.body || {});
+        const url = getPublicAppUrl(req);
+        const out = await createStripeCheckoutSession({
+            organizationId: organization.id,
+            email: user.email,
+            planCode: input.planCode,
+            publicUrl: url,
+            env: process.env,
+        });
+        res.json(out);
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Stripe: 回跳后用 session_id 完成订阅落库（无需等 webhook）
+app.post('/api/stripe/checkout/complete', async (req, res) => {
+    const schema = z.object({ sessionId: z.string().trim().min(10).max(200) });
+    try {
+        const user = await requireAuth(req, res);
+        if (!user) return;
+
+        const organization = await getPrimaryOrganizationForUserId(user.id);
+        if (!organization) return res.status(404).json({ error: '未找到组织' });
+
+        const input = schema.parse(req.body || {});
+        const out = await completeStripeCheckoutSession({
+            organizationId: organization.id,
+            sessionId: input.sessionId,
+            env: process.env,
+        });
+        res.json(out);
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Stripe: 同步订阅状态（用于前端支付后刷新）
+app.post('/api/stripe/subscriptions/sync', async (req, res) => {
+    try {
+        const user = await requireAuth(req, res);
+        if (!user) return;
+
+        const organization = await getPrimaryOrganizationForUserId(user.id);
+        if (!organization) return res.status(404).json({ error: '未找到组织' });
+
+        const out = await syncStripeSubscriptionForOrganization({ organizationId: organization.id, env: process.env });
+        res.json(out);
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
     }
 });
 
@@ -483,18 +922,250 @@ app.post('/api/chart-data', async (req, res) => {
         if (!sessionId || !data) {
             return res.status(400).json({ error: 'Missing sessionId or data' });
         }
+
+        const expected = sessionWriteTokens.get(sessionId);
+        if (expected) {
+            const provided = String(req.headers['x-chart-write-token'] || '').trim();
+            if (!provided || provided !== expected) {
+                return res.status(401).json({ error: 'Chart write token invalid' });
+            }
+        }
         
         sessionChartData.set(sessionId, data);
         
         // 5分钟后清理数据
         setTimeout(() => {
             sessionChartData.delete(sessionId);
+            sessionOwners.delete(sessionId);
+            sessionWriteTokens.delete(sessionId);
         }, 5 * 60 * 1000);
         
         res.json({ success: true });
     } catch (error) {
         console.error('Save chart data error:', error);
         res.status(500).json({ error: error.message });
+    }
+});
+
+// SaaS: 获取图表数据（需要登录且属于当前用户）
+app.get('/api/saas/chart-data/:sessionId', async (req, res) => {
+    try {
+        const user = await requireAuth(req, res);
+        if (!user) return;
+
+        const { sessionId } = req.params;
+        const owner = sessionOwners.get(sessionId);
+        if (!owner || owner.userId !== user.id) return res.status(404).json({ error: 'Chart data not found' });
+
+        const data = sessionChartData.get(sessionId);
+        if (!data) return res.status(404).json({ error: 'Chart data not found' });
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({ error: error?.message || String(error) });
+    }
+});
+
+// SaaS: AI 状态（订阅 + credit + Provider）
+app.get('/api/saas/ai/state', async (req, res) => {
+    try {
+        const user = await requireAuth(req, res);
+        if (!user) return;
+
+        const organization = await getPrimaryOrganizationForUserId(user.id);
+        if (!organization) return res.status(404).json({ error: '未找到组织' });
+
+        const subscription = await getCurrentSubscriptionForOrganizationId(organization.id);
+        const subscriptionActive = isSubscriptionActive(subscription);
+
+        const organizationId = organization.id;
+        const defs = await withCoreConnection((client) => listActiveProviderDefinitions(client));
+        const selectedId = await withCoreConnection((client) => getOrganizationSelectedProviderId(client, organizationId));
+
+        const items = await withCoreConnection(async (client) => {
+            const out = [];
+            for (const d of defs) {
+                const hasKey = await hasOrganizationProviderSecret(client, {
+                    organizationId,
+                    providerDefinitionId: d.id,
+                });
+                out.push({ ...d, hasKey });
+            }
+            return out;
+        });
+
+        const credit = subscriptionActive
+            ? await getCreditStatus({ subscription, organizationId })
+            : null;
+
+        res.json({
+            organization,
+            subscription,
+            subscriptionActive,
+            credit: credit
+                ? {
+                      periodStart: credit.periodStart,
+                      periodEnd: credit.periodEnd,
+                      allowanceCredits: unitsToCredits(credit.allowanceUnits),
+                      usedCredits: unitsToCredits(credit.usedUnits),
+                      remainingCredits: unitsToCredits(Math.max(0, credit.allowanceUnits - credit.usedUnits)),
+                  }
+                : null,
+            providers: {
+                selectedId,
+                items,
+            },
+        });
+    } catch (error) {
+        res.status(500).json({ error: error?.message || String(error) });
+    }
+});
+
+// SaaS: 选择 Provider
+app.post('/api/saas/ai/providers/select', async (req, res) => {
+    const schema = z.object({ providerId: z.string().uuid() });
+    try {
+        const user = await requireAuth(req, res);
+        if (!user) return;
+
+        const organization = await getPrimaryOrganizationForUserId(user.id);
+        if (!organization) return res.status(404).json({ error: '未找到组织' });
+
+        const input = schema.parse(req.body || {});
+        const provider = await withCoreConnection((client) => getProviderDefinitionById(client, input.providerId));
+        if (!provider || !provider.is_active) return res.status(400).json({ error: 'Provider 不可用' });
+
+        await withCoreConnection((client) =>
+            upsertOrganizationSelectedProvider(client, { organizationId: organization.id, providerDefinitionId: input.providerId })
+        );
+        res.json({ success: true });
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// SaaS: 设置当前组织的 apiKey（加密存储）
+app.post('/api/saas/ai/providers/set-key', async (req, res) => {
+    const schema = z.object({ providerId: z.string().uuid(), apiKey: z.string().trim().min(10).max(500) });
+    try {
+        const admin = await requireAdmin(req, res);
+        if (!admin) return;
+
+        const organization = await getPrimaryOrganizationForUserId(admin.id);
+        if (!organization) return res.status(404).json({ error: '未找到组织' });
+
+        const input = schema.parse(req.body || {});
+        const provider = await withCoreConnection((client) => getProviderDefinitionById(client, input.providerId));
+        if (!provider || !provider.is_active) return res.status(400).json({ error: 'Provider 不可用' });
+
+        const encrypted = await withCoreConnection((client) => encryptApiKeyForDb(client, input.apiKey));
+        await withCoreConnection((client) =>
+            upsertOrganizationProviderSecretEncrypted(client, {
+                organizationId: organization.id,
+                providerDefinitionId: input.providerId,
+                apiKeyEnc: encrypted,
+            })
+        );
+        res.json({ success: true });
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Admin: Provider 定义列表
+app.get('/api/admin/ai-providers', async (req, res) => {
+    const schema = z.object({
+        limit: z.coerce.number().int().min(1).max(200).optional(),
+        offset: z.coerce.number().int().min(0).optional(),
+    });
+    try {
+        const admin = await requireAdmin(req, res);
+        if (!admin) return;
+
+        const input = schema.parse(req.query || {});
+        const rows = await withCoreConnection((client) => listAllProviderDefinitions(client, { limit: input.limit ?? 100, offset: input.offset ?? 0 }));
+        res.json({ items: rows });
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Admin: 创建 Provider 定义
+app.post('/api/admin/ai-providers', async (req, res) => {
+    const schema = z.object({
+        code: z.string().trim().min(2).max(64),
+        displayName: z.string().trim().min(1).max(120),
+        baseUrl: z.string().trim().url().optional(),
+        modelName: z.string().trim().min(1).max(120),
+        thinkingMode: z.enum(['enabled', 'disabled', 'none']).optional(),
+        maxTokens: z.number().int().min(256).max(200000).optional(),
+        temperature: z.number().min(0).max(2).optional(),
+        multiplier: z.number().min(0.01).max(1000).optional(),
+        isActive: z.boolean().optional(),
+    });
+    try {
+        const admin = await requireAdmin(req, res);
+        if (!admin) return;
+
+        const input = schema.parse(req.body || {});
+        const row = await withCoreConnection((client) =>
+            insertProviderDefinition(client, {
+                code: input.code,
+                displayName: input.displayName,
+                baseUrl: input.baseUrl || null,
+                modelName: input.modelName,
+                thinkingMode: input.thinkingMode || 'none',
+                maxTokens: input.maxTokens ?? 8192,
+                temperatureX100: Math.round((input.temperature ?? 0.2) * 100),
+                multiplierX100: Math.round((input.multiplier ?? 1) * 100),
+                isActive: input.isActive ?? true,
+            })
+        );
+        res.json({ provider: row });
+    } catch (error) {
+        const msg = error?.message || String(error);
+        if (msg.toLowerCase().includes('duplicate key') || msg.toLowerCase().includes('unique')) {
+            return res.status(409).json({ error: 'code 已存在' });
+        }
+        res.status(400).json({ error: msg });
+    }
+});
+
+// Admin: 更新 Provider 定义
+app.put('/api/admin/ai-providers/:id', async (req, res) => {
+    const schema = z.object({
+        displayName: z.string().trim().min(1).max(120),
+        baseUrl: z.string().trim().url().optional().nullable(),
+        modelName: z.string().trim().min(1).max(120),
+        thinkingMode: z.enum(['enabled', 'disabled', 'none']).optional(),
+        maxTokens: z.number().int().min(256).max(200000).optional(),
+        temperature: z.number().min(0).max(2).optional(),
+        multiplier: z.number().min(0.01).max(1000).optional(),
+        isActive: z.boolean().optional(),
+    });
+    try {
+        const admin = await requireAdmin(req, res);
+        if (!admin) return;
+
+        const id = String(req.params.id || '').trim();
+        const input = schema.parse(req.body || {});
+
+        const row = await withCoreConnection((client) =>
+            updateProviderDefinitionById(client, {
+                id,
+                displayName: input.displayName,
+                baseUrl: input.baseUrl ?? null,
+                modelName: input.modelName,
+                thinkingMode: input.thinkingMode || 'none',
+                maxTokens: input.maxTokens ?? 8192,
+                temperatureX100: Math.round((input.temperature ?? 0.2) * 100),
+                multiplierX100: Math.round((input.multiplier ?? 1) * 100),
+                isActive: input.isActive ?? true,
+            })
+        );
+        if (!row) return res.status(404).json({ error: 'Provider 不存在' });
+        res.json({ provider: row });
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
     }
 });
 

@@ -6,6 +6,24 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, '../..');
 const PROVIDERS_FILE = join(PROJECT_ROOT, 'ai-providers.json');
 
+function tryParseProviderOverride() {
+    const raw = String(process.env.ARKILO_PROVIDER_OVERRIDE_JSON || '').trim();
+    if (!raw) return null;
+    try {
+        const obj = JSON.parse(raw);
+        if (!obj || typeof obj !== 'object') return null;
+        if (Array.isArray(obj.providers)) {
+            return obj;
+        }
+        if (obj.apiKey && (obj.modelName || obj.model)) {
+            return { providers: [{ ...obj, isActive: true }], version: 1 };
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
 /**
  * AI Provider 服务
  * 统一管理 ai-providers.json 的读取和配置
@@ -18,6 +36,9 @@ class ProviderService {
     }
 
     async _readProvidersFile() {
+        const override = tryParseProviderOverride();
+        if (override) return override;
+
         const now = Date.now();
         if (this._cache && now - this._cacheTime < this.CACHE_TTL) {
             return this._cache;

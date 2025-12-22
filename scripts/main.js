@@ -101,9 +101,13 @@ function buildAuto4xAux({ baseTimeframe, baseBars, desiredBarsCount }) {
  */
 async function sendChartDataToServer(sessionId, chartData) {
     try {
+        const headers = { 'Content-Type': 'application/json' };
+        const writeToken = String(process.env.CHART_WRITE_TOKEN || '').trim();
+        if (writeToken) headers['x-chart-write-token'] = writeToken;
+
         const response = await fetch(`${SERVER_URL}/api/chart-data`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             body: JSON.stringify({ sessionId, data: chartData }),
         });
 

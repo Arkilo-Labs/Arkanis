@@ -96,7 +96,20 @@ Windows PowerShell 里不要用 `&&`，请用两行命令或用 `;` 分隔。
 
 如果安装依赖时看到 `Ignored build scripts: esbuild`，执行一次 `pnpm rebuild --pending`。
 
+SaaS Console 里新增了 `AI 策略` 页面，会走受控接口（需要登录 + 订阅）：
+
+- 执行：`POST /api/saas/run-script`
+- 拉取图表：`GET /api/saas/chart-data/:sessionId`
+
+并且加入了按订阅的 monthly credit：
+
+- 月度：每月 `300.00` credit
+- 年度：每月 `500.00` credit
+- 重置时间：以订阅的 `current_period_start` 为锚点，每满 1 个月在同一“日”重置（遇到短月则按月末对齐）
+
 管理员账号白名单通过环境变量配置：`ARKILO_ADMIN_EMAILS=admin@yourdomain.com,other@yourdomain.com`（用于激活码管理）。
+
+`AI Provider` 的 apiKey 会加密存储在数据库中，需要配置 `PROVIDER_SECRET`（见 `.env.example`）。
 
 ## 3. 运行方式清单（按场景）
 

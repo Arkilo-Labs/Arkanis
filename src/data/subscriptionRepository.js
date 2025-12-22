@@ -51,7 +51,8 @@ export async function updateSubscriptionPeriodEnd(client, { subscriptionId, plan
 export async function getSubscriptionById(client, subscriptionId) {
     const res = await client.query(
         `
-          SELECT id, organization_id, provider, plan_code, status, current_period_start, current_period_end
+          SELECT id, organization_id, provider, provider_subscription_id, plan_code, status,
+                 current_period_start, current_period_end, cancel_at_period_end, created_at, updated_at
           FROM subscriptions
           WHERE id = $1
         `,
@@ -63,7 +64,8 @@ export async function getSubscriptionById(client, subscriptionId) {
 export async function getLatestSubscriptionForOrganizationId(client, organizationId) {
     const res = await client.query(
         `
-          SELECT id, organization_id, provider, plan_code, status, current_period_start, current_period_end
+          SELECT id, organization_id, provider, provider_subscription_id, plan_code, status,
+                 current_period_start, current_period_end, cancel_at_period_end, created_at, updated_at
           FROM subscriptions
           WHERE organization_id = $1
           ORDER BY created_at DESC
@@ -74,3 +76,60 @@ export async function getLatestSubscriptionForOrganizationId(client, organizatio
     return res.rowCount ? res.rows[0] : null;
 }
 
+export async function getSubscriptionByProviderSubscriptionId(client, { provider, providerSubscriptionId }) {
+    const res = await client.query(
+        `
+          SELECT id, organization_id, provider, provider_subscription_id, plan_code, status,
+                 current_period_start, current_period_end, cancel_at_period_end, created_at, updated_at
+          FROM subscriptions
+          WHERE provider = $1 AND provider_subscription_id = $2
+          LIMIT 1
+        `,
+        [provider, providerSubscriptionId]
+    );
+    return res.rowCount ? res.rows[0] : null;
+}
+
+export async function upsertSubscriptionByProviderSubscriptionId(
+    client,
+    { organizationId, provider, providerSubscriptionId, planCode, status, currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd }
+) {
+    const res = await client.query(
+        `
+          INSERT INTO subscriptions (
+            organization_id,
+            provider,
+            provider_subscription_id,
+            plan_code,
+            status,
+            current_period_start,
+            current_period_end,
+            cancel_at_period_end
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          ON CONFLICT (provider_subscription_id)
+          DO UPDATE SET
+            organization_id = EXCLUDED.organization_id,
+            provider = EXCLUDED.provider,
+            plan_code = EXCLUDED.plan_code,
+            status = EXCLUDED.status,
+            current_period_start = EXCLUDED.current_period_start,
+            current_period_end = EXCLUDED.current_period_end,
+            cancel_at_period_end = EXCLUDED.cancel_at_period_end,
+            updated_at = now()
+          RETURNING id, organization_id, provider, provider_subscription_id, plan_code, status,
+                    current_period_start, current_period_end, cancel_at_period_end, created_at, updated_at
+        `,
+        [
+            organizationId,
+            provider,
+            providerSubscriptionId,
+            planCode,
+            status,
+            currentPeriodStart,
+            currentPeriodEnd,
+            cancelAtPeriodEnd,
+        ]
+    );
+    return res.rows[0];
+}

@@ -314,6 +314,29 @@ code {
     gap: var(--spacing-md);
 }
 
+.card-warn {
+    border-color: rgba(255, 69, 0, 0.25);
+    background: rgba(255, 69, 0, 0.06);
+}
+
+.banner-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-lg);
+}
+
+.banner-title {
+    font-weight: 600;
+    margin-bottom: var(--spacing-xs);
+}
+
+.banner-msg {
+    margin-top: var(--spacing-sm);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
 .grid {
     display: grid;
     gap: var(--spacing-xl);
@@ -370,6 +393,48 @@ code {
     letter-spacing: 0.05em;
 }
 
+.terminal {
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-lg);
+    padding: 0.75rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    max-height: 320px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.terminal-empty {
+    color: rgba(255, 255, 255, 0.35);
+    font-style: italic;
+}
+
+.terminal-line {
+    display: flex;
+    gap: 0.6rem;
+    padding: 0.1rem 0;
+}
+
+.terminal-time {
+    flex: 0 0 auto;
+    color: rgba(255, 255, 255, 0.35);
+}
+
+.terminal-stdout {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.terminal-stderr {
+    color: rgba(255, 255, 255, 0.65);
+}
+
+.terminal-error {
+    color: rgba(239, 68, 68, 0.9);
+}
+
 @media (max-width: 960px) {
     .sidebar {
         display: none;
@@ -382,4 +447,3 @@ code {
         flex-direction: column;
     }
 }
-
