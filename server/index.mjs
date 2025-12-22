@@ -278,7 +278,7 @@ saasIo.on('connection', (socket) => {
     const user = socket.data.user;
     socket.join(`user:${user.id}`);
 
-    socket.on('disconnect', () => {});
+    socket.on('disconnect', () => { });
 
     socket.on('kill-process', (pid) => {
         const meta = saasProcesses.get(pid);
@@ -712,7 +712,7 @@ app.get('/api/stripe/config', async (req, res) => {
 
 // Stripe: 创建订阅（返回 Payment Element 的 client_secret）
 app.post('/api/stripe/subscriptions/create', async (req, res) => {
-    const schema = z.object({ planCode: z.enum(['monthly', 'yearly']) });
+    const schema = z.object({ planCode: z.enum(['monthly', 'quarterly', 'yearly']) });
     try {
         const user = await requireAuth(req, res);
         if (!user) return;
@@ -742,7 +742,7 @@ app.post('/api/stripe/subscriptions/create', async (req, res) => {
 
 // Stripe: 创建 Checkout Session（跳转到 Stripe 托管页面）
 app.post('/api/stripe/checkout/create', async (req, res) => {
-    const schema = z.object({ planCode: z.enum(['monthly', 'yearly']) });
+    const schema = z.object({ planCode: z.enum(['monthly', 'quarterly', 'yearly']) });
     try {
         const user = await requireAuth(req, res);
         if (!user) return;
@@ -902,11 +902,11 @@ app.get('/api/chart-data/:sessionId', async (req, res) => {
     try {
         const { sessionId } = req.params;
         const data = sessionChartData.get(sessionId);
-        
+
         if (!data) {
             return res.status(404).json({ error: 'Chart data not found' });
         }
-        
+
         res.json(data);
     } catch (error) {
         console.error('Get chart data error:', error);
@@ -918,7 +918,7 @@ app.get('/api/chart-data/:sessionId', async (req, res) => {
 app.post('/api/chart-data', async (req, res) => {
     try {
         const { sessionId, data } = req.body;
-        
+
         if (!sessionId || !data) {
             return res.status(400).json({ error: 'Missing sessionId or data' });
         }
@@ -930,16 +930,16 @@ app.post('/api/chart-data', async (req, res) => {
                 return res.status(401).json({ error: 'Chart write token invalid' });
             }
         }
-        
+
         sessionChartData.set(sessionId, data);
-        
+
         // 5分钟后清理数据
         setTimeout(() => {
             sessionChartData.delete(sessionId);
             sessionOwners.delete(sessionId);
             sessionWriteTokens.delete(sessionId);
         }, 5 * 60 * 1000);
-        
+
         res.json({ success: true });
     } catch (error) {
         console.error('Save chart data error:', error);
@@ -1003,12 +1003,12 @@ app.get('/api/saas/ai/state', async (req, res) => {
             subscriptionActive,
             credit: credit
                 ? {
-                      periodStart: credit.periodStart,
-                      periodEnd: credit.periodEnd,
-                      allowanceCredits: unitsToCredits(credit.allowanceUnits),
-                      usedCredits: unitsToCredits(credit.usedUnits),
-                      remainingCredits: unitsToCredits(Math.max(0, credit.allowanceUnits - credit.usedUnits)),
-                  }
+                    periodStart: credit.periodStart,
+                    periodEnd: credit.periodEnd,
+                    allowanceCredits: unitsToCredits(credit.allowanceUnits),
+                    usedCredits: unitsToCredits(credit.usedUnits),
+                    remainingCredits: unitsToCredits(Math.max(0, credit.allowanceUnits - credit.usedUnits)),
+                }
                 : null,
             providers: {
                 selectedId,

@@ -107,7 +107,7 @@ function formatDate(value) {
 }
 
 function formatPlanCode(code) {
-    const planMap = { monthly: '月度版', yearly: '年度版', free: '免费版' };
+    const planMap = { monthly: '月度版', quarterly: '季度版', yearly: '年度版', free: '免费版' };
     return planMap[code] || code;
 }
 
@@ -117,15 +117,17 @@ function formatStatus(status) {
 }
 
 function formatPrice(plan) {
-    const price = Number(plan.pricePerMonth || plan.allowanceCreditsPerMonth || 0);
+    const priceMap = { monthly: 5, quarterly: 10, yearly: 30 };
+    const price = priceMap[plan.code] || 0;
     if (price <= 0) return '免费';
-    return `$${price.toFixed(0)}`;
+    return `$${price}`;
 }
 
 function getPlanDesc(code) {
     const descMap = {
         monthly: '按月付费，灵活选择',
-        yearly: '年付享优惠，性价比之选',
+        quarterly: '季付享优惠，惠而不贵',
+        yearly: '年付最划算，性价比之选',
         free: '基础功能体验',
     };
     return descMap[code] || '专业级 AI 分析服务';
@@ -134,20 +136,25 @@ function getPlanDesc(code) {
 function getPlanFeatures(code) {
     const featuresMap = {
         monthly: [
-            '每月 100 次 AI 策略分析',
+            '每月 300 积分',
             '支持所有主流交易对',
             '实时行情图表',
             '优先客服支持',
         ],
-        yearly: [
-            '每月 150 次 AI 策略分析',
+        quarterly: [
+            '每月 400 积分',
             '所有月度版功能',
-            '专属高级模型',
+            '季付享优惠',
             '优先体验新功能',
-            '年付节省 20%',
+        ],
+        yearly: [
+            '每月 500 积分',
+            '所有季度版功能',
+            '专属高级模型',
+            '年付节省最多',
         ],
         free: [
-            '每月 10 次 AI 策略分析',
+            '每月 10 积分',
             '基础图表功能',
             '社区支持',
         ],

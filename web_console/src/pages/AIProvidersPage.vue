@@ -162,7 +162,7 @@ function formatDate(value) {
 }
 
 function formatPlanCode(code) {
-    const planMap = { monthly: '月度版', yearly: '年度版', free: '免费版' };
+    const planMap = { monthly: '月度版', quarterly: '季度版', yearly: '年度版', free: '免费版' };
     return planMap[code] || code;
 }
 

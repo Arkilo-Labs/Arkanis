@@ -25,6 +25,7 @@ function getWebhookSecret(env) {
 
 function getPlanPriceId({ env, planCode }) {
     if (planCode === 'yearly') return String(env.STRIPE_PRICE_YEARLY || '').trim();
+    if (planCode === 'quarterly') return String(env.STRIPE_PRICE_QUARTERLY || '').trim();
     return String(env.STRIPE_PRICE_MONTHLY || '').trim();
 }
 
@@ -54,7 +55,7 @@ async function cancelIfRemoteBlocking({ stripe, providerSubscriptionId, env }) {
     if (remote.status === 'incomplete' || remote.status === 'incomplete_expired') {
         try {
             await stripe.subscriptions.cancel(remote.id);
-        } catch {}
+        } catch { }
         return;
     }
 
@@ -64,10 +65,10 @@ async function cancelIfRemoteBlocking({ stripe, providerSubscriptionId, env }) {
     }
 
     // 其它中间态（例如 past_due/unpaid）先不强杀，避免误伤
-    if (remotePlan !== 'monthly' && remotePlan !== 'yearly') {
+    if (remotePlan !== 'monthly' && remotePlan !== 'quarterly' && remotePlan !== 'yearly') {
         try {
             await stripe.subscriptions.cancel(remote.id);
-        } catch {}
+        } catch { }
     }
 }
 
@@ -78,7 +79,7 @@ export async function createEmbeddedStripeSubscription({
     planCode,
     env = process.env,
 }) {
-    if (planCode !== 'monthly' && planCode !== 'yearly') throw new Error('planCode 无效');
+    if (planCode !== 'monthly' && planCode !== 'quarterly' && planCode !== 'yearly') throw new Error('planCode 无效');
 
     const priceId = getPlanPriceId({ env, planCode });
     if (!priceId) throw new Error('套餐未配置（缺少 STRIPE_PRICE_*）');
@@ -138,7 +139,7 @@ export async function createEmbeddedStripeSubscription({
             if (remote.status === 'incomplete_expired' || remotePlan !== planCode) {
                 try {
                     await stripe.subscriptions.cancel(remote.id);
-                } catch {}
+                } catch { }
             }
         }
     }
@@ -173,7 +174,7 @@ export async function createEmbeddedStripeSubscription({
 }
 
 export async function createStripeCheckoutSession({ organizationId, email, planCode, publicUrl, env = process.env }) {
-    if (planCode !== 'monthly' && planCode !== 'yearly') throw new Error('planCode 无效');
+    if (planCode !== 'monthly' && planCode !== 'quarterly' && planCode !== 'yearly') throw new Error('planCode 无效');
     const base = String(publicUrl || '').trim().replace(/\/+$/, '');
     if (!base) throw new Error('缺少 APP_PUBLIC_URL，无法生成 Stripe 回跳地址');
 
