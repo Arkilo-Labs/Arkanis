@@ -42,6 +42,8 @@ import {
     createStripeCheckoutSession,
     completeStripeCheckoutSession,
     getStripePublicConfig,
+    previewStripeUpgradeInvoice,
+    createStripeUpgradePortalSession,
     handleStripeWebhook,
     syncStripeSubscriptionForOrganization,
 } from '../src/services/billing/stripe/stripeService.js';
@@ -703,7 +705,7 @@ app.get('/api/stripe/config', async (req, res) => {
     try {
         const user = await requireAuth(req, res);
         if (!user) return;
-        const cfg = getStripePublicConfig({ env: process.env });
+        const cfg = await getStripePublicConfig({ env: process.env });
         res.json(cfg);
     } catch (error) {
         res.status(400).json({ error: error?.message || String(error) });
@@ -751,16 +753,65 @@ app.post('/api/stripe/checkout/create', async (req, res) => {
         const organization = await getPrimaryOrganizationForUserId(user.id);
         if (!organization) return res.status(404).json({ error: '未找到组织' });
 
-        const current = await getCurrentSubscriptionForOrganizationId(organization.id);
-        if (isSubscriptionActive(current)) return res.status(409).json({ error: '当前已有有效订阅' });
-
         const input = schema.parse(req.body || {});
+        const current = await getCurrentSubscriptionForOrganizationId(organization.id);
+
+        // 套餐等级映射（用于判断升级/降级）
+        const PLAN_RANK = { free: 0, monthly: 1, quarterly: 2, yearly: 3 };
+        const currentRank = PLAN_RANK[current?.plan_code] || 0;
+        const targetRank = PLAN_RANK[input.planCode] || 0;
+
+        // 已有活跃订阅时：只允许升级，不允许降级或重复订阅同等级套餐
+        if (isSubscriptionActive(current)) {
+            if (targetRank <= currentRank) {
+                return res.status(409).json({ error: '当前套餐等级相同或更高，无法降级' });
+            }
+            // 升级场景：Stripe 走 Billing Portal 的 subscription update（避免创建重复订阅）
+            if (current?.provider === 'stripe') {
+                const url = getPublicAppUrl(req);
+                const out = await createStripeUpgradePortalSession({
+                    organizationId: organization.id,
+                    targetPlanCode: input.planCode,
+                    publicUrl: url,
+                    env: process.env,
+                });
+                return res.json(out);
+            }
+        }
+
         const url = getPublicAppUrl(req);
         const out = await createStripeCheckoutSession({
             organizationId: organization.id,
             email: user.email,
             planCode: input.planCode,
             publicUrl: url,
+            env: process.env,
+        });
+        res.json(out);
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Stripe: 升级预估（用于前端展示补差价；最终以 Stripe 结算页为准）
+app.post('/api/stripe/subscriptions/upgrade/preview', async (req, res) => {
+    const schema = z.object({ targetPlanCode: z.enum(['monthly', 'quarterly', 'yearly']) });
+    try {
+        const user = await requireAuth(req, res);
+        if (!user) return;
+        if (!user.email_verified_at) return res.status(403).json({ error: '请先验证邮箱' });
+
+        const organization = await getPrimaryOrganizationForUserId(user.id);
+        if (!organization) return res.status(404).json({ error: '未找到组织' });
+
+        const current = await getCurrentSubscriptionForOrganizationId(organization.id);
+        if (!isSubscriptionActive(current)) return res.status(409).json({ error: '当前无有效订阅' });
+        if (current?.provider !== 'stripe') return res.status(409).json({ error: '当前订阅不支持 Stripe 升级预估' });
+
+        const input = schema.parse(req.body || {});
+        const out = await previewStripeUpgradeInvoice({
+            organizationId: organization.id,
+            targetPlanCode: input.targetPlanCode,
             env: process.env,
         });
         res.json(out);

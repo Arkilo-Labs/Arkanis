@@ -103,7 +103,9 @@ SaaS Console 里新增了 `AI 策略` 页面，会走受控接口（需要登录
 
 并且加入了按订阅的 monthly credit：
 
+- 免费：`10.00` credit（体验）
 - 月度：每月 `300.00` credit
+- 季度：每月 `400.00` credit
 - 年度：每月 `500.00` credit
 - 重置时间：以订阅的 `current_period_start` 为锚点，每满 1 个月在同一“日”重置（遇到短月则按月末对齐）
 

@@ -29,16 +29,80 @@ function getPlanPriceId({ env, planCode }) {
     return String(env.STRIPE_PRICE_MONTHLY || '').trim();
 }
 
-export function getStripePublicConfig({ env = process.env } = {}) {
+const PRICE_CACHE_TTL_MS = 10 * 60 * 1000;
+const priceSummaryCache = new Map(); // priceId -> { at, value }
+
+async function getStripePriceSummary({ stripe, priceId }) {
+    const id = String(priceId || '').trim();
+    if (!id) return null;
+
+    const now = Date.now();
+    const cached = priceSummaryCache.get(id);
+    if (cached && now - cached.at < PRICE_CACHE_TTL_MS) return cached.value;
+
+    const price = await stripe.prices.retrieve(id);
+    const value = {
+        currency: String(price?.currency || '').toUpperCase() || null,
+        unitAmount: typeof price?.unit_amount === 'number' ? price.unit_amount : null,
+        interval: String(price?.recurring?.interval || '').trim() || null,
+        intervalCount: typeof price?.recurring?.interval_count === 'number' ? price.recurring.interval_count : null,
+    };
+
+    priceSummaryCache.set(id, { at: now, value });
+    return value;
+}
+
+function formatAmount({ amount, currency }) {
+    const cur = String(currency || '').trim().toUpperCase();
+    const n = Number(amount);
+    if (!Number.isFinite(n)) return null;
+    const value = (n / 100).toFixed(2);
+    if (cur === 'USD') return `$${value}`;
+    if (!cur) return value;
+    return `${value} ${cur}`;
+}
+
+function pickPrimarySubscriptionItem({ subscription, env }) {
+    const items = subscription?.items?.data || [];
+    const monthly = String(env.STRIPE_PRICE_MONTHLY || '').trim();
+    const quarterly = String(env.STRIPE_PRICE_QUARTERLY || '').trim();
+    const yearly = String(env.STRIPE_PRICE_YEARLY || '').trim();
+    const known = [monthly, quarterly, yearly].filter(Boolean);
+
+    const matched = known.length
+        ? items.find((it) => it?.price?.id && known.includes(it.price.id))
+        : null;
+    return matched || items[0] || null;
+}
+
+export async function getStripePublicConfig({ env = process.env } = {}) {
     const publishableKey = getPublishableKey(env);
     if (!publishableKey) throw new Error('缺少 STRIPE_PUBLISHABLE_KEY');
 
-    const plans = getStripePlanCatalog({ env }).map((p) => ({
-        code: p.code,
-        displayName: p.displayName,
-        allowanceCreditsPerMonth: p.allowanceCreditsPerMonth,
-        available: p.available,
-    }));
+    const catalog = getStripePlanCatalog({ env });
+
+    const secret = String(env.STRIPE_SECRET_KEY || '').trim();
+    if (!secret) {
+        const plans = catalog.map((p) => ({
+            code: p.code,
+            displayName: p.displayName,
+            allowanceCreditsPerMonth: p.allowanceCreditsPerMonth,
+            available: p.available,
+            price: null,
+        }));
+        return { publishableKey, plans };
+    }
+
+    const stripe = getStripeClient({ secretKey: secret });
+    const plans = await Promise.all(
+        catalog.map(async (p) => ({
+            code: p.code,
+            displayName: p.displayName,
+            allowanceCreditsPerMonth: p.allowanceCreditsPerMonth,
+            available: p.available,
+            price: p.priceId ? await getStripePriceSummary({ stripe, priceId: p.priceId }) : null,
+        }))
+    );
 
     return { publishableKey, plans };
 }
@@ -222,6 +286,104 @@ export async function createStripeCheckoutSession({ organizationId, email, planC
     });
 
     if (!session?.url) throw new Error('未获取到 Stripe Checkout URL');
+    return { url: session.url, sessionId: session.id };
+}
+
+export async function previewStripeUpgradeInvoice({ organizationId, targetPlanCode, env = process.env }) {
+    const planCode = String(targetPlanCode || '').trim();
+    if (planCode !== 'monthly' && planCode !== 'quarterly' && planCode !== 'yearly') throw new Error('planCode 无效');
+
+    const targetPriceId = getPlanPriceId({ env, planCode });
+    if (!targetPriceId) throw new Error('套餐未配置（缺少 STRIPE_PRICE_*）');
+
+    const stripe = getStripeClient({ secretKey: env.STRIPE_SECRET_KEY });
+
+    const billingCustomer = await withCoreConnection((client) =>
+        getBillingCustomerByOrgAndProvider(client, { organizationId, provider: 'stripe' })
+    );
+    if (!billingCustomer?.provider_customer_id) throw new Error('当前组织未绑定 Stripe Customer');
+
+    const latest = await withCoreConnection((client) => getLatestSubscriptionForOrganizationId(client, organizationId));
+    if (!latest || latest.provider !== 'stripe' || !latest.provider_subscription_id) {
+        throw new Error('当前无可升级的 Stripe 订阅');
+    }
+
+    const remote = await stripe.subscriptions.retrieve(latest.provider_subscription_id, {
+        expand: ['items.data.price'],
+    });
+    const item = pickPrimarySubscriptionItem({ subscription: remote, env });
+    if (!item?.id) throw new Error('Stripe 订阅缺少可更新的 item');
+
+    const upcoming = await stripe.invoices.retrieveUpcoming({
+        customer: billingCustomer.provider_customer_id,
+        subscription: remote.id,
+        subscription_items: [{ id: item.id, price: targetPriceId, quantity: 1 }],
+        subscription_proration_behavior: 'create_prorations',
+    });
+
+    const currency = String(upcoming?.currency || '').toUpperCase() || null;
+    const amountDue = Number(upcoming?.amount_due);
+
+    return {
+        currency,
+        amountDue: Number.isFinite(amountDue) ? amountDue : null,
+        amountDueDisplay: formatAmount({ amount: amountDue, currency }),
+        invoiceId: upcoming?.id || null,
+    };
+}
+
+export async function createStripeUpgradePortalSession({
+    organizationId,
+    targetPlanCode,
+    publicUrl,
+    env = process.env,
+}) {
+    const planCode = String(targetPlanCode || '').trim();
+    if (planCode !== 'monthly' && planCode !== 'quarterly' && planCode !== 'yearly') throw new Error('planCode 无效');
+
+    const base = String(publicUrl || '').trim().replace(/\/+$/, '');
+    if (!base) throw new Error('缺少 APP_PUBLIC_URL，无法生成 Stripe 回跳地址');
+
+    const targetPriceId = getPlanPriceId({ env, planCode });
+    if (!targetPriceId) throw new Error('套餐未配置（缺少 STRIPE_PRICE_*）');
+
+    const stripe = getStripeClient({ secretKey: env.STRIPE_SECRET_KEY });
+
+    const billingCustomer = await withCoreConnection((client) =>
+        getBillingCustomerByOrgAndProvider(client, { organizationId, provider: 'stripe' })
+    );
+    if (!billingCustomer?.provider_customer_id) throw new Error('当前组织未绑定 Stripe Customer');
+
+    const latest = await withCoreConnection((client) => getLatestSubscriptionForOrganizationId(client, organizationId));
+    if (!latest || latest.provider !== 'stripe' || !latest.provider_subscription_id) {
+        throw new Error('当前无可升级的 Stripe 订阅');
+    }
+
+    const remote = await stripe.subscriptions.retrieve(latest.provider_subscription_id, {
+        expand: ['items.data.price'],
+    });
+
+    let session = null;
+    try {
+        session = await stripe.billingPortal.sessions.create({
+            customer: billingCustomer.provider_customer_id,
+            return_url: `${base}/app/subscription?stripe=portal_return`,
+            flow_data: {
+                type: 'subscription_update',
+                subscription_update: {
+                    subscription: remote.id,
+                },
+            },
+        });
+    } catch (e) {
+        const msg = e?.message || String(e);
+        if (/portal configuration is disabled/i.test(msg) || /subscription update feature/i.test(msg)) {
+            throw new Error('Stripe Customer Portal 未开启“订阅升级/降级”功能：请在 Stripe 后台启用 Customer Portal 的 Subscription update 配置后再试');
+        }
+        throw e;
+    }
+
+    if (!session?.url) throw new Error('未获取到 Stripe Billing Portal URL');
     return { url: session.url, sessionId: session.id };
 }
 

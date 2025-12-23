@@ -14,8 +14,11 @@ export function unitsToCredits(units) {
 
 export function planMonthlyAllowanceUnits(planCode) {
     const code = String(planCode || '').trim().toLowerCase();
+    if (code === 'free') return 10 * CREDIT_UNIT_SCALE;
+    if (code === 'monthly') return 300 * CREDIT_UNIT_SCALE;
+    if (code === 'quarterly') return 400 * CREDIT_UNIT_SCALE;
     if (code === 'yearly' || code === 'annual') return 500 * CREDIT_UNIT_SCALE;
-    return 300 * CREDIT_UNIT_SCALE;
+    return 0;
 }
 
 export function computeChargeUnits({ baseUnits, multiplierX100 }) {
@@ -56,4 +59,3 @@ export function computeMonthlyWindowUtc({ subscriptionStart, now, anchorDay }) {
 
     return { periodStart, periodEnd };
 }
-
