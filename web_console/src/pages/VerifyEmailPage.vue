@@ -17,9 +17,9 @@
                     <p v-if="status === 'success'" class="form-success">验证成功</p>
                     <p v-if="status === 'error'" class="form-error">{{ error }}</p>
 
-                    <div class="input-with-button">
-                        <button class="btn btn-primary btn-full" type="button" :disabled="status === 'verifying'" @click="verify">
-                            {{ status === 'verifying' ? '验证中...' : '重新验证' }}
+                    <div v-if="status === 'error'" class="input-with-button">
+                        <button class="btn btn-primary btn-full" type="button" @click="verify">
+                            重新验证
                         </button>
                     </div>
 
@@ -68,4 +68,3 @@ async function verify() {
 
 onMounted(verify);
 </script>
-

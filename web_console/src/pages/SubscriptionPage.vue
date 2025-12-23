@@ -1,9 +1,29 @@
 <template>
-    <AppShell title="订阅" subtitle="选择适合您的套餐">
+    <AppShell title="订阅" subtitle="解锁 AI 分析的全部潜力">
+        <!-- 无订阅时的营销横幅 -->
+        <div v-if="!subscription" class="promo-banner">
+            <div class="promo-content">
+                <div class="promo-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                </div>
+                <div class="promo-text">
+                    <h3>开启 AI 驱动的智能分析</h3>
+                    <p>获得专业级 VLM 模型支持，自动识别 K 线形态，精准标注支撑/阻力位</p>
+                </div>
+            </div>
+        </div>
+
         <!-- 当前订阅状态 -->
-        <div v-if="subscription" class="card">
-            <div style="display:flex; align-items:center; justify-content:space-between; gap: 1rem;">
-                <h2 class="card-title" style="margin:0;">当前订阅</h2>
+        <div v-if="subscription" class="card subscription-status-card">
+            <div class="subscription-header">
+                <div class="subscription-badge">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/>
+                    </svg>
+                    当前订阅
+                </div>
                 <button
                     v-if="subscription?.provider === 'stripe'"
                     class="btn btn-secondary btn-sm"
@@ -11,97 +31,111 @@
                     :disabled="syncingStripe"
                     @click="syncStripeSubscription"
                 >
-                    {{ syncingStripe ? '同步中...' : '同步订阅' }}
+                    {{ syncingStripe ? '同步中...' : '同步' }}
                 </button>
             </div>
-            <div class="card-content">
-                <div class="stat-row">
-                    <span class="stat-label">套餐</span>
-                    <span class="stat-value">{{ formatPlanCode(subscription.plan_code) }}</span>
+            <div class="subscription-details">
+                <div class="subscription-plan">
+                    <span class="plan-name">{{ formatPlanCode(subscription.plan_code) }}</span>
+                    <span class="plan-status" :class="subscription.status">{{ formatStatus(subscription.status) }}</span>
                 </div>
-                <div class="stat-row">
-                    <span class="stat-label">状态</span>
-                    <span class="stat-value">{{ formatStatus(subscription.status) }}</span>
-                </div>
-                <div class="stat-row">
-                    <span class="stat-label">有效期至</span>
-                    <span class="stat-value">{{ formatDate(subscription.current_period_end) }}</span>
+                <div class="plan-expiry">
+                    有效期至 <strong>{{ formatDate(subscription.current_period_end) }}</strong>
                 </div>
             </div>
         </div>
 
         <!-- 定价卡片 -->
-        <div class="card">
-            <h2 class="card-title">选择套餐</h2>
-            <div class="card-content">
-                <div v-if="stripeError" class="form-error">{{ stripeError }}</div>
-                <p v-if="stripeMsg" class="form-success">{{ stripeMsg }}</p>
+        <div class="pricing-section">
+            <div class="section-header">
+                <h2>选择套餐</h2>
+                <p v-if="!subscription">选择最适合您的方案，立即开始使用</p>
+                <p v-else>升级至更高套餐，享受更多额度</p>
+            </div>
 
-                <div v-if="stripeConfig" class="pricing-grid">
-                    <div 
-                        v-for="(p, index) in stripeConfig.plans" 
-                        :key="p.code" 
-                        class="pricing-card"
-                        :class="{ featured: index === 1 }"
-                    >
-                        <span v-if="index === 1" class="pricing-badge">推荐</span>
-                        <div class="pricing-header">
-                            <div class="pricing-name">{{ p.displayName }}</div>
-                            <div class="pricing-price">
-                                <template v-if="upgradeDisplay[p.code]">
-                                    <span class="pricing-amount pricing-discount">{{ upgradeDisplay[p.code].perMonthDisplay }}</span>
-                                    <span class="pricing-period">/月</span>
-                                    <span class="text-muted" style="margin-left:0.5rem;">
-                                        {{ upgradeDisplay[p.code].payableTotalDisplay }}
-                                        / {{ upgradeDisplay[p.code].months }} 个月
-                                    </span>
-                                    <span class="pricing-original">{{ upgradeDisplay[p.code].originalTotalDisplay }}</span>
-                                </template>
-                                <template v-else>
-                                    <span class="pricing-amount">{{ formatPrice(p).amount }}</span>
-                                    <span class="pricing-period">{{ formatPrice(p).period }}</span>
-                                </template>
+            <div v-if="stripeError" class="form-error" style="margin-bottom: 1rem;">{{ stripeError }}</div>
+            <p v-if="stripeMsg" class="form-success" style="margin-bottom: 1rem;">{{ stripeMsg }}</p>
+
+            <div v-if="stripeConfig" class="pricing-grid">
+                <div 
+                    v-for="(p, index) in stripeConfig.plans" 
+                    :key="p.code" 
+                    class="pricing-card"
+                    :class="{ featured: index === 1, current: isCurrentPlan(p.code) }"
+                >
+                    <span v-if="index === 1" class="pricing-badge">最受欢迎</span>
+                    <span v-else-if="index === 2" class="pricing-badge pricing-badge-save">最省钱</span>
+                    
+                    <div class="pricing-header">
+                        <div class="pricing-name">{{ p.displayName }}</div>
+                        <div class="pricing-price">
+                            <template v-if="upgradeDisplay[p.code]">
+                                <span class="pricing-amount pricing-discount">{{ upgradeDisplay[p.code].perMonthDisplay }}</span>
+                                <span class="pricing-period">/月</span>
+                            </template>
+                            <template v-else>
+                                <span class="pricing-amount">{{ formatPrice(p).amount }}</span>
+                                <span class="pricing-period">{{ formatPrice(p).period }}</span>
+                            </template>
+                        </div>
+                        <div class="pricing-billing">
+                            {{ formatBillingCycle(p) }}
+                        </div>
+                        
+                        <!-- 升级信息 -->
+                        <div v-if="upgradeDisplay[p.code]" class="upgrade-info">
+                            <div class="upgrade-price">
+                                升级价：{{ upgradeDisplay[p.code].payableTotalDisplay }}
+                                <span class="original-price">{{ upgradeDisplay[p.code].originalTotalDisplay }}</span>
                             </div>
-                            <div class="text-muted" style="margin-top:0.25rem;">
-                                {{ formatBillingCycle(p) }}
-                            </div>
-                            <div v-if="upgradeDisplay[p.code]" class="upgrade-hint">
-                                剩余价值：{{ upgradeDisplay[p.code].remainingValueDisplay }}（剩余 {{ upgradeDisplay[p.code].remainingPercent }}%）
-                            </div>
-                            <div v-else-if="isUpgradeTarget(p.code) && isActiveSubscription && isStripeSubscription && upgradeQuotes[p.code]?.loading" class="upgrade-hint">
-                                正在计算升级补差价...
-                            </div>
-                            <div v-else-if="isUpgradeTarget(p.code) && isActiveSubscription && isStripeSubscription && upgradeQuotes[p.code]?.error" class="upgrade-hint">
-                                升级补差价预估暂不可用，结算以 Stripe 结算页为准。
-                            </div>
-                            <div v-else-if="isUpgradeTarget(p.code) && isActiveSubscription && !isStripeSubscription" class="upgrade-hint">
-                                当前订阅非 Stripe（例如激活码），无法计算升级补差价；需使用 Stripe 订阅开通后才可升级。
+                            <div class="upgrade-value">
+                                已抵扣 {{ upgradeDisplay[p.code].remainingValueDisplay }}（{{ upgradeDisplay[p.code].remainingPercent }}%）
                             </div>
                         </div>
+                        <div v-else-if="isUpgradeTarget(p.code) && isActiveSubscription && isStripeSubscription && upgradeQuotes[p.code]?.loading" class="upgrade-hint">
+                            计算升级价格中...
+                        </div>
+                        <div v-else-if="isUpgradeTarget(p.code) && isActiveSubscription && !isStripeSubscription" class="upgrade-hint upgrade-hint-warn">
+                            激活码订阅无法直接升级
+                        </div>
+                    </div>
+
+                    <div class="pricing-body">
                         <p class="pricing-desc">{{ getPlanDesc(p.code) }}</p>
                         <ul class="pricing-features">
                             <li v-for="feature in getPlanFeatures(p.code)" :key="feature">{{ feature }}</li>
                         </ul>
-                        <button
-                            class="btn"
-                            :class="index === 1 ? 'btn-primary' : 'btn-secondary'"
-                            type="button"
-                            :disabled="creatingStripe || !p.available || isCurrentPlan(p.code)"
-                            @click="startCheckout(p.code)"
-                        >
-                            {{ getButtonText(p, creatingStripe) }}
-                        </button>
                     </div>
+
+                    <button
+                        class="btn pricing-btn"
+                        :class="getPricingButtonClass(p, index)"
+                        type="button"
+                        :disabled="creatingStripe || !p.available || isCurrentPlan(p.code)"
+                        @click="startCheckout(p.code)"
+                    >
+                        {{ getButtonText(p, creatingStripe) }}
+                    </button>
                 </div>
-                <p v-else class="text-muted">加载套餐信息...</p>
+            </div>
+            <div v-else class="loading-placeholder">
+                <div class="loading-spinner"></div>
+                <p>加载套餐信息...</p>
             </div>
         </div>
 
         <!-- 激活码兑换 -->
-        <div class="card">
-            <h2 class="card-title">激活码兑换</h2>
-            <form class="card-content" @submit.prevent="onRedeem">
-                <p class="text-muted" style="margin-bottom: 1rem;">如果您有激活码，可以在此处兑换</p>
+        <div class="card activation-card">
+            <div class="activation-header">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <circle cx="12" cy="16" r="1"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                </svg>
+                <h3>激活码兑换</h3>
+            </div>
+            <p class="text-muted">购买了激活码？在此处兑换开通订阅</p>
+            <form class="activation-form" @submit.prevent="onRedeem">
                 <div class="input-with-button">
                     <input v-model="code" class="form-input" placeholder="输入激活码" required />
                     <button class="btn btn-primary" type="submit" :disabled="redeeming">
@@ -114,6 +148,7 @@
         </div>
     </AppShell>
 </template>
+
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
@@ -371,6 +406,14 @@ function getButtonText(plan, loading) {
     return '立即订阅';
 }
 
+// 获取定价按钮样式类
+function getPricingButtonClass(plan, index) {
+    if (isCurrentPlan(plan.code)) return 'btn-secondary';
+    if (index === 1) return 'btn-primary';
+    if (index === 2) return 'btn-accent';
+    return 'btn-secondary';
+}
+
 async function load() {
     const res = await api.request('/api/billing/subscription');
     subscription.value = res.subscription || null;
@@ -534,3 +577,246 @@ onMounted(async () => {
     });
 });
 </script>
+
+<style scoped>
+/* 营销横幅 */
+.promo-banner {
+    background: linear-gradient(135deg, rgba(255, 69, 0, 0.15) 0%, rgba(255, 100, 50, 0.08) 100%);
+    border: 1px solid rgba(255, 69, 0, 0.3);
+    border-radius: var(--radius-2xl);
+    padding: var(--spacing-xl);
+    margin-bottom: var(--spacing-xl);
+}
+
+.promo-content {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-lg);
+}
+
+.promo-icon {
+    flex-shrink: 0;
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--color-accent), var(--color-accent-light));
+    border-radius: var(--radius-xl);
+    color: white;
+}
+
+.promo-text h3 {
+    font-size: var(--font-size-xl);
+    font-weight: 600;
+    margin-bottom: var(--spacing-xs);
+    color: var(--color-white);
+}
+
+.promo-text p {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-base);
+}
+
+/* 订阅状态卡片 */
+.subscription-status-card {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(30, 30, 30, 0.6) 100%);
+    border-color: rgba(34, 197, 94, 0.3);
+}
+
+.subscription-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-md);
+}
+
+.subscription-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-success);
+}
+
+.subscription-details {
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--color-border-light);
+}
+
+.subscription-plan {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-sm);
+}
+
+.plan-name {
+    font-size: var(--font-size-xl);
+    font-weight: 700;
+    color: var(--color-white);
+}
+
+.plan-status {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    padding: 0.2rem 0.6rem;
+    border-radius: var(--radius-full);
+    text-transform: uppercase;
+}
+
+.plan-status.active {
+    background: rgba(34, 197, 94, 0.2);
+    color: var(--color-success);
+}
+
+.plan-expiry {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+/* 定价区域 */
+.pricing-section {
+    margin-bottom: var(--spacing-xl);
+}
+
+.section-header {
+    margin-bottom: var(--spacing-xl);
+}
+
+.section-header h2 {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    margin-bottom: var(--spacing-xs);
+}
+
+.section-header p {
+    color: var(--color-text-muted);
+}
+
+.pricing-badge-save {
+    background: linear-gradient(135deg, #10b981, #34d399);
+}
+
+.pricing-card.current {
+    opacity: 0.7;
+}
+
+.pricing-billing {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-xs);
+}
+
+.pricing-body {
+    flex: 1;
+    margin-bottom: var(--spacing-lg);
+}
+
+.pricing-btn {
+    width: 100%;
+    margin-top: auto;
+}
+
+/* 升级信息 */
+.upgrade-info {
+    margin-top: var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: rgba(255, 69, 0, 0.1);
+    border-radius: var(--radius-lg);
+    font-size: var(--font-size-sm);
+}
+
+.upgrade-price {
+    color: var(--color-accent);
+    font-weight: 600;
+}
+
+.original-price {
+    color: var(--color-text-muted);
+    text-decoration: line-through;
+    margin-left: var(--spacing-sm);
+}
+
+.upgrade-value {
+    color: var(--color-success);
+    font-size: var(--font-size-xs);
+    margin-top: 0.25rem;
+}
+
+.upgrade-hint {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--spacing-sm);
+}
+
+.upgrade-hint-warn {
+    color: var(--color-warning);
+}
+
+/* 加载状态 */
+.loading-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-3xl);
+    color: var(--color-text-muted);
+}
+
+.loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--color-border);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: var(--spacing-md);
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* 激活码区域 */
+.activation-card {
+    background: rgba(30, 30, 30, 0.4);
+}
+
+.activation-header {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+    color: var(--color-text);
+}
+
+.activation-header h3 {
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    margin: 0;
+}
+
+.activation-form {
+    margin-top: var(--spacing-md);
+}
+
+/* 响应式适配 */
+@media (max-width: 768px) {
+    .promo-content {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .promo-text h3 {
+        font-size: var(--font-size-lg);
+    }
+
+    .subscription-plan {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-sm);
+    }
+}
+</style>

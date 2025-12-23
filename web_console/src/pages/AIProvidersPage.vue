@@ -1,5 +1,5 @@
 <template>
-    <AppShell title="AI 服务商" subtitle="配置 AI 模型与额度">
+    <AppShell title="模型" subtitle="选择 AI 分析模型">
         <div v-if="loading" class="card">
             <p class="text-muted">加载中...</p>
         </div>
@@ -17,31 +17,23 @@
                         <span class="stat-value">{{ formatPlanCode(state.subscription.plan_code) }}</span>
                     </div>
                     <div v-if="state.credit" class="stat-row">
-                        <span class="stat-label">月度额度</span>
-                        <span class="stat-value">{{ state.credit.allowanceCredits.toFixed(2) }}</span>
-                    </div>
-                    <div v-if="state.credit" class="stat-row">
-                        <span class="stat-label">已使用</span>
-                        <span class="stat-value">{{ state.credit.usedCredits.toFixed(2) }}</span>
-                    </div>
-                    <div v-if="state.credit" class="stat-row">
                         <span class="stat-label">可用额度</span>
-                        <span class="stat-value">{{ state.credit.remainingCredits.toFixed(2) }}</span>
+                        <span class="stat-value">{{ state.credit.remainingCredits.toFixed(0) }} 积分</span>
                     </div>
                     <div v-if="state.credit" class="stat-row">
                         <span class="stat-label">重置日期</span>
                         <span class="stat-value">{{ formatDate(state.credit.periodEnd) }}</span>
                     </div>
                     <p v-if="!state.subscriptionActive" class="text-muted">
-                        未激活订阅时不会扣费，也无法运行策略分析；你仍可提前配置 Provider。
+                        未激活订阅时无法运行策略分析，你仍可提前选择模型。
                     </p>
                 </div>
             </div>
 
             <div class="card">
-                <h2 class="card-title">当前选择</h2>
+                <h2 class="card-title">当前模型</h2>
                 <div class="card-content">
-                    <p v-if="!selected" class="text-muted">尚未选择服务商</p>
+                    <p v-if="!selected" class="text-muted">尚未选择模型</p>
                     <div v-else>
                         <div class="stat-row">
                             <span class="stat-label">名称</span>
@@ -55,80 +47,52 @@
                             <span class="stat-label">消耗倍率</span>
                             <span class="stat-value">{{ (selected.multiplier_x100 / 100).toFixed(2) }}x</span>
                         </div>
-                        <p v-if="!selected.hasKey && canEditKeys" class="form-error">该服务商未配置密钥</p>
-                        <p v-else-if="!selected.hasKey" class="text-muted">该服务商未就绪，请联系管理员配置</p>
+                        <div v-if="selected.remark" class="stat-row">
+                            <span class="stat-label">备注</span>
+                            <span class="stat-value">{{ selected.remark }}</span>
+                        </div>
+                        <p v-if="!selected.hasKey" class="text-muted">该模型暂不可用，请联系管理员</p>
                     </div>
                 </div>
             </div>
 
             <div class="card" style="grid-column: 1 / -1;">
-                <h2 class="card-title">服务商列表</h2>
+                <h2 class="card-title">可用模型</h2>
                 <div class="card-content">
                     <p v-if="error" class="form-error">{{ error }}</p>
 
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>名称</th>
-                                <th>模型</th>
-                                <th>消耗倍率</th>
-                                <th v-if="canEditKeys">密钥状态</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="p in state.providers.items" :key="p.id">
-                                <td>{{ p.display_name }}</td>
-                                <td>{{ p.model_name }}</td>
-                                <td>{{ (p.multiplier_x100 / 100).toFixed(2) }}x</td>
-                                <td v-if="canEditKeys">
-                                    <span v-if="p.hasKey" class="form-success">已设置</span>
-                                    <span v-else class="text-muted">未设置</span>
-                                </td>
-                                <td>
-                                    <button class="btn btn-secondary btn-sm" type="button" :disabled="selectingId === p.id" @click="select(p.id)">
-                                        {{ state.providers.selectedId === p.id ? '已选中' : selectingId === p.id ? '选择中...' : '选择' }}
-                                    </button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                    <p v-if="selectableProviders.length === 0" class="text-muted">暂无可选择模型，请联系管理员配置。</p>
 
-                    <div v-if="canEditKeys" class="mt-16">
-                        <h3 class="card-title" style="margin-bottom:0.75rem;">配置密钥</h3>
-                        <div class="grid grid-2">
-                            <div class="form-group">
-                                <label class="form-label">服务商</label>
-                                <select v-model="keyForm.providerId" class="form-input">
-                                    <option value="">请选择</option>
-                                    <option v-for="p in state.providers.items" :key="p.id" :value="p.id">
-                                        {{ p.display_name }} ({{ p.model_name }})
-                                    </option>
-                                </select>
+                    <div v-else class="model-grid">
+                        <div 
+                            v-for="p in selectableProviders" 
+                            :key="p.id" 
+                            class="model-card"
+                            :class="{ selected: state.providers.selectedId === p.id }"
+                            @click="select(p.id)"
+                        >
+                            <div class="model-name-row">
+                                <div class="model-name">{{ p.display_name }}</div>
+                                <div class="model-status">
+                                    <span v-if="state.providers.selectedId === p.id" class="status-selected">当前使用</span>
+                                    <span v-else class="status-available">可选择</span>
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label class="form-label">密钥</label>
-                                <input v-model="keyForm.apiKey" class="form-input" placeholder="sk-..." />
-                                <p v-if="keyError" class="form-error">{{ keyError }}</p>
-                                <p v-if="keySuccess" class="form-success">{{ keySuccess }}</p>
-                            </div>
+                            <div class="model-meta" :title="p.model_name">{{ p.remark || p.model_name }}</div>
+                            <div class="model-meta">倍率 {{ (p.multiplier_x100 / 100).toFixed(2) }}x</div>
                         </div>
-                        <button class="btn btn-primary" type="button" :disabled="savingKey" @click="saveKey">
-                            {{ savingKey ? '保存中...' : '保存' }}
-                        </button>
                     </div>
-                    <p v-else class="text-muted mt-16">密钥由管理员配置，您只能选择服务商。</p>
                 </div>
             </div>
         </div>
     </AppShell>
 </template>
 
+
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
 import AppShell from '../components/AppShell.vue';
 import { api } from '../lib/apiClient.js';
-import { useAuthStore } from '../stores/authStore.js';
 
 const loading = ref(true);
 const error = ref('');
@@ -142,15 +106,8 @@ const state = reactive({
 
 const selectingId = ref('');
 
-const keyForm = reactive({ providerId: '', apiKey: '' });
-const savingKey = ref(false);
-const keyError = ref('');
-const keySuccess = ref('');
-
-const auth = useAuthStore();
-const canEditKeys = computed(() => auth.isAdmin.value);
-
 const selected = computed(() => state.providers.items.find((p) => p.id === state.providers.selectedId) || null);
+const selectableProviders = computed(() => (state.providers.items || []).filter((p) => !!p.hasKey));
 
 function formatDate(value) {
     if (!value) return '-';
@@ -176,6 +133,8 @@ async function load() {
 }
 
 async function select(id) {
+    if (!id || selectingId.value) return;
+    if (state.providers.selectedId === id) return;
     selectingId.value = id;
     try {
         await api.request('/api/saas/ai/providers/select', { method: 'POST', body: { providerId: id } });
@@ -184,28 +143,6 @@ async function select(id) {
         error.value = e?.message || '选择失败';
     } finally {
         selectingId.value = '';
-    }
-}
-
-async function saveKey() {
-    keyError.value = '';
-    keySuccess.value = '';
-    savingKey.value = true;
-    try {
-        if (!keyForm.providerId) throw new Error('请选择 Provider');
-        if (!keyForm.apiKey.trim()) throw new Error('请输入 apiKey');
-
-        await api.request('/api/saas/ai/providers/set-key', {
-            method: 'POST',
-            body: { providerId: keyForm.providerId, apiKey: keyForm.apiKey.trim() },
-        });
-        keySuccess.value = '已保存';
-        keyForm.apiKey = '';
-        await load();
-    } catch (e) {
-        keyError.value = e?.message || '保存失败';
-    } finally {
-        savingKey.value = false;
     }
 }
 
@@ -219,3 +156,73 @@ onMounted(async () => {
     }
 });
 </script>
+
+<style scoped>
+.model-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: var(--spacing-md);
+}
+
+.model-card {
+    padding: var(--spacing-lg);
+    background: rgba(40, 40, 40, 0.5);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-xl);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.model-card:hover {
+    background: rgba(50, 50, 50, 0.6);
+    border-color: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+}
+
+.model-card.selected {
+    background: rgba(255, 69, 0, 0.1);
+    border-color: var(--color-accent);
+}
+
+.model-name-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+}
+
+.model-name {
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+.model-status {
+    font-size: var(--font-size-xs);
+}
+
+.model-meta {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
+.status-selected {
+    color: var(--color-accent);
+    font-weight: 600;
+}
+
+.status-available {
+    color: var(--color-success);
+}
+
+@media (max-width: 480px) {
+    .model-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .model-card {
+        padding: var(--spacing-md);
+    }
+}
+</style>

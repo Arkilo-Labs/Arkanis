@@ -1383,7 +1383,14 @@ app.get('/api/saas/ai/state', async (req, res) => {
                     organizationId,
                     providerDefinitionId: d.id,
                 });
-                out.push({ ...d, hasKey });
+                out.push({
+                    id: d.id,
+                    display_name: d.display_name,
+                    model_name: d.model_name,
+                    multiplier_x100: d.multiplier_x100,
+                    remark: d.remark || '',
+                    hasKey,
+                });
             }
             return out;
         });
@@ -1489,6 +1496,7 @@ app.post('/api/admin/ai-providers', async (req, res) => {
     const schema = z.object({
         code: z.string().trim().min(2).max(64),
         displayName: z.string().trim().min(1).max(120),
+        remark: z.string().trim().max(500).optional(),
         baseUrl: z.string().trim().url().optional(),
         modelName: z.string().trim().min(1).max(120),
         thinkingMode: z.enum(['enabled', 'disabled', 'none']).optional(),
@@ -1506,6 +1514,7 @@ app.post('/api/admin/ai-providers', async (req, res) => {
             insertProviderDefinition(client, {
                 code: input.code,
                 displayName: input.displayName,
+                remark: input.remark || null,
                 baseUrl: input.baseUrl || null,
                 modelName: input.modelName,
                 thinkingMode: input.thinkingMode || 'none',
@@ -1529,6 +1538,7 @@ app.post('/api/admin/ai-providers', async (req, res) => {
 app.put('/api/admin/ai-providers/:id', async (req, res) => {
     const schema = z.object({
         displayName: z.string().trim().min(1).max(120),
+        remark: z.string().trim().max(500).optional().nullable(),
         baseUrl: z.string().trim().url().optional().nullable(),
         modelName: z.string().trim().min(1).max(120),
         thinkingMode: z.enum(['enabled', 'disabled', 'none']).optional(),
@@ -1548,6 +1558,7 @@ app.put('/api/admin/ai-providers/:id', async (req, res) => {
             updateProviderDefinitionById(client, {
                 id,
                 displayName: input.displayName,
+                remark: input.remark ?? null,
                 baseUrl: input.baseUrl ?? null,
                 modelName: input.modelName,
                 thinkingMode: input.thinkingMode || 'none',

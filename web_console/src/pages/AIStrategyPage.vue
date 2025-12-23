@@ -20,29 +20,27 @@
         </div>
 
         <div v-else class="grid grid-2">
-            <div class="card" style="grid-column: 1 / -1;">
+            <div class="card credit-summary-card" style="grid-column: 1 / -1;">
                 <div class="card-content">
-                    <div class="grid grid-3">
-                        <div class="stat-row">
-                            <span class="stat-label">剩余额度</span>
-                            <span class="stat-value">{{ (state.credit?.remainingCredits ?? 0).toFixed(2) }}</span>
+                    <div class="credit-progress-section">
+                        <div class="credit-header">
+                            <span class="credit-label">剩余额度</span>
+                            <span class="credit-value">{{ (state.credit?.remainingCredits ?? 0).toFixed(0) }} <span class="credit-unit">积分</span></span>
                         </div>
-                        <div class="stat-row">
-                            <span class="stat-label">重置日期</span>
-                            <span class="stat-value">{{ formatDate(state.credit?.periodEnd) }}</span>
+                        <div class="progress-bar">
+                            <div class="progress-fill" :style="{ width: creditPercent + '%' }"></div>
                         </div>
-                        <div class="stat-row">
-                            <span class="stat-label">服务商</span>
-                            <span class="stat-value">
-                                <span v-if="selectedProvider">{{ selectedProvider.display_name }}</span>
-                                <span v-else class="text-muted">未选择</span>
-                            </span>
+                        <div class="credit-meta">
+                            <span>重置：{{ formatDate(state.credit?.periodEnd) }}</span>
+                            <span v-if="selectedProvider">模型：{{ selectedProvider.display_name }}</span>
+                            <span v-else class="text-warn">未选择模型</span>
                         </div>
                     </div>
-                    <p v-if="!selectedProvider" class="form-error">请先在「AI 服务商」页面选择并配置密钥</p>
-                    <p v-else-if="!selectedProvider.hasKey" class="form-error">当前服务商未配置密钥</p>
+                    <p v-if="!selectedProvider" class="form-error" style="margin-top: 0.75rem;">请先在「模型」页面选择并配置</p>
+                    <p v-else-if="!selectedProvider.hasKey" class="form-error" style="margin-top: 0.75rem;">当前模型未配置密钥</p>
                 </div>
             </div>
+
 
             <div class="card">
                 <h2 class="card-title">参数</h2>
@@ -208,6 +206,14 @@ const chart = reactive({ base: null, aux: null, vlm: null });
 
 const selectedProvider = computed(() => state.providers.items.find((p) => p.id === state.providers.selectedId) || null);
 const canRun = computed(() => !!selectedProvider.value && !!selectedProvider.value.hasKey);
+
+// 额度百分比用于进度条
+const creditPercent = computed(() => {
+    const remaining = state.credit?.remainingCredits ?? 0;
+    const allowance = state.credit?.allowanceCredits ?? 0;
+    if (allowance <= 0) return 0;
+    return Math.min(100, Math.max(0, (remaining / allowance) * 100));
+});
 
 function addLog(type, data, sid) {
     if (sid && sessionId.value && sid !== sessionId.value) return;
@@ -375,3 +381,61 @@ onUnmounted(() => {
     socket()?.off?.('process-killed', onKilled);
 });
 </script>
+
+<style scoped>
+.credit-summary-card {
+    background: linear-gradient(135deg, rgba(30, 30, 30, 0.8) 0%, rgba(25, 25, 25, 0.6) 100%);
+}
+
+.credit-progress-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.credit-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.credit-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
+.credit-value {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    color: var(--color-white);
+}
+
+.credit-unit {
+    font-size: var(--font-size-sm);
+    font-weight: 400;
+    color: var(--color-text-muted);
+}
+
+.credit-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+}
+
+.text-warn {
+    color: var(--color-warning, #f59e0b);
+}
+
+@media (max-width: 480px) {
+    .credit-value {
+        font-size: var(--font-size-xl);
+    }
+
+    .credit-meta {
+        flex-direction: column;
+        gap: var(--spacing-xs);
+    }
+}
+</style>
