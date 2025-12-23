@@ -1,5 +1,5 @@
 <template>
-    <AppShell title="服务商管理" subtitle="管理员：新增服务商与配置倍率">
+    <AdminShell title="服务商管理" subtitle="管理员：新增服务商与配置倍率">
         <div class="card">
             <h2 class="card-title">新增服务商</h2>
             <form class="card-content" @submit.prevent="create">
@@ -117,13 +117,13 @@
                 <p v-if="editError" class="form-error">{{ editError }}</p>
             </form>
         </div>
-    </AppShell>
+    </AdminShell>
 </template>
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import AppShell from '../components/AppShell.vue';
+import AdminShell from '../components/AdminShell.vue';
 import { api } from '../lib/apiClient.js';
 
 const router = useRouter();
@@ -222,4 +222,3 @@ async function saveEdit() {
 
 onMounted(load);
 </script>
-

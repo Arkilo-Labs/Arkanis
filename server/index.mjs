@@ -18,6 +18,22 @@ import { generateSessionToken, tokenToHash } from '../src/services/auth/session.
 import { sendEmailVerification, verifyEmailByToken } from '../src/services/auth/emailVerificationService.js';
 import { getPrimaryOrganizationForUserId } from '../src/data/orgRepository.js';
 import { listActivationCodes, revokeActivationCodeById } from '../src/data/activationCodeRepository.js';
+import { listUsers, revokeAllUserSessions } from '../src/data/adminUsersRepository.js';
+import { listOrganizations } from '../src/data/adminOrganizationsRepository.js';
+import {
+    getSubscriptionById as getAdminSubscriptionById,
+    listSubscriptions,
+    updateActivationCodeSubscriptionById,
+} from '../src/data/adminSubscriptionsRepository.js';
+import {
+    getDailySubscriptionCreations,
+    getDailyUserRegistrations,
+    getOverviewByPlan,
+    getOverviewTotals,
+    normalizeOverviewDays,
+} from '../src/data/adminStatsRepository.js';
+import { getUserByEmail, updateUserById } from '../src/data/userRepository.js';
+import { deleteUserAccount } from '../src/services/admin/accountDeletionService.js';
 import {
     createActivationCodes,
     getCurrentSubscriptionForOrganizationId,
@@ -110,7 +126,7 @@ async function getAuthedUser(req) {
 
     const tokenHash = tokenToHash(token);
     const sql = `
-      SELECT u.id, u.email, u.display_name, u.status, u.email_verified_at
+      SELECT u.id, u.email, u.display_name, u.status, u.email_verified_at, u.deleted_at
       FROM user_sessions s
       JOIN users u ON u.id = s.user_id
       WHERE s.refresh_token_hash = $1
@@ -129,7 +145,7 @@ async function getAuthedUserFromToken(token) {
 
     const tokenHash = tokenToHash(value);
     const sql = `
-      SELECT u.id, u.email, u.display_name, u.status, u.email_verified_at
+      SELECT u.id, u.email, u.display_name, u.status, u.email_verified_at, u.deleted_at
       FROM user_sessions s
       JOIN users u ON u.id = s.user_id
       WHERE s.refresh_token_hash = $1
@@ -167,6 +183,25 @@ async function requireAuth(req, res) {
     const user = await getAuthedUser(req);
     if (!user) {
         res.status(401).json({ error: '未登录' });
+        return null;
+    }
+
+    if (user.deleted_at) {
+        try {
+            const token = getBearerToken(req);
+            if (token) {
+                const tokenHash = tokenToHash(token);
+                await queryCore('UPDATE user_sessions SET revoked_at = now() WHERE refresh_token_hash = $1', [tokenHash]);
+            }
+        } catch {
+            // 这里不需要阻塞主流程
+        }
+        res.status(403).json({ error: '账户已注销/删除' });
+        return null;
+    }
+
+    if (user.status !== 'active') {
+        res.status(403).json({ error: '账户已被禁用' });
         return null;
     }
     return user;
@@ -582,14 +617,12 @@ app.post('/api/auth/login', async (req, res) => {
         const input = schema.parse(req.body || {});
         const email = input.email.trim();
 
-        const found = await queryCore(
-            'SELECT id, email, password_hash, display_name, status, email_verified_at FROM users WHERE email = $1 LIMIT 1',
-            [email]
-        );
-        if (!found.rowCount) return res.status(401).json({ error: '邮箱或密码错误' });
+        const userRow = await withCoreConnection((client) => getUserByEmail(client, email));
+        if (!userRow) return res.status(401).json({ error: '邮箱或密码错误' });
+        if (userRow.deleted_at) return res.status(401).json({ error: '邮箱或密码错误' });
+        if (userRow.status !== 'active') return res.status(403).json({ error: '账户已被禁用' });
 
-        const userRow = found.rows[0];
-        const ok = await verifyPassword(input.password, userRow.password_hash);
+        const ok = await verifyPassword(input.password, userRow.password_hash || '');
         if (!ok) return res.status(401).json({ error: '邮箱或密码错误' });
 
         const token = generateSessionToken();
@@ -609,6 +642,43 @@ app.post('/api/auth/login', async (req, res) => {
             email_verified_at: userRow.email_verified_at,
         };
         res.json({ token, user });
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Account: 用户自助注销（备份 + 双重确认）
+app.post('/api/account/deactivate', async (req, res) => {
+    const schema = z.object({
+        password: z.string().min(1).max(200),
+        confirmText: z.string().trim().min(1).max(20),
+        note: z.string().trim().max(2000).optional(),
+    });
+
+    try {
+        const user = await requireAuth(req, res);
+        if (!user) return;
+
+        const input = schema.parse(req.body || {});
+        if (input.confirmText !== '注销') return res.status(400).json({ error: '请在确认框输入：注销' });
+
+        const ok = await withCoreConnection(async (client) => {
+            const found = await client.query('SELECT password_hash FROM users WHERE id = $1 LIMIT 1', [user.id]);
+            if (!found.rowCount) return false;
+            const hash = found.rows[0].password_hash || '';
+            return verifyPassword(input.password, hash);
+        });
+        if (!ok) return res.status(401).json({ error: '密码错误' });
+
+        const out = await deleteUserAccount({
+            targetUserId: user.id,
+            actorUserId: user.id,
+            actionType: 'self_deactivate',
+            note: input.note || null,
+            ip: getClientIp(req),
+            userAgent: String(req.headers['user-agent'] || '').slice(0, 500) || null,
+        });
+        res.json(out);
     } catch (error) {
         res.status(400).json({ error: error?.message || String(error) });
     }
@@ -943,6 +1013,280 @@ app.post('/api/admin/activation-codes/:id/revoke', async (req, res) => {
         const row = await withCoreConnection(async (client) => revokeActivationCodeById(client, id));
         if (!row) return res.status(404).json({ error: '激活码不存在或已撤销' });
         res.json({ activationCode: row });
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Admin: 用户列表
+app.get('/api/admin/users', async (req, res) => {
+    const schema = z.object({
+        limit: z.coerce.number().int().min(1).max(200).optional(),
+        offset: z.coerce.number().int().min(0).optional(),
+        q: z.string().trim().max(200).optional(),
+    });
+
+    try {
+        const admin = await requireAdmin(req, res);
+        if (!admin) return;
+
+        const input = schema.parse(req.query || {});
+        const out = await withCoreConnection((client) =>
+            listUsers(client, { limit: input.limit ?? 50, offset: input.offset ?? 0, q: input.q ?? '' })
+        );
+        res.json(out);
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Admin: 更新用户状态（active/disabled）
+app.patch('/api/admin/users/:id', async (req, res) => {
+    const schema = z.object({
+        status: z.enum(['active', 'disabled']).optional(),
+        displayName: z.string().trim().min(1).max(80).optional().nullable(),
+        email: z.string().email().max(320).optional(),
+    });
+    try {
+        const admin = await requireAdmin(req, res);
+        if (!admin) return;
+
+        const id = String(req.params.id || '').trim();
+        if (!id) return res.status(400).json({ error: '缺少 id' });
+
+        const input = schema.parse(req.body || {});
+        const hasAnyField = input.status !== undefined || input.displayName !== undefined || input.email !== undefined;
+        if (!hasAnyField) return res.status(400).json({ error: '缺少可更新字段' });
+
+        const user = await withCoreConnection(async (client) => {
+            const current = await client.query('SELECT id, deleted_at FROM users WHERE id = $1 LIMIT 1', [id]);
+            if (!current.rowCount) return null;
+            if (current.rows[0].deleted_at) throw new Error('用户已删除/注销，无法修改');
+
+            return updateUserById(client, {
+                userId: id,
+                email: input.email,
+                displayName: input.displayName === null ? '' : input.displayName,
+                status: input.status,
+            });
+        });
+        if (!user) return res.status(404).json({ error: '用户不存在' });
+        res.json({ user });
+    } catch (error) {
+        const msg = error?.message || String(error);
+        if (msg.toLowerCase().includes('duplicate key') || msg.toLowerCase().includes('unique')) {
+            return res.status(409).json({ error: '邮箱已被占用' });
+        }
+        if (msg.includes('已删除') || msg.includes('注销')) return res.status(409).json({ error: msg });
+        res.status(400).json({ error: msg });
+    }
+});
+
+// Admin: 撤销用户所有会话（强制退出）
+app.post('/api/admin/users/:id/revoke-sessions', async (req, res) => {
+    try {
+        const admin = await requireAdmin(req, res);
+        if (!admin) return;
+
+        const id = String(req.params.id || '').trim();
+        if (!id) return res.status(400).json({ error: '缺少 id' });
+
+        const out = await withCoreConnection((client) => revokeAllUserSessions(client, { userId: id }));
+        res.json(out);
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Admin: 删除账户（备份 + 双重确认）
+app.post('/api/admin/users/:id/delete', async (req, res) => {
+    const schema = z.object({
+        confirmUserId: z.string().uuid(),
+        confirmEmail: z.string().email().max(320),
+        confirmText: z.string().trim().min(1).max(20),
+        note: z.string().trim().max(2000).optional(),
+    });
+
+    try {
+        const admin = await requireAdmin(req, res);
+        if (!admin) return;
+
+        const id = String(req.params.id || '').trim();
+        if (!id) return res.status(400).json({ error: '缺少 id' });
+        if (id === admin.id) return res.status(400).json({ error: '不允许删除当前登录管理员' });
+
+        const input = schema.parse(req.body || {});
+        if (input.confirmText !== 'DELETE') return res.status(400).json({ error: '请在确认框输入：DELETE' });
+        if (input.confirmUserId !== id) return res.status(400).json({ error: 'confirmUserId 不匹配' });
+
+        const current = await withCoreConnection(async (client) => {
+            const res = await client.query('SELECT id, email, deleted_at FROM users WHERE id = $1 LIMIT 1', [id]);
+            return res.rowCount ? res.rows[0] : null;
+        });
+        if (!current) return res.status(404).json({ error: '用户不存在' });
+        if (current.deleted_at) return res.status(409).json({ error: '用户已删除/注销' });
+        if (String(current.email || '').toLowerCase() !== String(input.confirmEmail || '').toLowerCase()) {
+            return res.status(400).json({ error: 'confirmEmail 不匹配' });
+        }
+
+        const out = await deleteUserAccount({
+            targetUserId: id,
+            actorUserId: admin.id,
+            actionType: 'admin_delete',
+            note: input.note || null,
+            ip: getClientIp(req),
+            userAgent: String(req.headers['user-agent'] || '').slice(0, 500) || null,
+        });
+        res.json(out);
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Admin: 组织列表（含最新订阅摘要）
+app.get('/api/admin/organizations', async (req, res) => {
+    const schema = z.object({
+        limit: z.coerce.number().int().min(1).max(200).optional(),
+        offset: z.coerce.number().int().min(0).optional(),
+        q: z.string().trim().max(200).optional(),
+    });
+
+    try {
+        const admin = await requireAdmin(req, res);
+        if (!admin) return;
+
+        const input = schema.parse(req.query || {});
+        const out = await withCoreConnection((client) =>
+            listOrganizations(client, { limit: input.limit ?? 50, offset: input.offset ?? 0, q: input.q ?? '' })
+        );
+        res.json(out);
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Admin: 订阅列表（可筛选）
+app.get('/api/admin/subscriptions', async (req, res) => {
+    const schema = z.object({
+        limit: z.coerce.number().int().min(1).max(200).optional(),
+        offset: z.coerce.number().int().min(0).optional(),
+        q: z.string().trim().max(200).optional(),
+        provider: z.string().trim().max(64).optional(),
+        status: z.string().trim().max(64).optional(),
+    });
+
+    try {
+        const admin = await requireAdmin(req, res);
+        if (!admin) return;
+
+        const input = schema.parse(req.query || {});
+        const out = await withCoreConnection((client) =>
+            listSubscriptions(client, {
+                limit: input.limit ?? 50,
+                offset: input.offset ?? 0,
+                q: input.q ?? '',
+                provider: input.provider ?? '',
+                status: input.status ?? '',
+            })
+        );
+        res.json(out);
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Admin: 修改订阅（仅激活码订阅；Stripe 请走官方流程后再 sync）
+app.patch('/api/admin/subscriptions/:id', async (req, res) => {
+    const schema = z.object({
+        planCode: z.string().trim().min(1).max(64).optional(),
+        status: z.string().trim().min(1).max(64).optional(),
+        currentPeriodEnd: z.string().datetime().optional(),
+        extendDays: z.number().int().min(1).max(3650).optional(),
+        cancelAtPeriodEnd: z.boolean().optional(),
+    });
+
+    try {
+        const admin = await requireAdmin(req, res);
+        if (!admin) return;
+
+        const id = String(req.params.id || '').trim();
+        if (!id) return res.status(400).json({ error: '缺少 id' });
+
+        const input = schema.parse(req.body || {});
+        const sub = await withCoreConnection((client) => getAdminSubscriptionById(client, id));
+        if (!sub) return res.status(404).json({ error: '订阅不存在' });
+        if (sub.provider !== 'activation_code') {
+            return res.status(409).json({ error: '仅支持修改激活码订阅；Stripe 订阅请在 Stripe 侧修改后再同步' });
+        }
+
+        const nextEnd = (() => {
+            if (input.currentPeriodEnd) return new Date(input.currentPeriodEnd).toISOString();
+            if (!input.extendDays) return null;
+            const base = sub.current_period_end ? new Date(sub.current_period_end) : new Date();
+            const d = new Date(base.getTime());
+            d.setUTCDate(d.getUTCDate() + input.extendDays);
+            return d.toISOString();
+        })();
+
+        const updated = await withCoreConnection((client) =>
+            updateActivationCodeSubscriptionById(client, {
+                subscriptionId: id,
+                planCode: input.planCode,
+                status: input.status,
+                currentPeriodEnd: nextEnd,
+                cancelAtPeriodEnd: input.cancelAtPeriodEnd,
+            })
+        );
+        if (!updated) return res.status(404).json({ error: '订阅不存在或不可修改' });
+
+        res.json({ subscription: updated });
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Admin: 概览统计（注册/订阅时间轴 + 套餐汇总）
+app.get('/api/admin/stats/overview', async (req, res) => {
+    const schema = z.object({ days: z.coerce.number().int().min(7).max(365).optional() });
+    try {
+        const admin = await requireAdmin(req, res);
+        if (!admin) return;
+
+        const input = schema.parse(req.query || {});
+        const days = normalizeOverviewDays(input.days);
+
+        const out = await withCoreConnection(async (client) => {
+            const totals = await getOverviewTotals(client);
+            const byPlan = await getOverviewByPlan(client);
+            const users = await getDailyUserRegistrations(client, days);
+            const subscriptions = await getDailySubscriptionCreations(client, days);
+            return {
+                totals: {
+                    users: totals.users,
+                    organizations: totals.organizations,
+                    activeSubscriptions: totals.active_subscriptions,
+                },
+                byPlan,
+                series: { users, subscriptions },
+            };
+        });
+
+        res.json(out);
+    } catch (error) {
+        res.status(400).json({ error: error?.message || String(error) });
+    }
+});
+
+// Admin: 支持侧手动同步 Stripe 订阅
+app.post('/api/admin/stripe/subscriptions/sync', async (req, res) => {
+    const schema = z.object({ organizationId: z.string().uuid() });
+    try {
+        const admin = await requireAdmin(req, res);
+        if (!admin) return;
+
+        const input = schema.parse(req.body || {});
+        const out = await syncStripeSubscriptionForOrganization({ organizationId: input.organizationId, env: process.env });
+        res.json(out);
     } catch (error) {
         res.status(400).json({ error: error?.message || String(error) });
     }

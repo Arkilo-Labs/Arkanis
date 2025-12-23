@@ -4,16 +4,18 @@
             <div class="sidebar-header">
                 <div class="logo">
                     <img src="/logo.png" alt="Arkilo" />
-                    <span>Arkilo Console</span>
+                    <span>Arkilo Admin</span>
                 </div>
             </div>
 
             <nav class="nav-menu">
-                <RouterLink class="nav-item" to="/app">概览</RouterLink>
-                <RouterLink class="nav-item" to="/app/ai">AI 策略</RouterLink>
-                <RouterLink class="nav-item" to="/app/providers">AI 服务商</RouterLink>
-                <RouterLink class="nav-item" to="/app/subscription">订阅</RouterLink>
-                <RouterLink v-if="isAdmin" class="nav-item" to="/admin">管理后台</RouterLink>
+                <RouterLink class="nav-item" to="/admin/overview">概览</RouterLink>
+                <RouterLink class="nav-item" to="/admin/users">用户管理</RouterLink>
+                <RouterLink class="nav-item" to="/admin/organizations">组织管理</RouterLink>
+                <RouterLink class="nav-item" to="/admin/subscriptions">订阅管理</RouterLink>
+                <RouterLink class="nav-item" to="/admin/activation-codes">激活码</RouterLink>
+                <RouterLink class="nav-item" to="/admin/providers">服务商管理</RouterLink>
+                <RouterLink class="nav-item" to="/app">返回控制台</RouterLink>
             </nav>
 
             <div class="sidebar-footer">
@@ -69,9 +71,7 @@ defineProps({
 const auth = useAuthStore();
 const router = useRouter();
 
-const email = computed(() => auth.user.value?.email || '');
 const userLabel = computed(() => auth.user.value?.display_name || auth.user.value?.email || '用户');
-const isAdmin = computed(() => auth.isAdmin.value);
 const showEmailVerifyBanner = computed(() => !!auth.user.value && !auth.user.value?.email_verified_at);
 
 const sending = ref(false);
@@ -98,5 +98,5 @@ async function onSendVerify() {
         sending.value = false;
     }
 }
-
 </script>
+

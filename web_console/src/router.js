@@ -6,9 +6,13 @@ import RegisterPage from './pages/RegisterPage.vue';
 import VerifyEmailPage from './pages/VerifyEmailPage.vue';
 import DashboardPage from './pages/DashboardPage.vue';
 import SubscriptionPage from './pages/SubscriptionPage.vue';
-import AdminActivationCodesPage from './pages/AdminActivationCodesPage.vue';
 import AIStrategyPage from './pages/AIStrategyPage.vue';
 import AIProvidersPage from './pages/AIProvidersPage.vue';
+import AdminDashboardPage from './pages/AdminDashboardPage.vue';
+import AdminUsersPage from './pages/AdminUsersPage.vue';
+import AdminOrganizationsPage from './pages/AdminOrganizationsPage.vue';
+import AdminSubscriptionsPage from './pages/AdminSubscriptionsPage.vue';
+import AdminActivationCodesPage from './pages/AdminActivationCodesPage.vue';
 import AdminAIProvidersPage from './pages/AdminAIProvidersPage.vue';
 
 const routes = [
@@ -20,8 +24,19 @@ const routes = [
     { path: '/app/ai', component: AIStrategyPage, meta: { requiresAuth: true } },
     { path: '/app/providers', component: AIProvidersPage, meta: { requiresAuth: true } },
     { path: '/app/subscription', component: SubscriptionPage, meta: { requiresAuth: true } },
-    { path: '/app/admin/codes', component: AdminActivationCodesPage, meta: { requiresAuth: true } },
-    { path: '/app/admin/providers', component: AdminAIProvidersPage, meta: { requiresAuth: true } },
+
+    // 旧入口保留：统一跳转到独立 Admin 后台
+    { path: '/app/admin/codes', redirect: '/admin/activation-codes' },
+    { path: '/app/admin/providers', redirect: '/admin/providers' },
+
+    // Admin 后台
+    { path: '/admin', redirect: '/admin/overview' },
+    { path: '/admin/overview', component: AdminDashboardPage, meta: { requiresAuth: true, requiresAdmin: true } },
+    { path: '/admin/users', component: AdminUsersPage, meta: { requiresAuth: true, requiresAdmin: true } },
+    { path: '/admin/organizations', component: AdminOrganizationsPage, meta: { requiresAuth: true, requiresAdmin: true } },
+    { path: '/admin/subscriptions', component: AdminSubscriptionsPage, meta: { requiresAuth: true, requiresAdmin: true } },
+    { path: '/admin/activation-codes', component: AdminActivationCodesPage, meta: { requiresAuth: true, requiresAdmin: true } },
+    { path: '/admin/providers', component: AdminAIProvidersPage, meta: { requiresAuth: true, requiresAdmin: true } },
 ];
 
 export const router = createRouter({
@@ -34,6 +49,7 @@ router.beforeEach(async (to) => {
     if (!auth.initialized.value) await auth.init();
 
     if (to.meta.requiresAuth && !auth.user.value) return '/login';
+    if (to.meta.requiresAdmin && !auth.isAdmin.value) return '/app';
     if (to.meta.guestOnly && auth.user.value) return '/app';
     return true;
 });

@@ -1,5 +1,5 @@
 <template>
-    <AppShell title="激活码" subtitle="创建、查看与撤销激活码（仅管理员）">
+    <AdminShell title="激活码" subtitle="创建、查看与撤销激活码（仅管理员）">
         <div class="card">
             <h2 class="card-title">创建激活码</h2>
             <form class="card-content" @submit.prevent="onCreate">
@@ -113,14 +113,14 @@
                 </div>
             </div>
         </div>
-    </AppShell>
+    </AdminShell>
 </template>
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '../lib/apiClient.js';
-import AppShell from '../components/AppShell.vue';
+import AdminShell from '../components/AdminShell.vue';
 
 const router = useRouter();
 
@@ -204,4 +204,3 @@ async function onRevoke(id) {
 
 onMounted(load);
 </script>
-
