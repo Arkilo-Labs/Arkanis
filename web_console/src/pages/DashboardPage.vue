@@ -1,5 +1,5 @@
 <template>
-    <AppShell title="概览" subtitle="我的工作区与订阅信息">
+    <AppShell title="概览" subtitle="我的账号与订阅信息">
         <!-- 余额卡片 -->
         <div class="card balance-card">
             <div class="balance-header">
@@ -22,15 +22,15 @@
 
         <div class="grid grid-2">
             <div class="card">
-                <h2 class="card-title">工作区</h2>
-                <div v-if="overview.organization" class="card-content">
+                <h2 class="card-title">账号信息</h2>
+                <div v-if="overview.user" class="card-content">
                     <div class="stat-row">
-                        <span class="stat-label">名称</span>
-                        <span class="stat-value">{{ overview.organization.name }}</span>
+                        <span class="stat-label">邮箱</span>
+                        <span class="stat-value">{{ overview.user.email }}</span>
                     </div>
                     <div class="stat-row">
-                        <span class="stat-label">权限</span>
-                        <span class="stat-value">{{ formatRole(overview.organization.role) }}</span>
+                        <span class="stat-label">昵称</span>
+                        <span class="stat-value">{{ overview.user.display_name || '-' }}</span>
                     </div>
                 </div>
                 <p v-else class="text-muted">加载中...</p>
@@ -75,7 +75,7 @@ import { api } from '../lib/apiClient.js';
 import AppShell from '../components/AppShell.vue';
 import { useOverviewStore } from '../stores/overviewStore.js';
 
-const overview = reactive({ user: null, organization: null, subscription: null });
+const overview = reactive({ user: null, subscription: null });
 const credit = ref(null);
 const code = ref('');
 const redeemError = ref('');
@@ -101,11 +101,6 @@ function formatDate(value) {
     }
 }
 
-function formatRole(role) {
-    const roleMap = { owner: '所有者', admin: '管理员', member: '成员' };
-    return roleMap[role] || role;
-}
-
 function formatPlanCode(code) {
     const planMap = { monthly: '月度版', quarterly: '季度版', yearly: '年度版', free: '免费版' };
     return planMap[code] || code;
@@ -121,7 +116,6 @@ async function load({ force = false } = {}) {
     try {
         const res = await overviewStore.get({ force });
         overview.user = res.user;
-        overview.organization = res.organization;
         overview.subscription = res.subscription;
     } finally {
         loading.value = false;
@@ -149,7 +143,6 @@ async function onRedeem() {
         overviewStore.invalidate();
         await load({ force: true });
         await loadCredit();
-        overview.organization = res.organization;
         overview.subscription = res.subscription;
         redeemSuccess.value = '兑换成功，订阅已更新';
         code.value = '';

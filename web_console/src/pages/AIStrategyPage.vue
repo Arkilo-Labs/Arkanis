@@ -7,7 +7,7 @@
         <div v-else-if="!state.subscriptionActive" class="card">
             <h2 class="card-title">需要订阅</h2>
             <div class="card-content">
-                <p class="text-muted">当前工作区未激活订阅，无法运行策略分析。</p>
+                <p class="text-muted">当前账号未激活订阅，无法运行策略分析。</p>
                 <div class="input-with-button">
                     <input v-model="activationCode" class="form-input" placeholder="输入激活码" />
                     <button class="btn btn-primary" type="button" :disabled="redeeming" @click="redeem">

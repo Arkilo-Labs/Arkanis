@@ -8,7 +8,7 @@
                         <span>Arkilo</span>
                     </div>
                     <h1 class="auth-title">注册</h1>
-                    <p class="auth-subtitle">创建工作区并开始使用</p>
+                    <p class="auth-subtitle">创建账号并开始使用</p>
                 </div>
 
                 <form @submit.prevent="onSubmit">
@@ -82,4 +82,3 @@ async function onSubmit() {
     }
 }
 </script>
-
