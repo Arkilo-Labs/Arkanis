@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "providers": {
+    "didl_gpt41_mini": {
+      "type": "openai_compatible",
+      "base_url": "https://a.didl.top",
+      "api_key_env": "DIDL_API_KEY",
+      "model": "claude-sonnet-4-5",
+      "supports_vision": true,
+      "temperature": 0.3,
+      "max_tokens": 50000
+    },
+    "deepseek_api": {
+      "type": "openai_compatible",
+      "base_url": "https://api.deepseek.com",
+      "api_key_env": "DEEPSEEK_API_KEY",
+      "model": "deepseek-chat",
+      "supports_vision": false,
+      "temperature": 0.2,
+      "max_tokens": 2000
+    }
+  }
+}

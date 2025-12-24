@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "roundtable_settings": {
+    "max_rounds": 3,
+    "summary_agent": "Gemini_Scribe",
+    "final_agent": "DeepSeek_Leader",
+    "max_context_chars": 24000,
+    "llm_timeout_ms": 90000,
+    "llm_retries": 1,
+    "mcp_timeout_ms": 60000,
+    "debate_rules": "- 必须指出至少 1 条你不同意/质疑的点（引用“上一位发言”或上下文原话）。\n- 你的反驳必须给出可验证条件：什么情况下对方成立/你成立。\n- 如果你同意，也要补充一个可能失败的反例或风险触发条件。\n- 禁止纯复述；每段必须新增信息或更严格约束。"
+  },
+  "agents": [
+    {
+      "name": "Qwen_Vision",
+      "provider_ref": "didl_gpt41_mini",
+      "role": "ChartReader",
+      "prompt": "qwen_vision.md",
+      "order": 1,
+      "can_see_images": true
+    },
+    {
+      "name": "Grok_News",
+      "provider_ref": "didl_gpt41_mini",
+      "role": "SentimentAnalyst",
+      "prompt": "grok_news.md",
+      "order": 2,
+      "tools": [
+        {
+          "type": "mcp",
+          "server": "trendradar",
+          "call": {
+            "method": "tools/call",
+            "params": {
+              "name": "get_latest_news",
+              "arguments": {
+                "platforms": null,
+                "limit": 50,
+                "include_url": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "GPT_Technical",
+      "provider_ref": "didl_gpt41_mini",
+      "role": "TechnicalTrader",
+      "prompt": "gpt_technical.md",
+      "order": 3
+    },
+    {
+      "name": "Claude_Risk",
+      "provider_ref": "didl_gpt41_mini",
+      "role": "RiskManager",
+      "prompt": "claude_risk.md",
+      "order": 4
+    },
+    {
+      "name": "DeepSeek_Leader",
+      "provider_ref": "didl_gpt41_mini",
+      "role": "DecisionMaker",
+      "prompt": "deepseek_leader.md",
+      "order": 5,
+      "is_final_decision": true
+    },
+    {
+      "name": "Gemini_Scribe",
+      "provider_ref": "didl_gpt41_mini",
+      "role": "Summarizer",
+      "prompt": "gemini_scribe.md",
+      "order": 99
+    }
+  ]
+}

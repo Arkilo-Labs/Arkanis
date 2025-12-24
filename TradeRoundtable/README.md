@@ -1,0 +1,51 @@
+# TradeRoundtable
+
+一个“圆桌会议式”的交易分析后端脚手架：  
+从本仓库现有 JS 数据/图表能力获取 15m/1h K 线截图 + 外部网页截图（如 Coinglass 清算地图），再按配置驱动的多 Agent 顺序调用不同 Provider，最终输出决策与会议纪要。
+
+## 约束
+
+- 本目录为独立实现，不修改仓库现有 `src/`、`scripts/` 等库代码（仅复用其能力）。
+- 不需要前端；输出为 `logs/` 与 `outputs/` 文件。
+- 不在仓库内硬编码任何密钥；统一通过环境变量注入。
+
+## 快速开始
+
+1) 配置 Provider 与 Agent：
+- `TradeRoundtable/config/providers.json`
+- `TradeRoundtable/config/agents.json`
+
+2) 准备环境变量（示例，按你的 Provider 配置调整）：
+
+```powershell
+$env:DIDL_API_KEY="..."
+```
+
+如果要启用 TrendRadar MCP（新闻/舆情），还需要：
+
+```powershell
+$env:TRENDRADAR_DIR="C:\\path\\to\\TrendRadar"
+```
+
+3) 运行：
+
+```powershell
+node TradeRoundtable/main.js --symbol BTCUSDT --bars 250
+```
+
+如果你本机没有 PostgreSQL（或连接慢），建议直接走交易所数据源：
+
+```powershell
+node TradeRoundtable/main.js --symbol BTCUSDT --bars 250 --data-source exchange
+```
+
+输出：
+- `TradeRoundtable/outputs/<sessionId>/charts/*.png`
+- `TradeRoundtable/outputs/<sessionId>/decision.json`
+- `TradeRoundtable/logs/<sessionId>.log`
+
+## 常见问题
+
+- 数据库/补全：沿用仓库现有 `KlinesRepository` 行为（数据不足会自动从交易所补全并入库）。
+- 外部网页截图：默认抓 `https://www.coinglass.com/zh/liquidation-levels`，如遇风控可改 `--liquidation-url` 或调大等待时间 `--page-wait-ms`。
+- 卡住/一直等：现在对 DB/交易所/截图/LLM 都加了超时与重试；同时可打开 `TradeRoundtable/logs/<sessionId>.log` 看实时进度。
