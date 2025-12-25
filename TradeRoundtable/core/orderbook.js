@@ -1,4 +1,5 @@
 import { getExchangeClient } from '../../src/data/exchangeClient.js';
+import { detectAssetClass } from '../../src/data/marketDataClient.js';
 
 function normalizeBaseUrlForMarket(market) {
     const m = String(market || '').trim().toLowerCase();
@@ -43,10 +44,18 @@ export async function fetchOrderbook({
     exchangeId = 'binance',
     marketType = 'futures',
     symbol,
-    limit = 200,
+    limit = 100,
     fallbackToBinanceRest = true,
     logger = null,
+    assetClass = null,
 }) {
+    // 非crypto资产无挂单薄
+    const resolvedAssetClass = assetClass || detectAssetClass(symbol);
+    if (['stock', 'forex', 'commodity', 'index'].includes(resolvedAssetClass)) {
+        logger?.info?.(`跳过挂单薄：${symbol} 属于 ${resolvedAssetClass}，不支持交易所挂单薄`);
+        return null;
+    }
+
     try {
         const client = getExchangeClient({ exchangeId, marketType, logger });
         const ob = await client.fetchOrderbook({ symbol, limit });

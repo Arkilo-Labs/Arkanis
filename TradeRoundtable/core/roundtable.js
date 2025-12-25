@@ -6,6 +6,14 @@ export class Roundtable {
         this.logger = logger;
     }
 
+    _findLastTurn(transcript, predicate) {
+        for (let i = (transcript?.length ?? 0) - 1; i >= 0; i--) {
+            const t = transcript[i];
+            if (predicate(t)) return t;
+        }
+        return null;
+    }
+
     _truncateContext(text) {
         const limit = this.settings.max_context_chars ?? 24000;
         if (!text || text.length <= limit) return text;
@@ -73,13 +81,19 @@ export class Roundtable {
         return results;
     }
 
-    _buildTurnContext({ baseContext, round, maxRounds, agent, lastTurn, debateRules }) {
+    _buildTurnContext({ baseContext, round, maxRounds, agent, lastTurn, selfLastTurn, debateRules }) {
         const parts = [];
 
         parts.push(`# 回合信息\n- round: ${round}/${maxRounds}\n- speaker: ${agent.name} (${agent.role})`);
 
         if (debateRules) {
             parts.push(`# 交锋规则（必须遵守）\n${debateRules}`);
+        }
+
+        if (selfLastTurn) {
+            parts.push(
+                `# 你上一轮发言（不要复述；只回应质疑/补充变化）\n【${selfLastTurn.name}｜${selfLastTurn.role}】\n${selfLastTurn.text}`,
+            );
         }
 
         if (lastTurn) {
@@ -142,14 +156,17 @@ export class Roundtable {
 
             for (const agent of orderedPerRound) {
                 const lastTurn = transcript.length ? transcript[transcript.length - 1] : null;
+                const selfLastTurn = this._findLastTurn(transcript, (t) => t?.name === agent.name);
                 const baseContext = this._truncateContext(context);
+                const isFirstSpeaker = agent.name === orderedPerRound[0].name;
                 const turnContext = this._buildTurnContext({
                     baseContext,
                     round,
                     maxRounds,
                     agent,
                     lastTurn,
-                    debateRules: agent.name === orderedPerRound[0].name ? null : debateRules,
+                    selfLastTurn,
+                    debateRules: isFirstSpeaker && round === 1 ? null : debateRules,
                 });
 
                 this.logger.info(`发言：${agent.name} (${agent.role})`);

@@ -21,16 +21,20 @@
 $env:DIDL_API_KEY="..."
 ```
 
-如果要启用 TrendRadar MCP（新闻/舆情），还需要：
-
-```powershell
-$env:TRENDRADAR_DIR="C:\\path\\to\\TrendRadar"
-```
+新闻收集默认走「SearXNG + Firecrawl」（本地 HTTP 服务），地址在 `TradeRoundtable/config/agents.json` 的 `news_pipeline_settings` 中可改：
+- SearXNG：默认 `http://localhost:8080`
+- Firecrawl：默认 `http://localhost:3002`
 
 3) 运行：
 
 ```powershell
 node TradeRoundtable/main.js --symbol BTCUSDT --bars 250
+```
+
+如果只想跳过新闻收集：
+
+```powershell
+node TradeRoundtable/main.js --symbol BTCUSDT --bars 250 --skip-news
 ```
 
 指定交易所/市场类型（ccxt，多交易所）：
@@ -49,6 +53,7 @@ node TradeRoundtable/main.js --symbol BTCUSDT --bars 250 --data-source exchange
 - `TradeRoundtable/outputs/<sessionId>/charts/*.png`
 - `TradeRoundtable/outputs/<sessionId>/decision.json`
 - `TradeRoundtable/logs/<sessionId>.log`
+- `TradeRoundtable/outputs/<sessionId>/news_briefing.md`（如未跳过新闻收集）
 
 ## 常见问题
 

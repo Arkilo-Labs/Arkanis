@@ -8,7 +8,7 @@ import { loadAgentsConfig, loadMcpConfig, loadProvidersConfig } from './core/con
 import { PromptStore } from './core/promptStore.js';
 import { SessionLogger } from './core/logger.js';
 import { McpClient } from './core/mcpClient.js';
-import { buildAgents } from './core/agentFactory.js';
+import { buildAgents, buildSubagents } from './core/agentFactory.js';
 import { Roundtable } from './core/roundtable.js';
 import { loadBars } from './core/marketData.js';
 import { renderChartPng } from './core/chartShots.js';
@@ -16,6 +16,9 @@ import { screenshotPage } from './core/liquidationShot.js';
 import { computeMacd, computeRsi } from './core/indicators.js';
 import { fetchOrderbook, summarizeOrderbook } from './core/orderbook.js';
 import { withRetries, withTimeout } from './core/runtime.js';
+import { SearxngClient } from './core/searxngClient.js';
+import { FirecrawlClient } from './core/firecrawlClient.js';
+import { runNewsPipeline } from './core/newsPipeline.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -59,11 +62,13 @@ async function main() {
         .option('--chart-wait-ms <n>', '图表渲染等待(ms)', (v) => parseInt(v, 10), 600)
         .option('--liquidation-url <url>', '清算地图页面', 'https://www.coinglass.com/zh/liquidation-levels')
         .option('--skip-llm', '跳过模型调用（只产出数据和截图）')
+        .option('--skip-news', '跳过新闻收集（SearXNG + Firecrawl）')
         .option('--skip-liquidation', '跳过清算地图截图')
         .option('--skip-mcp', '跳过 MCP 工具调用')
         .option('--mcp-verbose', '打印 MCP 的 stderr 原始输出（默认只打印错误）')
         .option('--mcp-silent', '完全静默 MCP stderr（不打印任何 MCP 输出）')
         .option('--mcp-diagnose', '只做 MCP 诊断（tools/list + 试调用），不跑圆桌')
+        .option('--mcp-diagnose-server <name>', 'MCP 诊断的 server 名称（默认取配置第一个）', '')
         .option('--data-source <mode>', 'K线数据源：auto|db|exchange', 'auto')
         .option('--db-timeout-ms <n>', 'DB 超时(ms)', (v) => parseInt(v, 10), 6000)
         .option('--exchange-timeout-ms <n>', '交易所超时(ms)', (v) => parseInt(v, 10), 25000)
@@ -105,7 +110,12 @@ async function main() {
                 return;
             }
 
-            const serverName = 'trendradar';
+            const configuredServers = Object.keys(mcpConfig?.mcpServers ?? {});
+            const serverName = String(opts.mcpDiagnoseServer || '').trim() || configuredServers[0];
+            if (!serverName) {
+                logger.error('未配置任何 MCP server（config/mcp_config.json）');
+                return;
+            }
             logger.info(`MCP 诊断：server=${serverName}`);
 
             try {
@@ -117,16 +127,17 @@ async function main() {
                 return;
             }
 
-            // 尝试用 agents.json 里 Grok_News 的第一条工具配置做一次试调用
-            const grok = agentsConfig.agents.find((a) => a.name === 'Grok_News');
-            const t = grok?.tools?.find((x) => x.type === 'mcp' && x.server === serverName);
-            if (!t) {
-                logger.warn('agents.json 未配置 Grok_News 的 MCP 工具，跳过试调用');
+            // 如果 agents.json 有配置 MCP 工具，挑一个同 server 的做试调用；否则仅 tools/list
+            const anyTool = (agentsConfig.agents ?? [])
+                .flatMap((a) => a.tools ?? [])
+                .find((x) => x.type === 'mcp' && x.server === serverName);
+            if (!anyTool) {
+                logger.warn('agents.json 未配置该 server 的 MCP 工具，跳过试调用（仅输出 tools/list）');
                 return;
             }
 
             try {
-                const res = await mcpClient.call(serverName, t.call.method, t.call.params ?? {});
+                const res = await mcpClient.call(serverName, anyTool.call.method, anyTool.call.params ?? {});
                 writeText(join(sessionOut, 'mcp_call_result.json'), JSON.stringify(res, null, 2));
                 logger.info(`已输出：${join(sessionOut, 'mcp_call_result.json')}`);
             } catch (e) {
@@ -135,7 +146,7 @@ async function main() {
             return;
         }
 
-        logger.info('加载市场数据（会自动补全并入库）');
+        logger.info('加载市场数据');
         const [primaryBars, auxBars] = await Promise.all([
             loadBars(
                 { symbol: opts.symbol, timeframe: opts.primary, barsCount: opts.bars, assetClass: opts.assetClass || undefined },
@@ -258,6 +269,54 @@ async function main() {
             return;
         }
 
+        let newsBriefing = null;
+        if (!opts.skipNews && agentsConfig.news_pipeline_settings?.enabled) {
+            try {
+                const subagents = buildSubagents({ agentsConfig, providersConfig: providers, promptStore, logger });
+                const collectorName = agentsConfig.news_pipeline_settings?.collector_agent;
+                const collector = subagents.find((a) => a.name === collectorName);
+                if (!collector) {
+                    throw new Error(`未找到 news_pipeline_settings.collector_agent 对应的 subagent：${collectorName}`);
+                }
+
+                const searxngCfg = agentsConfig.news_pipeline_settings?.searxng ?? {};
+                const firecrawlCfg = agentsConfig.news_pipeline_settings?.firecrawl ?? {};
+                const firecrawlApiKeyEnv = String(firecrawlCfg.api_key_env || '').trim();
+                const firecrawlApiKey = firecrawlApiKeyEnv ? String(process.env[firecrawlApiKeyEnv] || '').trim() : '';
+
+                const searxngClient = new SearxngClient({
+                    baseUrl: searxngCfg.base_url,
+                    timeoutMs: searxngCfg.timeout_ms,
+                    dockerFallbackContainer: searxngCfg.docker_fallback_container,
+                    logger,
+                });
+                const firecrawlClient = new FirecrawlClient({
+                    baseUrl: firecrawlCfg.base_url,
+                    timeoutMs: firecrawlCfg.timeout_ms,
+                    apiKey: firecrawlApiKey,
+                });
+
+                logger.info('新闻收集：SearXNG + Firecrawl');
+                newsBriefing = await runNewsPipeline({
+                    collectorAgent: collector,
+                    searxngClient,
+                    firecrawlClient,
+                    symbol: opts.symbol,
+                    assetClass: opts.assetClass || undefined,
+                    settings: agentsConfig.news_pipeline_settings,
+                    logger,
+                });
+
+                writeText(join(sessionOut, 'news_briefing.md'), newsBriefing.briefingMarkdown);
+                writeText(join(sessionOut, 'news_meta.json'), JSON.stringify(newsBriefing, null, 2));
+                logger.info(`新闻简报已保存：${join(sessionOut, 'news_briefing.md')}`);
+            } catch (e) {
+                logger.warn(`[新闻收集失败] ${e.message}`);
+            }
+        } else {
+            logger.info('新闻收集：已跳过（--skip-news 或配置关闭）');
+        }
+
         const agents = buildAgents({ agentsConfig, providersConfig: providers, promptStore, logger });
         const roundtable = new Roundtable({
             agents,
@@ -272,6 +331,9 @@ async function main() {
             `- primary: ${opts.primary}`,
             `- aux: ${opts.aux}`,
             `- bars: ${opts.bars}`,
+            ``,
+            `# 新闻简报（SearXNG + Firecrawl）`,
+            newsBriefing?.briefingMarkdown ? newsBriefing.briefingMarkdown : '（新闻收集失败或被跳过）',
             ``,
             `# 硬数据（文本）`,
             `- primary_rsi14: ${primaryRsi == null ? 'null' : primaryRsi.toFixed(2)}`,

@@ -5,10 +5,10 @@
       "type": "openai_compatible",
       "base_url": "https://a.didl.top",
       "api_key_env": "DIDL_API_KEY",
-      "model": "claude-sonnet-4-5",
+      "model": "gpt-4.1-mini",
       "supports_vision": true,
       "temperature": 0.5,
-      "max_tokens": 50000
+      "max_tokens": 32767
     },
     "deepseek_api": {
       "type": "openai_compatible",
@@ -18,6 +18,15 @@
       "supports_vision": false,
       "temperature": 0.2,
       "max_tokens": 2000
+    },
+    "yunwu_grok_4_fast": {
+      "type": "openai_compatible",
+      "base_url": "https://api.yunwu.ai",
+      "api_key_env": "YUNWU_API_KEY",
+      "model": "grok-4-fast",
+      "supports_vision": true,
+      "temperature": 0.6,
+      "max_tokens": 81920
     }
   }
 }

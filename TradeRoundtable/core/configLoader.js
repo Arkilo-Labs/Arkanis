@@ -37,6 +37,41 @@ const AgentSchema = z.object({
     tools: z.array(ToolSchema).optional().default([]),
 });
 
+const NewsPipelineSettingsSchema = z.object({
+    enabled: z.boolean().optional().default(true),
+    collector_agent: z.string().min(1),
+    searxng: z
+        .object({
+            base_url: z.string().min(1).default('http://localhost:8080'),
+            timeout_ms: z.number().int().positive().default(15000),
+            docker_fallback_container: z.string().min(1).optional().default('searxng'),
+        })
+        .default({}),
+    firecrawl: z
+        .object({
+            base_url: z.string().min(1).default('http://localhost:3002'),
+            timeout_ms: z.number().int().positive().default(30000),
+            api_key_env: z.string().optional().default(''),
+        })
+        .default({}),
+    search: z
+        .object({
+            queries_max: z.number().int().positive().default(4),
+            results_per_query: z.number().int().positive().default(10),
+            language: z.string().min(1).optional().default('zh-CN'),
+            recency_hours: z.number().int().positive().optional().default(24),
+        })
+        .default({}),
+    fetch: z
+        .object({
+            max_urls: z.number().int().positive().default(6),
+            concurrency: z.number().int().positive().default(3),
+            max_markdown_chars_per_url: z.number().int().positive().default(7000),
+            max_total_markdown_chars: z.number().int().positive().default(22000),
+        })
+        .default({}),
+});
+
 const AgentsConfigSchema = z.object({
     version: z.number().int().positive(),
     roundtable_settings: z.object({
@@ -50,6 +85,8 @@ const AgentsConfigSchema = z.object({
         debate_rules: z.string().optional(),
     }),
     agents: z.array(AgentSchema).min(1),
+    subagents: z.array(AgentSchema).optional().default([]),
+    news_pipeline_settings: NewsPipelineSettingsSchema.optional(),
 });
 
 const McpConfigSchema = z.object({
