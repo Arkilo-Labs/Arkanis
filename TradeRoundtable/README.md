@@ -33,6 +33,12 @@ $env:TRENDRADAR_DIR="C:\\path\\to\\TrendRadar"
 node TradeRoundtable/main.js --symbol BTCUSDT --bars 250
 ```
 
+指定交易所/市场类型（ccxt，多交易所）：
+
+```powershell
+node TradeRoundtable/main.js --symbol BTCUSDT --exchange okx --market-type swap --exchange-fallbacks binance,bybit
+```
+
 如果你本机没有 PostgreSQL（或连接慢），建议直接走交易所数据源：
 
 ```powershell

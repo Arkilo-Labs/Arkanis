@@ -130,6 +130,13 @@ async function main() {
         .name('vlm-trade')
         .description('VLM 交易决策主脚本')
         .option('--symbol <symbol>', '交易对', defaultConfig.symbol)
+        .option('--exchange <id>', '交易所（ccxt exchangeId）', config.marketData.exchange)
+        .option('--market-type <type>', '市场类型：spot|future|swap（兼容 futures）', config.marketData.marketType)
+        .option(
+            '--exchange-fallbacks <list>',
+            '失败切换交易所（逗号分隔 ccxt exchangeId）',
+            config.marketData.exchangeFallbacks || '',
+        )
         .option('--timeframe <tf>', '时间周期', defaultConfig.timeframe)
         .option('--bars <n>', 'K线数量', (v) => parseInt(v, 10), defaultConfig.bars)
         .option('--start-time <time>', '开始时间')
@@ -154,6 +161,9 @@ async function main() {
     const endTime = opts.endTime ? parseTime(opts.endTime) : null;
 
     logger.info(`[配置] 交易对: ${opts.symbol}`);
+    logger.info(
+        `[配置] 市场: exchange=${opts.exchange} marketType=${opts.marketType}${opts.exchangeFallbacks ? ` fallbacks=${opts.exchangeFallbacks}` : ''}`,
+    );
     logger.info(`[配置] 时间周期: ${opts.timeframe}`);
     logger.info(`[配置] K线数量: ${opts.bars}`);
     logger.info(`[配置] 4 倍辅助图: ${opts.enable4xChart ? '启用' : '关闭'}`);
@@ -162,7 +172,11 @@ async function main() {
     logger.info(`[配置] 输出目录: ${outputDir}`);
 
     try {
-        const repo = new KlinesRepository();
+        const repo = new KlinesRepository({
+            exchangeId: opts.exchange,
+            marketType: opts.marketType,
+            exchangeFallbacks: opts.exchangeFallbacks,
+        });
         const builder = new ChartBuilder();
 
         // 获取 K 线数据

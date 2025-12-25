@@ -10,12 +10,20 @@ function calcStartMs({ timeframe, barsCount, endTime }) {
     return end.getTime() - (barsCount + padBars) * minutes * 60 * 1000;
 }
 
-async function loadFromExchange({ symbol, timeframe, barsCount, endTime }, { timeoutMs, logger }) {
+async function loadFromExchange(
+    { symbol, timeframe, barsCount, endTime },
+    { timeoutMs, logger, exchangeId = null, marketType = null, exchangeFallbacks = [] },
+) {
     const interval = TIMEFRAME_TO_INTERVAL[timeframe];
     if (!interval) throw new Error(`不支持 interval: ${timeframe}`);
     const startMs = calcStartMs({ timeframe, barsCount, endTime });
     const endMs = endTime ? new Date(endTime).getTime() : null;
-    const client = getExchangeClient();
+    const client = getExchangeClient({
+        exchangeId: exchangeId || undefined,
+        marketType: marketType || undefined,
+        fallbackExchangeIds: exchangeFallbacks,
+        logger,
+    });
 
     const rawBars = await withTimeout(
         client.fetchKlines({ symbol, interval, startMs, endMs, limit: 1000 }),
@@ -45,7 +53,15 @@ async function loadFromDb({ symbol, timeframe, barsCount, endTime }, { timeoutMs
 
 export async function loadBars(
     { symbol, timeframe, barsCount, endTime },
-    { logger, dbTimeoutMs = 6000, exchangeTimeoutMs = 25000, prefer = 'auto' } = {},
+    {
+        logger,
+        dbTimeoutMs = 6000,
+        exchangeTimeoutMs = 25000,
+        prefer = 'auto',
+        exchangeId = null,
+        marketType = null,
+        exchangeFallbacks = [],
+    } = {},
 ) {
     const preferMode = String(prefer || 'auto').toLowerCase();
     const tryDb = preferMode === 'auto' || preferMode === 'db';
@@ -77,7 +93,16 @@ export async function loadBars(
     return withRetries(
         async ({ attempt }) => {
             if (attempt > 1) logger?.warn(`交易所读取重试：${symbol} ${timeframe} 第 ${attempt} 次`);
-            return loadFromExchange({ symbol, timeframe, barsCount, endTime }, { timeoutMs: exchangeTimeoutMs, logger });
+            return loadFromExchange(
+                { symbol, timeframe, barsCount, endTime },
+                {
+                    timeoutMs: exchangeTimeoutMs,
+                    logger,
+                    exchangeId,
+                    marketType,
+                    exchangeFallbacks,
+                },
+            );
         },
         {
             retries: 2,

@@ -33,14 +33,35 @@ export class KlinesRepository {
      * @param {Object} options
      * @param {string} [options.tableName] 数据表名
      * @param {boolean} [options.autoFill] 是否自动从交易所补全数据
+     * @param {string} [options.assetClass] 资产类别（预留：crypto/stock/fx）
+     * @param {string} [options.exchangeId] 交易所（ccxt exchangeId）
+     * @param {string} [options.marketType] 市场类型（spot/future/swap，兼容 futures）
+     * @param {string} [options.venue] 交易场所/挂牌地（预留）
+     * @param {string|string[]} [options.exchangeFallbacks] 失败切换交易所（逗号分隔或数组）
      */
-    constructor({ tableName = null, autoFill = true } = {}) {
+    constructor({
+        tableName = null,
+        autoFill = true,
+        assetClass = null,
+        exchangeId = null,
+        marketType = null,
+        venue = null,
+        exchangeFallbacks = null,
+    } = {}) {
         this.cfg = marketDataConfig;
         this.autoFill = autoFill;
         this.instrumentsTable = this.cfg.instrumentsTable;
         this.klines1mTable = tableName || this.cfg.klines1mTable;
-        this.exchange = (this.cfg.exchange || 'binance').trim().toLowerCase();
-        this.market = (this.cfg.market || 'futures').trim().toLowerCase();
+        this.assetClass = String(assetClass ?? this.cfg.assetClass ?? 'crypto').trim().toLowerCase();
+        this.exchange = String(exchangeId ?? this.cfg.exchange ?? 'binance').trim().toLowerCase();
+        this.marketType = String(marketType ?? this.cfg.marketType ?? 'futures').trim().toLowerCase();
+        this.venue = String(venue ?? this.cfg.venue ?? '').trim();
+        this.exchangeFallbacks = Array.isArray(exchangeFallbacks)
+            ? exchangeFallbacks.map((s) => String(s).trim()).filter(Boolean)
+            : String(exchangeFallbacks ?? this.cfg.exchangeFallbacks ?? '')
+                  .split(',')
+                  .map((s) => s.trim())
+                  .filter(Boolean);
         this.instrumentIdCache = new Map();
     }
 
@@ -128,12 +149,18 @@ export class KlinesRepository {
      */
     async _fillFromExchange(symbol, timeframe, startTime, endTime) {
         try {
-            const client = getExchangeClient();
+            const client = getExchangeClient({
+                assetClass: this.assetClass,
+                exchangeId: this.exchange,
+                marketType: this.marketType,
+                fallbackExchangeIds: this.exchangeFallbacks,
+                logger,
+            });
             const startMs = startTime.getTime();
             const endMs = endTime.getTime();
 
             // 使用 1m 数据存储
-            const bars = await client.fetchKlines({
+            const { bars, sourceExchangeId } = await client.fetchKlinesWithMeta({
                 symbol,
                 interval: '1m',
                 startMs,
@@ -141,7 +168,7 @@ export class KlinesRepository {
             });
 
             if (bars.length) {
-                await this._saveBarsToDb(symbol, bars);
+                await this._saveBarsToDb(symbol, bars, { source: sourceExchangeId || this.exchange });
                 logger.info(`成功从交易所补全 ${symbol} ${bars.length} 条 1m K 线`);
             }
         } catch (error) {
@@ -153,11 +180,12 @@ export class KlinesRepository {
      * 批量保存 K 线到数据库
      * @private
      */
-    async _saveBarsToDb(symbol, bars) {
+    async _saveBarsToDb(symbol, bars, { source = null } = {}) {
         if (!bars.length) return;
 
         const intervalMs = 60 * 1000; // 1分钟
         const instrumentId = await this._getOrCreateInstrumentId(symbol);
+        const dataSource = String(source || this.exchange || 'unknown').trim().toLowerCase();
 
         // 使用事务批量插入
         await withMarketConnection(async (client) => {
@@ -178,16 +206,17 @@ export class KlinesRepository {
                         bar.high,
                         bar.low,
                         bar.close,
-                        bar.volume
+                        bar.volume,
+                        dataSource
                     );
                     values.push(
-                        `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}, $${baseIndex + 7}, $${baseIndex + 8})`
+                        `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}, $${baseIndex + 7}, $${baseIndex + 8}, $${baseIndex + 9})`
                     );
                 }
 
                 const sql = `
           INSERT INTO ${this.klines1mTable}
-            (instrument_id, open_time_ms, close_time_ms, open, high, low, close, volume)
+            (instrument_id, open_time_ms, close_time_ms, open, high, low, close, volume, source)
           VALUES ${values.join(',')}
           ON CONFLICT (instrument_id, open_time_ms) DO NOTHING
         `;
@@ -296,7 +325,7 @@ export class KlinesRepository {
       LIMIT $1
     `;
 
-        const result = await queryMarket(sql, [limit, this.exchange, this.market]);
+        const result = await queryMarket(sql, [limit, this.exchange, this.marketType]);
         return result.rows.map((row) => row.symbol);
     }
 
@@ -306,19 +335,50 @@ export class KlinesRepository {
             throw new Error('symbol 不能为空');
         }
 
-        const cacheKey = `${this.exchange}:${this.market}:${normalizedSymbol}`;
+        const cacheKey = `${this.exchange}:${this.marketType}:${normalizedSymbol}`;
         if (this.instrumentIdCache.has(cacheKey)) {
             return this.instrumentIdCache.get(cacheKey);
         }
 
-        const sql = `
+        const upsertNew = async () => {
+            const sql = `
+      INSERT INTO ${this.instrumentsTable} (asset_class, exchange, market, symbol, venue, updated_at)
+      VALUES ($1, $2, $3, $4, $5, now())
+      ON CONFLICT (exchange, market, symbol)
+      DO UPDATE SET updated_at = now()
+      RETURNING id
+    `;
+            return queryMarket(sql, [
+                this.assetClass,
+                this.exchange,
+                this.marketType,
+                normalizedSymbol,
+                this.venue || null,
+            ]);
+        };
+
+        const upsertOld = async () => {
+            const sql = `
       INSERT INTO ${this.instrumentsTable} (exchange, market, symbol, updated_at)
       VALUES ($1, $2, $3, now())
       ON CONFLICT (exchange, market, symbol)
       DO UPDATE SET updated_at = now()
       RETURNING id
     `;
-        const res = await queryMarket(sql, [this.exchange, this.market, normalizedSymbol]);
+            return queryMarket(sql, [this.exchange, this.marketType, normalizedSymbol]);
+        };
+
+        let res;
+        try {
+            res = await upsertNew();
+        } catch (e) {
+            const msg = String(e?.message || '');
+            if (!msg.includes('column') && !msg.includes('asset_class') && !msg.includes('venue')) {
+                throw e;
+            }
+            res = await upsertOld();
+        }
+
         const id = Number.parseInt(res.rows[0].id, 10);
         this.instrumentIdCache.set(cacheKey, id);
         return id;

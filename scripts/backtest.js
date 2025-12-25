@@ -229,6 +229,13 @@ async function main() {
         .description('VLM 回测脚本')
         .requiredOption('--start-time <time>', '回测开始时间')
         .option('--symbol <symbol>', '交易对', defaultConfig.symbol)
+        .option('--exchange <id>', '交易所（ccxt exchangeId）', config.marketData.exchange)
+        .option('--market-type <type>', '市场类型：spot|future|swap（兼容 futures）', config.marketData.marketType)
+        .option(
+            '--exchange-fallbacks <list>',
+            '失败切换交易所（逗号分隔 ccxt exchangeId）',
+            config.marketData.exchangeFallbacks || '',
+        )
         .option('--timeframe <tf>', '时间周期', defaultConfig.timeframe)
         .option('--bars <n>', '每次分析的历史K线数量', (v) => parseInt(v, 10), defaultConfig.bars)
         .option('--end-time <time>', '回测结束时间')
@@ -256,6 +263,9 @@ async function main() {
     logger.info('VLM 回测启动');
     logger.info('='.repeat(60));
     logger.info(`交易对: ${opts.symbol}`);
+    logger.info(
+        `市场: exchange=${opts.exchange} marketType=${opts.marketType}${opts.exchangeFallbacks ? ` fallbacks=${opts.exchangeFallbacks}` : ''}`,
+    );
     logger.info(`时间周期: ${opts.timeframe}`);
     logger.info(`历史 K 线数量: ${opts.bars}`);
     logger.info(`开始时间: ${opts.startTime}`);
@@ -266,7 +276,11 @@ async function main() {
     logger.info('='.repeat(60));
 
     try {
-        const repo = new KlinesRepository();
+        const repo = new KlinesRepository({
+            exchangeId: opts.exchange,
+            marketType: opts.marketType,
+            exchangeFallbacks: opts.exchangeFallbacks,
+        });
         const builder = new ChartBuilder();
         const client = await VLMClient.fromActiveProvider();
         

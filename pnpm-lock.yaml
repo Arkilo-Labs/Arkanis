@@ -11,6 +11,9 @@ importers:
       axios:
         specifier: ^1.6.0
         version: 1.13.2
+      ccxt:
+        specifier: ^4.5.29
+        version: 4.5.29
       chokidar:
         specifier: ^5.0.0
         version: 5.0.0
@@ -755,6 +758,10 @@ packages:
 
   caseless@0.12.0:
     resolution: {integrity: sha512-4tYFyifaFfGacoiObjJegolkwSU4xQNGbVgUiNYVUxbQ2x2lUsFvY4hVgVzGiIe6WLOPqycWXA40l+PWsxthUw==}
+
+  ccxt@4.5.29:
+    resolution: {integrity: sha512-EYSpexaDdNh6SSDK18p7cltXwrohqp0H+II55wvdytwF1M3SoNYR9TsfmchOa/FjhYiBJnr2tOU8WDJLSj7ULw==}
+    engines: {node: '>=15.0.0'}
 
   chalk@4.1.2:
     resolution: {integrity: sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA==}
@@ -2808,6 +2815,13 @@ snapshots:
   callsites@3.1.0: {}
 
   caseless@0.12.0: {}
+
+  ccxt@4.5.29:
+    dependencies:
+      ws: 8.17.1
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   chalk@4.1.2:
     dependencies:

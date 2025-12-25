@@ -14,7 +14,7 @@ import { loadBars } from './core/marketData.js';
 import { renderChartPng } from './core/chartShots.js';
 import { screenshotPage } from './core/liquidationShot.js';
 import { computeMacd, computeRsi } from './core/indicators.js';
-import { fetchBinanceOrderbook, summarizeOrderbook } from './core/orderbook.js';
+import { fetchOrderbook, summarizeOrderbook } from './core/orderbook.js';
 import { withRetries, withTimeout } from './core/runtime.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,6 +33,17 @@ async function main() {
     program
         .name('trade-roundtable')
         .option('--symbol <symbol>', '交易对', 'BTCUSDT')
+        .option('--exchange <id>', '交易所（ccxt exchangeId）', process.env.MARKET_EXCHANGE || 'binance')
+        .option(
+            '--market-type <type>',
+            '市场类型：spot|future|swap（兼容 futures）',
+            process.env.MARKET_MARKET_TYPE || process.env.BINANCE_MARKET || 'futures',
+        )
+        .option(
+            '--exchange-fallbacks <list>',
+            '失败切换交易所（逗号分隔 ccxt exchangeId）',
+            process.env.MARKET_EXCHANGE_FALLBACKS || '',
+        )
         .option('--bars <n>', 'K线数量', (v) => parseInt(v, 10), 250)
         .option('--primary <tf>', '主周期', '15m')
         .option('--aux <tf>', '辅助周期', '1h')
@@ -54,6 +65,10 @@ async function main() {
         .parse();
 
     const opts = program.opts();
+    const exchangeFallbacks = String(opts.exchangeFallbacks || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
     const sessionId = newSessionId();
     const sessionOut = join(opts.outputDir, sessionId);
     const chartsDir = join(sessionOut, 'charts');
@@ -74,6 +89,9 @@ async function main() {
         logger.info(`Session: ${sessionId}`);
         logger.info(`Symbol: ${opts.symbol}`);
         logger.info(`Timeframes: ${opts.primary} + ${opts.aux}`);
+        logger.info(
+            `Market: exchange=${opts.exchange} marketType=${opts.marketType}${exchangeFallbacks.length ? ` fallbacks=${exchangeFallbacks.join(',')}` : ''}`,
+        );
         if (opts.skipMcp) logger.info('MCP: 已跳过 (--skip-mcp)');
 
         if (opts.mcpDiagnose) {
@@ -116,11 +134,27 @@ async function main() {
         const [primaryBars, auxBars] = await Promise.all([
             loadBars(
                 { symbol: opts.symbol, timeframe: opts.primary, barsCount: opts.bars },
-                { logger, prefer: opts.dataSource, dbTimeoutMs: opts.dbTimeoutMs, exchangeTimeoutMs: opts.exchangeTimeoutMs },
+                {
+                    logger,
+                    prefer: opts.dataSource,
+                    dbTimeoutMs: opts.dbTimeoutMs,
+                    exchangeTimeoutMs: opts.exchangeTimeoutMs,
+                    exchangeId: opts.exchange,
+                    marketType: opts.marketType,
+                    exchangeFallbacks,
+                },
             ),
             loadBars(
                 { symbol: opts.symbol, timeframe: opts.aux, barsCount: opts.bars },
-                { logger, prefer: opts.dataSource, dbTimeoutMs: opts.dbTimeoutMs, exchangeTimeoutMs: opts.exchangeTimeoutMs },
+                {
+                    logger,
+                    prefer: opts.dataSource,
+                    dbTimeoutMs: opts.dbTimeoutMs,
+                    exchangeTimeoutMs: opts.exchangeTimeoutMs,
+                    exchangeId: opts.exchange,
+                    marketType: opts.marketType,
+                    exchangeFallbacks,
+                },
             ),
         ]);
 
@@ -136,7 +170,17 @@ async function main() {
         let orderbookSummary = null;
         try {
             const ob = await withTimeout(
-                withRetries(() => fetchBinanceOrderbook({ symbol: opts.symbol, limit: 1000, market: 'futures' }), { retries: 1, baseDelayMs: 1200 }),
+                withRetries(
+                    () =>
+                        fetchOrderbook({
+                            exchangeId: opts.exchange,
+                            marketType: opts.marketType,
+                            symbol: opts.symbol,
+                            limit: 200,
+                            logger,
+                        }),
+                    { retries: 1, baseDelayMs: 1200 },
+                ),
                 30000,
                 '挂单薄',
             );

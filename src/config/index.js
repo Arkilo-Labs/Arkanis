@@ -128,8 +128,16 @@ export const vlmConfig = {
  * 市场数据表配置
  */
 export const marketDataConfig = {
+    assetClass: getEnv('MARKET_ASSET_CLASS', 'crypto'),
     exchange: getEnv('MARKET_EXCHANGE', 'binance'),
-    market: getEnv('BINANCE_MARKET', 'futures'),
+    marketType: getEnv('MARKET_MARKET_TYPE', getEnv('BINANCE_MARKET', 'futures')),
+    venue: getEnv('MARKET_VENUE', ''),
+    exchangeFallbacks: getEnv('MARKET_EXCHANGE_FALLBACKS', ''),
+    ccxt: {
+        enableRateLimit: getEnvBool('CCXT_ENABLE_RATE_LIMIT', true),
+        timeoutMs: getEnvInt('CCXT_TIMEOUT_MS', 20000),
+        sandbox: getEnvBool('CCXT_SANDBOX', false),
+    },
     instrumentsTable: getEnv('MARKET_INSTRUMENTS_TABLE', 'instruments'),
     klines1mTable: getEnv('MARKET_KLINES_1M_TABLE', 'klines_1m'),
 };

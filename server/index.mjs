@@ -1593,6 +1593,13 @@ const ALLOWED_CONFIG_KEYS = [
     'LOG_LEVEL',
     'DEFAULT_SYMBOL', 'DEFAULT_TIMEFRAME', 'DEFAULT_BARS',
     'MARKET_EXCHANGE',
+    'MARKET_MARKET_TYPE',
+    'MARKET_EXCHANGE_FALLBACKS',
+    'MARKET_ASSET_CLASS',
+    'MARKET_VENUE',
+    'CCXT_ENABLE_RATE_LIMIT',
+    'CCXT_TIMEOUT_MS',
+    'CCXT_SANDBOX',
     'BINANCE_MARKET'
 ];
 
@@ -1627,7 +1634,20 @@ const CONFIG_SCHEMA = {
     },
     defaults: {
         label: '默认参数',
-        items: ['DEFAULT_SYMBOL', 'DEFAULT_TIMEFRAME', 'DEFAULT_BARS', 'MARKET_EXCHANGE', 'BINANCE_MARKET']
+        items: [
+            'DEFAULT_SYMBOL',
+            'DEFAULT_TIMEFRAME',
+            'DEFAULT_BARS',
+            'MARKET_EXCHANGE',
+            'MARKET_MARKET_TYPE',
+            'MARKET_EXCHANGE_FALLBACKS',
+            'MARKET_ASSET_CLASS',
+            'MARKET_VENUE',
+            'CCXT_ENABLE_RATE_LIMIT',
+            'CCXT_TIMEOUT_MS',
+            'CCXT_SANDBOX',
+            'BINANCE_MARKET',
+        ]
     }
 };
 

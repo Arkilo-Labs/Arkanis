@@ -1,3 +1,5 @@
+import { getExchangeClient } from '../../src/data/exchangeClient.js';
+
 function normalizeBaseUrlForMarket(market) {
     const m = String(market || '').trim().toLowerCase();
     if (m === 'spot') return 'https://api.binance.com';
@@ -35,6 +37,34 @@ export async function fetchBinanceOrderbook({ symbol, limit = 1000, market = 'fu
         bids: bids.map(([p, q]) => ({ price: toNumber(p), qty: toNumber(q) })).filter((x) => x.price && x.qty),
         asks: asks.map(([p, q]) => ({ price: toNumber(p), qty: toNumber(q) })).filter((x) => x.price && x.qty),
     };
+}
+
+export async function fetchOrderbook({
+    exchangeId = 'binance',
+    marketType = 'futures',
+    symbol,
+    limit = 200,
+    fallbackToBinanceRest = true,
+    logger = null,
+}) {
+    try {
+        const client = getExchangeClient({ exchangeId, marketType, logger });
+        const ob = await client.fetchOrderbook({ symbol, limit });
+        return {
+            lastUpdateId: null,
+            bids: ob.bids,
+            asks: ob.asks,
+            meta: { exchangeId: ob.exchangeId, symbol: ob.symbol, tsMs: ob.tsMs },
+        };
+    } catch (e) {
+        const msg = String(e?.message || '');
+        logger?.warn?.(`ccxt 挂单薄失败：${exchangeId} ${symbol} -> ${msg}`);
+        if (fallbackToBinanceRest && String(exchangeId).toLowerCase() === 'binance') {
+            const ob = await fetchBinanceOrderbook({ symbol, limit: Math.min(limit, 1000), market: marketType });
+            return { ...ob, meta: { exchangeId: 'binance', symbol } };
+        }
+        throw e;
+    }
 }
 
 export function summarizeOrderbook({ orderbook, referencePrice, bands = [0.001, 0.002, 0.005] }) {

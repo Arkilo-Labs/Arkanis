@@ -250,7 +250,7 @@ Run Tab 的交互说明见 `docs/RUN_TAB_GUIDE.md`。最小配置：
 以 `.env.example` 为准，主要包括：
 
 - 数据库：`DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_*_DATABASE`
-- 市场数据：`MARKET_EXCHANGE`、`BINANCE_MARKET`
+- 市场数据：`MARKET_EXCHANGE`、`MARKET_MARKET_TYPE`、`MARKET_EXCHANGE_FALLBACKS`（兼容旧的 `BINANCE_MARKET`）
 - Prompt：`PROMPT_NAME`（对应 `prompts/<name>.md`）
 - 图表：`CHART_*`
 - 日志：`LOG_LEVEL`
@@ -340,10 +340,12 @@ pnpm db:migrate:market
 
 ### 7.2 新交易所 / 新市场
 
-落点：`src/data/exchangeClient.js`
+落点：`src/data/exchangeClient.js`（ccxt + failover）
 
 - 先把“拉 1m 原始 K 线”的接口对齐
 - 保持 `instruments(exchange, market, symbol)` 的唯一键不变（便于多来源扩展）
+- 需要更强的“多资产类别”扩展时，优先在 `instruments.asset_class/venue/metadata` 上做增量演进（见 `migrations/market_data/002_instruments_extensibility.cjs`）
+- 使用与环境变量说明：`docs/MARKET_DATA_CCXT.md`
 
 ### 7.3 新图表能力（交互式图表 / 指标 / 标注）
 
