@@ -42,6 +42,7 @@
         "puppeteer": "^21.6.0",
         "sharp": "^0.33.0",
         "stripe": "^17.7.0",
+        "yahoo-finance2": "^3.10.2",
         "zod": "^3.22.4"
     },
     "devDependencies": {

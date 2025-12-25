@@ -138,6 +138,9 @@ export const marketDataConfig = {
         timeoutMs: getEnvInt('CCXT_TIMEOUT_MS', 20000),
         sandbox: getEnvBool('CCXT_SANDBOX', false),
     },
+    yahoo: {
+        timeoutMs: getEnvInt('YAHOO_TIMEOUT_MS', 20000),
+    },
     instrumentsTable: getEnv('MARKET_INSTRUMENTS_TABLE', 'instruments'),
     klines1mTable: getEnv('MARKET_KLINES_1M_TABLE', 'klines_1m'),
 };

@@ -24,6 +24,7 @@ import {
 } from '../src/data/index.js';
 import { ChartBuilder, ChartInput } from '../src/chart/index.js';
 import { VLMClient, ENHANCED_USER_PROMPT_TEMPLATE, drawInstructionToOverlay } from '../src/vlm/index.js';
+import { getMarketDataClient, detectAssetClass } from '../src/data/marketDataClient.js';
 import logger from '../src/utils/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -147,6 +148,7 @@ async function main() {
         .option('--skip-vlm', '跳过 VLM 调用')
         .option('--enable-4x-chart', '启用 4 倍辅助周期图')
         .option('--aux-timeframe <tf>', '辅助周期')
+        .option('--asset-class <type>', '资产类型：crypto|stock|forex|commodity（默认自动检测）', '')
         .option('--session-id <id>', '会话ID')
         .option('--skip-png', '跳过PNG生成')
         .parse();
@@ -171,40 +173,77 @@ async function main() {
     if (endTime) logger.info(`[配置] 结束时间: ${endTime.toISOString()}`);
     logger.info(`[配置] 输出目录: ${outputDir}`);
 
+    // 检测资产类型
+    const resolvedAssetClass = opts.assetClass || detectAssetClass(opts.symbol);
+    const isYahoo = ['stock', 'forex', 'commodity', 'index'].includes(resolvedAssetClass);
+    if (isYahoo) {
+        logger.info(`[配置] 资产类型: ${resolvedAssetClass} (使用 Yahoo Finance)`);
+    }
+
     try {
-        const repo = new KlinesRepository({
-            exchangeId: opts.exchange,
-            marketType: opts.marketType,
-            exchangeFallbacks: opts.exchangeFallbacks,
-        });
         const builder = new ChartBuilder();
 
         // 获取 K 线数据
-        logger.info('\n[步骤1] 从数据库获取 K 线数据...');
+        logger.info('\n[步骤1] 获取 K 线数据...');
 
         let bars;
-        if (startTime && endTime) {
-            bars = await repo.getBarsByRange({
+        if (isYahoo) {
+            // Yahoo Finance 数据源
+            const yahooClient = getMarketDataClient({
                 symbol: opts.symbol,
-                timeframe: opts.timeframe,
-                startTime,
-                endTime,
+                assetClass: resolvedAssetClass,
+                logger: { info: (m) => logger.info(`[Yahoo] ${m}`), warn: (m) => logger.warn(`[Yahoo] ${m}`) },
             });
-        } else if (endTime) {
-            bars = await repo.getBars({
+            const now = Date.now();
+            const intervalMs = {
+                '1m': 60 * 1000, '5m': 5 * 60 * 1000, '15m': 15 * 60 * 1000, '30m': 30 * 60 * 1000,
+                '1h': 60 * 60 * 1000, '4h': 4 * 60 * 60 * 1000, '1d': 24 * 60 * 60 * 1000,
+            };
+            const tfMs = intervalMs[opts.timeframe] || 60 * 60 * 1000;
+            // 扩大时间范围 3 倍，确保获取足够数据（考虑非交易时段、周末等）
+            const startMs = (endTime ? endTime.getTime() : now) - opts.bars * tfMs * 3;
+            const endMs = endTime ? endTime.getTime() : now;
+
+            const rawBars = await yahooClient.fetchKlines({
                 symbol: opts.symbol,
-                timeframe: opts.timeframe,
-                endTime,
-                limit: opts.bars,
+                interval: opts.timeframe,
+                startMs,
+                endMs,
+                limit: opts.bars + 50,  // 额外获取 50 根用于指标预热
             });
+            bars = rawBars.map((r) => r.toBar());
         } else {
-            // 默认获取最新数据，强制更新
-            bars = await repo.getBars({
-                symbol: opts.symbol,
-                timeframe: opts.timeframe,
-                limit: opts.bars,
-                forceUpdate: true,
+            // Crypto: 使用 KlinesRepository
+            const repo = new KlinesRepository({
+                exchangeId: opts.exchange,
+                marketType: opts.marketType,
+                exchangeFallbacks: opts.exchangeFallbacks,
             });
+
+            const fetchLimit = opts.bars + 50;  // 额外获取 50 根用于指标预热
+
+            if (startTime && endTime) {
+                bars = await repo.getBarsByRange({
+                    symbol: opts.symbol,
+                    timeframe: opts.timeframe,
+                    startTime,
+                    endTime,
+                });
+            } else if (endTime) {
+                bars = await repo.getBars({
+                    symbol: opts.symbol,
+                    timeframe: opts.timeframe,
+                    endTime,
+                    limit: fetchLimit,
+                });
+            } else {
+                bars = await repo.getBars({
+                    symbol: opts.symbol,
+                    timeframe: opts.timeframe,
+                    limit: fetchLimit,
+                    forceUpdate: true,
+                });
+            }
         }
 
         if (!bars.length) {
@@ -216,6 +255,16 @@ async function main() {
         logger.info(`       时间范围: ${bars[0].ts.toISOString()} ~ ${bars[bars.length - 1].ts.toISOString()}`);
         logger.info(`       价格范围: ${Math.min(...bars.map((b) => b.low)).toFixed(2)} ~ ${Math.max(...bars.map((b) => b.high)).toFixed(2)}`);
 
+        // 技术指标预热：保留完整数据用于指标计算，裁剪后的数据用于绘图
+        // BOLL(20)、MACD(26+9=35)、ADX(14) 最大预热需求约 50 根
+        const WARMUP_BARS = 50;
+        const fullBars = bars;  // 完整数据用于指标计算
+        const displayBars = bars.length > opts.bars ? bars.slice(-opts.bars) : bars;  // 裁剪后用于显示
+
+        if (fullBars.length > displayBars.length) {
+            logger.info(`       预热数据: ${fullBars.length - displayBars.length} 根（用于指标计算）`);
+        }
+
         // 准备图表数据收集（用于前端渲染）
         const chartData = {
             base: null,
@@ -224,19 +273,21 @@ async function main() {
             decision: null,
         };
 
-        // 构建基础图表
+        // 构建基础图表（使用裁剪后的数据，但指标使用完整数据）
         logger.info('\n[步骤2] 渲染基础图表...');
         const chartInput = new ChartInput({
-            bars,
+            bars: displayBars,
             symbol: opts.symbol,
             timeframe: opts.timeframe,
+            // 传入完整数据用于指标计算
+            indicatorBars: fullBars,
         });
 
         // 收集基础图表数据
         chartData.base = {
             symbol: opts.symbol,
             timeframe: opts.timeframe,
-            bars: bars.map(b => b.toDict()),
+            bars: displayBars.map(b => b.toDict()),
             overlays: [],
         };
 

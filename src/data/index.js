@@ -28,6 +28,18 @@ export {
     closeExchangeClient,
     TIMEFRAME_TO_INTERVAL,
 } from './exchangeClient.js';
+export {
+    YahooFinanceClient,
+    getYahooFinanceClient,
+    closeYahooFinanceClient,
+    normalizeToYahooSymbol,
+    yahooSymbolToOriginal,
+} from './yahooFinanceClient.js';
+export {
+    getMarketDataClient,
+    closeAllMarketDataClients,
+    detectAssetClass,
+} from './marketDataClient.js';
 
 export { getPrimaryOrganizationForUserId } from './orgRepository.js';
 export {

@@ -44,6 +44,11 @@ async function main() {
             '失败切换交易所（逗号分隔 ccxt exchangeId）',
             process.env.MARKET_EXCHANGE_FALLBACKS || '',
         )
+        .option(
+            '--asset-class <type>',
+            '资产类型：crypto|stock|forex|commodity（默认自动检测）',
+            '',
+        )
         .option('--bars <n>', 'K线数量', (v) => parseInt(v, 10), 250)
         .option('--primary <tf>', '主周期', '15m')
         .option('--aux <tf>', '辅助周期', '1h')
@@ -90,7 +95,7 @@ async function main() {
         logger.info(`Symbol: ${opts.symbol}`);
         logger.info(`Timeframes: ${opts.primary} + ${opts.aux}`);
         logger.info(
-            `Market: exchange=${opts.exchange} marketType=${opts.marketType}${exchangeFallbacks.length ? ` fallbacks=${exchangeFallbacks.join(',')}` : ''}`,
+            `Market: exchange=${opts.exchange} marketType=${opts.marketType}${exchangeFallbacks.length ? ` fallbacks=${exchangeFallbacks.join(',')}` : ''}${opts.assetClass ? ` assetClass=${opts.assetClass}` : ''}`,
         );
         if (opts.skipMcp) logger.info('MCP: 已跳过 (--skip-mcp)');
 
@@ -133,7 +138,7 @@ async function main() {
         logger.info('加载市场数据（会自动补全并入库）');
         const [primaryBars, auxBars] = await Promise.all([
             loadBars(
-                { symbol: opts.symbol, timeframe: opts.primary, barsCount: opts.bars },
+                { symbol: opts.symbol, timeframe: opts.primary, barsCount: opts.bars, assetClass: opts.assetClass || undefined },
                 {
                     logger,
                     prefer: opts.dataSource,
@@ -145,7 +150,7 @@ async function main() {
                 },
             ),
             loadBars(
-                { symbol: opts.symbol, timeframe: opts.aux, barsCount: opts.bars },
+                { symbol: opts.symbol, timeframe: opts.aux, barsCount: opts.bars, assetClass: opts.assetClass || undefined },
                 {
                     logger,
                     prefer: opts.dataSource,
@@ -257,7 +262,7 @@ async function main() {
         const roundtable = new Roundtable({
             agents,
             settings: agentsConfig.roundtable_settings,
-            mcpClient: opts.skipMcp ? { call: async () => null, stopAll: async () => {} } : mcpClient,
+            mcpClient: opts.skipMcp ? { call: async () => null, stopAll: async () => { } } : mcpClient,
             logger,
         });
 
