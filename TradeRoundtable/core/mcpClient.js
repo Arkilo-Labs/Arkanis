@@ -1,4 +1,21 @@
 import { spawn } from 'child_process';
+import { once } from 'events';
+
+function withTimeout(promise, timeoutMs, label) {
+    const t = Math.max(1, Number(timeoutMs) || 0);
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`${label} 超时（${t}ms）`)), t);
+        promise
+            .then((v) => {
+                clearTimeout(timer);
+                resolve(v);
+            })
+            .catch((e) => {
+                clearTimeout(timer);
+                reject(e);
+            });
+    });
+}
 
 function jsonLine(obj) {
     return JSON.stringify(obj);
@@ -176,8 +193,17 @@ export class McpClient {
     async stopAll() {
         for (const [name, state] of this._servers.entries()) {
             try {
+                if (state.child.killed) continue;
+
+                // 先温和关闭，再兜底强杀，避免进程句柄把 Node 挂住
                 state.child.kill();
+                await withTimeout(Promise.race([once(state.child, 'exit'), once(state.child, 'close')]), 3000, `mcp:${name} 关闭`);
             } catch (e) {
+                try {
+                    state.child.kill('SIGKILL');
+                } catch {
+                    // ignore
+                }
                 this.logger.warn(`[mcp:${name}] 关闭失败：${e.message}`);
             }
         }

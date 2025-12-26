@@ -149,5 +149,62 @@ export class SearxngClient {
             return this._searchViaDocker({ query: q, language, categories, recencyHours, limit });
         }
     }
+
+    async searchMultiPage({ query, language, categories = 'general', recencyHours = 24, resultsPerPage = 10, pages = 1 } = {}) {
+        const q = String(query || '').trim();
+        if (!q) throw new Error('SearXNG searchMultiPage 需要 query');
+
+        const allResults = [];
+        const seen = new Set();
+
+        for (let p = 1; p <= Math.min(pages, 5); p++) {
+            try {
+                const timeRange = this._toTimeRange ? this._toTimeRange(recencyHours) : toTimeRange(recencyHours);
+                const url = this._buildSearchUrl({ query: q, language, categories, timeRange, pageno: p });
+
+                let pageResults = [];
+                try {
+                    const controller = new AbortController();
+                    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+                    try {
+                        const res = await fetch(url, {
+                            method: 'GET',
+                            headers: { Accept: 'application/json' },
+                            signal: controller.signal,
+                        });
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        const json = await res.json();
+                        pageResults = this._normalizeResults(json, { limit: resultsPerPage });
+                    } finally {
+                        clearTimeout(timer);
+                    }
+                } catch (e) {
+                    if (!this.dockerFallbackContainer) throw e;
+                    this.logger?.warn?.(`[SearXNG] 第${p}页 HTTP 失败，改用 docker：${e.message}`);
+                    const { stdout } = await execFileCapture(
+                        'docker',
+                        ['exec', this.dockerFallbackContainer, 'wget', '-qO-', url],
+                        { timeoutMs: this.timeoutMs, label: `SearXNG(docker:${this.dockerFallbackContainer})` },
+                    );
+                    const json = JSON.parse(stdout);
+                    pageResults = this._normalizeResults(json, { limit: resultsPerPage });
+                }
+
+                for (const r of pageResults) {
+                    if (!seen.has(r.url)) {
+                        seen.add(r.url);
+                        allResults.push(r);
+                    }
+                }
+
+                if (pageResults.length < resultsPerPage * 0.5) break;
+            } catch (e) {
+                this.logger?.warn?.(`[SearXNG] 第${p}页搜索失败：${e.message}`);
+                break;
+            }
+        }
+
+        return allResults;
+    }
 }
 

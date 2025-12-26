@@ -14,13 +14,21 @@ function buildAgentFromConfig({ agentConfig, providers, promptStore, logger }) {
     const provider = providers.get(agentConfig.provider_ref);
     if (!provider) throw new Error(`agents.json 引用未知 provider_ref: ${agentConfig.provider_ref}`);
     const promptText = promptStore.getPrompt(agentConfig.prompt);
+    const requestedImages = Boolean(agentConfig.can_see_images);
+    const providerSupportsVision = Boolean(provider.supportsVision);
+    const canSeeImages = requestedImages && providerSupportsVision;
+    if (requestedImages && !providerSupportsVision) {
+        logger?.warn?.(
+            `[配置] ${agentConfig.name} 设置 can_see_images=true，但 provider(${agentConfig.provider_ref}) 不支持图片；已自动关闭图片输入`,
+        );
+    }
     return new Agent({
         name: agentConfig.name,
         role: agentConfig.role,
         order: agentConfig.order,
         systemPrompt: promptText,
         provider,
-        canSeeImages: agentConfig.can_see_images,
+        canSeeImages,
         tools: agentConfig.tools,
         logger,
     });

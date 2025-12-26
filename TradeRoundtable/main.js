@@ -19,6 +19,8 @@ import { withRetries, withTimeout } from './core/runtime.js';
 import { SearxngClient } from './core/searxngClient.js';
 import { FirecrawlClient } from './core/firecrawlClient.js';
 import { runNewsPipeline } from './core/newsPipeline.js';
+import { closeExchangeClient } from '../src/data/exchangeClient.js';
+import { closePools as closePgPools } from '../src/data/pgClient.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -29,6 +31,59 @@ function newSessionId() {
     return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}_${pad(d.getUTCHours())}${pad(
         d.getUTCMinutes(),
     )}${pad(d.getUTCSeconds())}`;
+}
+
+function dumpActiveHandles(logger) {
+    const handles = typeof process._getActiveHandles === 'function' ? process._getActiveHandles() : [];
+    const requests = typeof process._getActiveRequests === 'function' ? process._getActiveRequests() : [];
+
+    const fmt = (x) => {
+        const name = x?.constructor?.name || typeof x;
+        const details = [];
+        if (x?.hasOwnProperty?.('fd')) details.push(`fd=${x.fd}`);
+        if (x?.hasOwnProperty?.('pid')) details.push(`pid=${x.pid}`);
+        if (name === 'Socket') {
+            const ra = x?.remoteAddress ? String(x.remoteAddress) : '';
+            const rp = x?.remotePort ? String(x.remotePort) : '';
+            const la = x?.localAddress ? String(x.localAddress) : '';
+            const lp = x?.localPort ? String(x.localPort) : '';
+            const remote = ra && rp ? `${ra}:${rp}` : ra || '';
+            const local = la && lp ? `${la}:${lp}` : la || '';
+            if (remote) details.push(`remote=${remote}`);
+            if (local) details.push(`local=${local}`);
+        }
+        return details.length ? `${name}(${details.join(',')})` : name;
+    };
+
+    logger.warn(`[退出诊断] active_handles=${handles.length} active_requests=${requests.length}`);
+    const list = handles.slice(0, 20).map(fmt).join(', ');
+    if (list) logger.warn(`[退出诊断] handles: ${list}${handles.length > 20 ? ' ...' : ''}`);
+}
+
+async function closeUndiciDispatcher(logger) {
+    try {
+        const undici = await import('undici');
+        const dispatcher = undici?.getGlobalDispatcher?.();
+        if (dispatcher && typeof dispatcher.close === 'function') {
+            await dispatcher.close();
+            logger.info('[退出清理] undici dispatcher 已关闭');
+        }
+    } catch {
+        // 没有 undici 或版本不支持时忽略
+    }
+}
+
+function scheduleForcedExit({ logger, timeoutMs }) {
+    const t = Math.max(0, Number(timeoutMs) || 0);
+    if (t <= 0) return;
+
+    const timer = setTimeout(() => {
+        const code = Number.isInteger(process.exitCode) ? process.exitCode : 0;
+        dumpActiveHandles(logger);
+        logger.warn(`[退出诊断] ${t}ms 后仍未退出，强制结束进程（exitCode=${code}）`);
+        process.exit(code);
+    }, t);
+    timer.unref?.();
 }
 
 async function main() {
@@ -65,6 +120,8 @@ async function main() {
         .option('--skip-news', '跳过新闻收集（SearXNG + Firecrawl）')
         .option('--skip-liquidation', '跳过清算地图截图')
         .option('--skip-mcp', '跳过 MCP 工具调用')
+        .option('--exit-timeout-ms <n>', '结束后强制退出超时(ms)，0=禁用', (v) => parseInt(v, 10), 2500)
+        .option('--dump-active-handles', '输出阻塞退出的活跃句柄（用于诊断）')
         .option('--mcp-verbose', '打印 MCP 的 stderr 原始输出（默认只打印错误）')
         .option('--mcp-silent', '完全静默 MCP stderr（不打印任何 MCP 输出）')
         .option('--mcp-diagnose', '只做 MCP 诊断（tools/list + 试调用），不跑圆桌')
@@ -239,6 +296,10 @@ async function main() {
                     fileName: 'liquidation.png',
                     waitMs: opts.pageWaitMs,
                     fullPage: false,
+                    // 清算图表通常在 canvas，放大分辨率并裁剪最大 canvas，模型更容易读价格轴与结构
+                    preferChartClip: true,
+                    deviceScaleFactor: 2,
+                    clipPadding: 48,
                 });
                 logger.info(`清算地图已保存：${liquidationPng}`);
             } catch (e) {
@@ -355,7 +416,13 @@ async function main() {
             imagePaths: [primaryPng, auxPng, ...(liquidationPng ? [liquidationPng] : [])],
         });
 
-        const decisionText = transcript.find((t) => t.name === agentsConfig.roundtable_settings.final_agent)?.text ?? '';
+        let decisionText = '';
+        for (let i = transcript.length - 1; i >= 0; i--) {
+            if (transcript[i]?.name === agentsConfig.roundtable_settings.final_agent) {
+                decisionText = transcript[i]?.text ?? '';
+                break;
+            }
+        }
         const outJson = join(sessionOut, 'decision.json');
         const outTxt = join(sessionOut, 'transcript.txt');
 
@@ -368,9 +435,15 @@ async function main() {
 
         // 保存截断后的上下文，便于回放
         writeText(join(sessionOut, 'context_tail.txt'), context);
-    } finally {
-        await mcpClient.stopAll();
-    }
+	    } finally {
+	        await mcpClient.stopAll();
+	        await closePgPools();
+	        await closeExchangeClient();
+	        await closeUndiciDispatcher(logger);
+
+	        if (opts.dumpActiveHandles) dumpActiveHandles(logger);
+	        scheduleForcedExit({ logger, timeoutMs: opts.exitTimeoutMs });
+	    }
 }
 
 main().catch((e) => {

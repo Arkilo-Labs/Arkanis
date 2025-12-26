@@ -58,6 +58,7 @@ const NewsPipelineSettingsSchema = z.object({
         .object({
             queries_max: z.number().int().positive().default(4),
             results_per_query: z.number().int().positive().default(10),
+            pages_per_query: z.number().int().min(1).max(5).default(1),
             language: z.string().min(1).optional().default('zh-CN'),
             recency_hours: z.number().int().positive().optional().default(24),
         })

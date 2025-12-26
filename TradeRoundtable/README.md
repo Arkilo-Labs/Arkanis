@@ -55,6 +55,9 @@ node TradeRoundtable/main.js --symbol BTCUSDT --bars 250 --data-source exchange
 - `TradeRoundtable/logs/<sessionId>.log`
 - `TradeRoundtable/outputs/<sessionId>/news_briefing.md`（如未跳过新闻收集）
 
+说明：
+- `charts/liquidation.png` 会默认提高截图分辨率，并尽量裁剪到主要图表区域，方便模型读取价格轴与结构。
+
 ## 常见问题
 
 - 数据库/补全：沿用仓库现有 `KlinesRepository` 行为（数据不足会自动从交易所补全并入库）。

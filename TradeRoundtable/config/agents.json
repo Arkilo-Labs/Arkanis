@@ -24,16 +24,17 @@
       "api_key_env": ""
     },
     "search": {
-      "queries_max": 4,
-      "results_per_query": 10,
+      "queries_max": 6,
+      "results_per_query": 15,
+      "pages_per_query": 2,
       "language": "zh-CN",
       "recency_hours": 24
     },
     "fetch": {
-      "max_urls": 6,
+      "max_urls": 10,
       "concurrency": 3,
-      "max_markdown_chars_per_url": 7000,
-      "max_total_markdown_chars": 22000
+      "max_markdown_chars_per_url": 6000,
+      "max_total_markdown_chars": 35000
     }
   },
   "subagents": [
@@ -81,11 +82,11 @@
     },
     {
       "name": "DeepSeek_Leader",
-      "provider_ref": "yunwu_grok_4_fast",
+      "provider_ref": "deepseek_api",
       "role": "DecisionMaker",
       "prompt": "deepseek_leader.md",
       "order": 5,
-      "can_see_images": true,
+      "can_see_images": false,
       "is_final_decision": true
     },
     {

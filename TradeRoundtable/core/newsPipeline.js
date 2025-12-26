@@ -36,7 +36,7 @@ async function mapWithConcurrency(items, limit, fn) {
     let nextIndex = 0;
 
     const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
-        for (;;) {
+        for (; ;) {
             const i = nextIndex++;
             if (i >= items.length) return;
             results[i] = await fn(items[i], i);
@@ -108,6 +108,7 @@ export async function runNewsPipeline({
     const recencyHours = Number(searchCfg.recency_hours ?? 24);
     const queriesMax = Number(searchCfg.queries_max ?? 4);
     const resultsPerQuery = Number(searchCfg.results_per_query ?? 10);
+    const pagesPerQuery = Number(searchCfg.pages_per_query ?? 1);
     const language = String(searchCfg.language || 'zh-CN');
 
     const maxUrls = Number(fetchCfg.max_urls ?? 6);
@@ -133,8 +134,14 @@ export async function runNewsPipeline({
             `  "recency_hours": ${recencyHours}`,
             `}`,
             ``,
+            `# 查询生成策略`,
+            `- 覆盖多维度：标的本身、上下游产业链、宏观政策、监管动态、市场情绪`,
+            `- 混合语言：中文+英文各一组（如 "比特币 ETF" + "Bitcoin ETF"）`,
+            `- 分时效：近12h紧急新闻 + 近24h背景分析`,
+            `- 包含负面筛选：避开广告、招聘、论坛帖等低质内容`,
+            ``,
             `# 约束`,
-            `- queries 数量不超过 ${queriesMax}，每条尽量短，覆盖：标的相关、行业/监管/宏观、重大风险。`,
+            `- queries 数量不超过 ${queriesMax}，每条尽量短但覆盖面广`,
             `- 不要输出解释性文字，不要加 Markdown。`,
         ].join('\n'),
         imagePaths: [],
@@ -149,15 +156,16 @@ export async function runNewsPipeline({
     }
     const clippedQueries = queries.slice(0, queriesMax);
 
-    logger?.info?.(`新闻管线：SearXNG 搜索（queries=${clippedQueries.length}）`);
+    logger?.info?.(`新闻管线：SearXNG 搜索（queries=${clippedQueries.length}, pages=${pagesPerQuery}）`);
     const resultsByQuery = [];
     for (const q of clippedQueries) {
-        const res = await searxngClient.search({
+        const res = await searxngClient.searchMultiPage({
             query: q,
             language,
             categories: 'general',
             recencyHours,
-            limit: resultsPerQuery,
+            resultsPerPage: resultsPerQuery,
+            pages: pagesPerQuery,
         });
         resultsByQuery.push(res);
     }
@@ -168,13 +176,19 @@ export async function runNewsPipeline({
             `# 任务`,
             `从下面的 SearXNG 结果里挑选要抓取的新闻 URL，用于后续 Firecrawl 抓取原文。`,
             ``,
+            `# URL 选择优先级`,
+            `1. 权威财经媒体 > 行业垂直媒体 > 社交平台`,
+            `2. 官方公告 > 深度分析 > 快讯`,
+            `3. 首发来源 > 转载`,
+            `4. 避开：纯视频页、登录墙、404风险页、论坛帖`,
+            ``,
             `# 要求`,
             `- 只选择与本次分析最相关的 ${maxUrls} 条以内`,
             `- 去重：同一事件尽量选 1 个最权威/最原始来源`,
-            `- 优先选择能直接呈现信息的页面（避免登录墙/纯列表页/视频页）`,
+            `- 优先选择能直接呈现信息的页面`,
             ``,
-            `# 输入：SearXNG 结果`,
-            formatSearchResultsForModel({ queries: clippedQueries, resultsByQuery, maxItems: 60 }),
+            `# 输入：SearXNG 结果（共 ${resultsByQuery.flat().length} 条）`,
+            formatSearchResultsForModel({ queries: clippedQueries, resultsByQuery, maxItems: 120 }),
             ``,
             `# 输出（必须是严格 JSON）`,
             `你只能输出一个 JSON 对象：`,
@@ -228,22 +242,33 @@ export async function runNewsPipeline({
     const briefingText = await collectorAgent.speak({
         contextText: [
             `# 任务`,
-            `基于下面的网页原文（Markdown），为「${symbol}」生成可交易的新闻简报。`,
+            `基于下面的网页原文（Markdown），为「${symbol}」生成「足够长、可直接被后续 agent 复用」的新闻整合稿。`,
             ``,
             `# 强制要求`,
             `- 只基于提供的原文，不要臆造来源/时间/数据`,
-            `- 必须输出「引用列表」，每条引用包含 URL，并在正文要点里用 [1][2] 这样的编号引用`,
+            `- 必须输出「引用列表」，每条引用包含 URL，并在正文要点/卡片里用 [1][2] 这样的编号引用`,
             `- 只关注未来 24h 可能影响方向/波动的变量`,
+            `- 必须把每条新闻“讲清楚”：发生了什么、为何重要、潜在交易影响、关键不确定性`,
             ``,
             `# 输出格式（必须是 Markdown）`,
             `你必须按以下结构输出：`,
-            `## 新闻主线（3~6条）`,
-            `- ... [1]`,
+            `## 新闻主线（5~10条）`,
+            `- 用一句话概括事件 + 影响方向/波动 + 关键条件 ... [1]`,
+            ``,
+            `## 逐条新闻卡片（按重要性排序，至少 8 条）`,
+            `### [1] <标题或事件名>`,
+            `- 来源/时间：...`,
+            `- 核心事实（3~6条）：...`,
+            `- 交易影响（多/空/双向/不确定）：...`,
+            `- 关键不确定性/需要验证：...`,
+            `- 原文关键句（可选，1~3条短摘录）："...""`,
+            ``,
+            `（重复以上卡片结构）`,
             ``,
             `## 情绪标签`,
             `Fear / Neutral / Greed（并给 1 句话理由）`,
             ``,
-            `## 24h 风险点（1~2个）`,
+            `## 24h 风险点（2~5个）`,
             `- ... [2]`,
             ``,
             `## 引用`,
@@ -265,4 +290,3 @@ export async function runNewsPipeline({
         scrapeResults,
     };
 }
-
