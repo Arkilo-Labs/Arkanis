@@ -379,11 +379,25 @@ async function main() {
         }
 
         const agents = buildAgents({ agentsConfig, providersConfig: providers, promptStore, logger });
+
+        let auditorAgent = null;
+        const auditSettings = agentsConfig.roundtable_settings?.audit_settings;
+        if (auditSettings?.enabled && auditSettings?.auditor_agent) {
+            const subagents = buildSubagents({ agentsConfig, providersConfig: providers, promptStore, logger });
+            auditorAgent = subagents.find((a) => a.name === auditSettings.auditor_agent);
+            if (!auditorAgent) {
+                logger.warn(`未找到配置的审计 Agent: ${auditSettings.auditor_agent}，审计功能已禁用`);
+            } else {
+                logger.info(`审计 Agent 已启用: ${auditorAgent.name}`);
+            }
+        }
+
         const roundtable = new Roundtable({
             agents,
             settings: agentsConfig.roundtable_settings,
-            mcpClient: opts.skipMcp ? { call: async () => null, stopAll: async () => { } } : mcpClient,
+            mcpClient: opts.skipMcp ? { call: async () => null, stopAll: async () => {} } : mcpClient,
             logger,
+            auditorAgent,
         });
 
         const contextSeed = [
@@ -431,6 +445,16 @@ async function main() {
 
         logger.info(`已输出：${outJson}`);
         logger.info(`已输出：${outTxt}`);
+
+        const auditReport = roundtable.generateAuditReport(sessionId);
+        if (auditReport) {
+            writeText(join(sessionOut, 'audit_report.json'), JSON.stringify(auditReport, null, 2));
+            const auditSummary = roundtable.generateAuditSummaryMarkdown(auditReport);
+            writeText(join(sessionOut, 'audit_summary.md'), auditSummary);
+            logger.info(`审计报告已保存：${join(sessionOut, 'audit_report.json')}`);
+            logger.info(`审计摘要已保存：${join(sessionOut, 'audit_summary.md')}`);
+        }
+
         logger.info('结束');
 
         // 保存截断后的上下文，便于回放

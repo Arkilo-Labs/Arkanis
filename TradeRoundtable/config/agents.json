@@ -8,7 +8,15 @@
     "llm_timeout_ms": 150000,
     "llm_retries": 1,
     "mcp_timeout_ms": 60000,
-    "debate_rules": "- 必须指出至少 1 条你不同意/质疑的点（引用“上一位发言”或上下文原话）。\n- 你的反驳必须给出可验证条件：什么情况下对方成立/你成立。\n- 如果你同意，也要补充一个可能失败的反例或风险触发条件。\n- 禁止纯复述；每段必须新增信息或更严格约束。"
+    "debate_rules": "- 必须指出至少 1 条你不同意/质疑的点（引用\"上一位发言\"或上下文原话）。\n- 你的反驳必须给出可验证条件：什么情况下对方成立/你成立。\n- 如果你同意，也要补充一个可能失败的反例或风险触发条件。\n- 禁止纯复述；每段必须新增信息或更严格约束。",
+    "audit_settings": {
+      "enabled": true,
+      "auditor_agent": "Quality_Auditor",
+      "strict_mode": "moderate",
+      "log_filtered": true,
+      "filter_threshold": 0.6,
+      "chairman_relax_factor": 0.1
+    }
   },
   "news_pipeline_settings": {
     "enabled": true,
@@ -44,6 +52,14 @@
       "role": "NewsCollector",
       "prompt": "news_collector.md",
       "order": 0,
+      "can_see_images": false
+    },
+    {
+      "name": "Quality_Auditor",
+      "provider_ref": "yunwu_grok_4_fast",
+      "role": "Auditor",
+      "prompt": "auditor.md",
+      "order": -1,
       "can_see_images": false
     }
   ],

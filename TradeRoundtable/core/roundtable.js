@@ -1,9 +1,11 @@
 export class Roundtable {
-    constructor({ agents, settings, mcpClient, logger }) {
+    constructor({ agents, settings, mcpClient, logger, auditorAgent = null }) {
         this.agents = agents;
         this.settings = settings;
         this.mcpClient = mcpClient;
         this.logger = logger;
+        this.auditorAgent = auditorAgent;
+        this.auditHistory = [];
     }
 
     _findLastTurn(transcript, predicate) {
@@ -32,6 +34,62 @@ export class Roundtable {
         } catch {
             return null;
         }
+    }
+
+    async _auditTurn({ turn, agent, text }) {
+        if (!this.auditorAgent) {
+            return null;
+        }
+
+        const auditPrompt = [
+            `# 审计任务`,
+            `- turn: ${turn}`,
+            `- speaker: ${agent.name} (${agent.role})`,
+            ``,
+            `# 待审计发言`,
+            text,
+        ].join('\n');
+
+        try {
+            const llmTimeoutMs = this.settings.llm_timeout_ms ?? 60000;
+            const llmRetries = this.settings.llm_retries ?? 1;
+
+            const auditResultText = await this.auditorAgent.speak({
+                contextText: auditPrompt,
+                imagePaths: [],
+                toolResults: [],
+                callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
+            });
+
+            const auditResult = this._extractJsonObject(auditResultText);
+            if (auditResult) {
+                this.auditHistory.push(auditResult);
+                const status = auditResult.pass ? '通过' : '过滤';
+                const score = auditResult.overall_score?.toFixed(2) ?? 'N/A';
+                this.logger.info(`[审计] ${agent.name} - ${status} (评分: ${score})`);
+            }
+            return auditResult;
+        } catch (e) {
+            this.logger.warn(`[审计失败] ${agent.name}: ${e.message}`);
+            return null;
+        }
+    }
+
+    _applyAudit(text, auditResult) {
+        if (!auditResult) {
+            return { filteredText: text, isFiltered: false };
+        }
+
+        if (!auditResult.pass) {
+            return { filteredText: '', isFiltered: true };
+        }
+
+        if (auditResult.filtered_content) {
+            const filteredText = text.replace(auditResult.filtered_content, '[已过滤: 不相关内容]');
+            return { filteredText, isFiltered: false };
+        }
+
+        return { filteredText: text, isFiltered: false };
     }
 
     async _runTools(tools) {
@@ -223,8 +281,12 @@ export class Roundtable {
                 callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
             });
 
-            transcript.push({ name: agent.name, role: agent.role, text });
-            context += `\n\n【${agent.name}】\n${text}\n`;
+            const auditResult = await this._auditTurn({ turn, agent, text });
+            const { filteredText, isFiltered } = this._applyAudit(text, auditResult);
+            transcript.push({ name: agent.name, role: agent.role, text: filteredText, audited: !!auditResult, filtered: isFiltered });
+            if (!isFiltered) {
+                context += `\n\n【${agent.name}】\n${filteredText}\n`;
+            }
         }
 
         // 1) 讨论：每轮先由主席决定 next_speaker，再由对应发言人回应
@@ -259,8 +321,18 @@ export class Roundtable {
                 callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
             });
 
-            transcript.push({ name: chairAgent.name, role: chairAgent.role, text: chairText });
-            context += `\n\n【${chairAgent.name}】\n${chairText}\n`;
+            const chairAuditResult = await this._auditTurn({ turn, agent: chairAgent, text: chairText });
+            const { filteredText: chairFilteredText, isFiltered: chairIsFiltered } = this._applyAudit(chairText, chairAuditResult);
+            transcript.push({
+                name: chairAgent.name,
+                role: chairAgent.role,
+                text: chairFilteredText,
+                audited: !!chairAuditResult,
+                filtered: chairIsFiltered,
+            });
+            if (!chairIsFiltered) {
+                context += `\n\n【${chairAgent.name}】\n${chairFilteredText}\n`;
+            }
 
             const parsed = this._extractJsonObject(chairText);
             lastChairJson = parsed;
@@ -315,8 +387,18 @@ export class Roundtable {
                 callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
             });
 
-            transcript.push({ name: nextAgent.name, role: nextAgent.role, text: nextText });
-            context += `\n\n【${nextAgent.name}】\n${nextText}\n`;
+            const nextAuditResult = await this._auditTurn({ turn, agent: nextAgent, text: nextText });
+            const { filteredText: nextFilteredText, isFiltered: nextIsFiltered } = this._applyAudit(nextText, nextAuditResult);
+            transcript.push({
+                name: nextAgent.name,
+                role: nextAgent.role,
+                text: nextFilteredText,
+                audited: !!nextAuditResult,
+                filtered: nextIsFiltered,
+            });
+            if (!nextIsFiltered) {
+                context += `\n\n【${nextAgent.name}】\n${nextFilteredText}\n`;
+            }
         }
 
         // 2) 兜底：如果最后一次发言不是主席，补一次主席收敛，保证输出可解析的最终 JSON
@@ -347,8 +429,18 @@ export class Roundtable {
                 callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
             });
 
-            transcript.push({ name: chairAgent.name, role: chairAgent.role, text: chairText });
-            context += `\n\n【${chairAgent.name}】\n${chairText}\n`;
+            const finalAuditResult = await this._auditTurn({ turn: turn + 1, agent: chairAgent, text: chairText });
+            const { filteredText: finalFilteredText, isFiltered: finalIsFiltered } = this._applyAudit(chairText, finalAuditResult);
+            transcript.push({
+                name: chairAgent.name,
+                role: chairAgent.role,
+                text: finalFilteredText,
+                audited: !!finalAuditResult,
+                filtered: finalIsFiltered,
+            });
+            if (!finalIsFiltered) {
+                context += `\n\n【${chairAgent.name}】\n${finalFilteredText}\n`;
+            }
         }
 
         if (summaryAgent) {
@@ -375,5 +467,107 @@ export class Roundtable {
         }
 
         return { transcript, context: this._truncateContext(context) };
+    }
+
+    _computeAuditStatistics() {
+        if (!this.auditHistory.length) {
+            return null;
+        }
+
+        const totalTurns = this.auditHistory.length;
+        const passedTurns = this.auditHistory.filter((a) => a.pass).length;
+        const filteredTurns = totalTurns - passedTurns;
+        const averageScore = this.auditHistory.reduce((sum, a) => sum + (a.overall_score ?? 0), 0) / totalTurns;
+
+        const scoreBySpeaker = {};
+        for (const audit of this.auditHistory) {
+            if (!scoreBySpeaker[audit.speaker]) {
+                scoreBySpeaker[audit.speaker] = { total: 0, count: 0 };
+            }
+            scoreBySpeaker[audit.speaker].total += audit.overall_score ?? 0;
+            scoreBySpeaker[audit.speaker].count += 1;
+        }
+
+        return {
+            total_turns: totalTurns,
+            audited_turns: totalTurns,
+            passed_turns: passedTurns,
+            filtered_turns: filteredTurns,
+            average_score: averageScore,
+            score_by_speaker: Object.fromEntries(
+                Object.entries(scoreBySpeaker).map(([speaker, data]) => [speaker, data.total / data.count]),
+            ),
+        };
+    }
+
+    generateAuditReport(sessionId) {
+        if (!this.auditHistory.length) {
+            return null;
+        }
+
+        const statistics = this._computeAuditStatistics();
+        return {
+            session_id: sessionId,
+            audit_enabled: true,
+            audit_settings: this.settings.audit_settings,
+            statistics,
+            audit_history: this.auditHistory,
+        };
+    }
+
+    generateAuditSummaryMarkdown(report) {
+        if (!report) {
+            return '';
+        }
+
+        const { statistics, audit_history, audit_settings } = report;
+        const strictModeMap = { strict: '严格', moderate: '平衡', lenient: '宽松' };
+
+        const lines = [
+            `# 审计摘要报告`,
+            ``,
+            `## 会话信息`,
+            `- 会话 ID: ${report.session_id}`,
+            `- 审计模式: ${strictModeMap[audit_settings?.strict_mode] || 'unknown'}`,
+            `- 过滤阈值: ${audit_settings?.filter_threshold ?? 0.6}`,
+            ``,
+            `## 统计概览`,
+            `- 总轮次: ${statistics.total_turns}`,
+            `- 审计通过: ${statistics.passed_turns} (${Math.round((statistics.passed_turns / statistics.total_turns) * 100)}%)`,
+            `- 过滤轮次: ${statistics.filtered_turns} (${Math.round((statistics.filtered_turns / statistics.total_turns) * 100)}%)`,
+            `- 平均评分: ${statistics.average_score?.toFixed(2) ?? 'N/A'}`,
+            ``,
+            `## 按发言人统计`,
+            `| 发言人 | 通过率 | 平均评分 |`,
+            `|--------|--------|----------|`,
+        ];
+
+        for (const [speaker, score] of Object.entries(statistics.score_by_speaker ?? {})) {
+            const speakerAudits = audit_history.filter((a) => a.speaker === speaker);
+            const passed = speakerAudits.filter((a) => a.pass).length;
+            const rate = Math.round((passed / speakerAudits.length) * 100);
+            lines.push(`| ${speaker} | ${rate}% (${passed}/${speakerAudits.length}) | ${score.toFixed(2)} |`);
+        }
+
+        lines.push(``, `## 过滤详情`);
+
+        const filteredAudits = audit_history.filter((a) => !a.pass);
+        if (filteredAudits.length === 0) {
+            lines.push(`无过滤记录，所有发言均通过审计。`);
+        } else {
+            for (const audit of filteredAudits) {
+                lines.push(``, `### 轮次 ${audit.turn} - ${audit.speaker} [已过滤]`);
+                lines.push(`- 评分: ${audit.overall_score?.toFixed(2) ?? 'N/A'}`);
+                lines.push(`- 原因: ${audit.reason || '未提供'}`);
+                if (audit.suggestions?.length) {
+                    lines.push(`- 改进建议:`);
+                    for (const suggestion of audit.suggestions) {
+                        lines.push(`  - ${suggestion}`);
+                    }
+                }
+            }
+        }
+
+        return lines.join('\n');
     }
 }

@@ -37,6 +37,15 @@ const AgentSchema = z.object({
     tools: z.array(ToolSchema).optional().default([]),
 });
 
+const AuditSettingsSchema = z.object({
+    enabled: z.boolean().optional().default(false),
+    auditor_agent: z.string().min(1).optional(),
+    strict_mode: z.enum(['strict', 'moderate', 'lenient']).optional().default('moderate'),
+    log_filtered: z.boolean().optional().default(true),
+    filter_threshold: z.number().min(0).max(1).optional().default(0.6),
+    chairman_relax_factor: z.number().min(0).max(0.5).optional().default(0.1),
+});
+
 const NewsPipelineSettingsSchema = z.object({
     enabled: z.boolean().optional().default(true),
     collector_agent: z.string().min(1),
@@ -84,6 +93,7 @@ const AgentsConfigSchema = z.object({
         llm_retries: z.number().int().min(0).max(5).default(1),
         mcp_timeout_ms: z.number().int().positive().default(10000),
         debate_rules: z.string().optional(),
+        audit_settings: AuditSettingsSchema.optional(),
     }),
     agents: z.array(AgentSchema).min(1),
     subagents: z.array(AgentSchema).optional().default([]),
