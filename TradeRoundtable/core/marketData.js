@@ -14,6 +14,77 @@ function calcStartMs({ timeframe, barsCount, endTime }) {
     return end.getTime() - (barsCount + padBars) * minutes * 60 * 1000;
 }
 
+function timeframeToMs(timeframe) {
+    const minutes = TIMEFRAME_MINUTES[timeframe];
+    if (!minutes) throw new Error(`不支持 timeframe: ${timeframe}`);
+    return minutes * 60 * 1000;
+}
+
+function maxYahooLookbackDays(timeframe) {
+    // 经验值：yahoo-finance2 的区间能力会因 interval 不同而变化
+    if (timeframe === '1m') return 7;
+    if (['2m', '5m', '15m', '30m'].includes(timeframe)) return 60;
+    if (['1h', '4h'].includes(timeframe)) return 730;
+    return 3650;
+}
+
+function mergeBarsByTs(bars) {
+    const byTs = new Map();
+    for (const bar of bars || []) {
+        const ts = bar?.ts instanceof Date ? bar.ts.getTime() : new Date(bar?.ts).getTime();
+        if (!Number.isFinite(ts)) continue;
+        byTs.set(ts, bar);
+    }
+    return Array.from(byTs.entries())
+        .sort(([a], [b]) => a - b)
+        .map(([, bar]) => bar);
+}
+
+async function fetchYahooBarsWithBackfill(
+    { symbol, interval, barsCount, startMs, endMs },
+    { client, timeoutMs, logger },
+) {
+    const timeframeMs = timeframeToMs(interval);
+    const endMsResolved = endMs ?? Date.now();
+    const earliestStartMs = endMsResolved - maxYahooLookbackDays(interval) * 24 * 60 * 60 * 1000;
+
+    const maxAttempts = 6;
+    let mergedBars = [];
+    let cursorStartMs = startMs;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        let rawBars;
+        try {
+            rawBars = await withTimeout(
+                client.fetchKlines({ symbol, interval, startMs: cursorStartMs, endMs, limit: 1000 }),
+                timeoutMs,
+                `Yahoo FinanceK线(${symbol} ${interval})`,
+            );
+        } catch (e) {
+            if (attempt === 1) throw e;
+            logger?.warn?.(`Yahoo 回溯补拉失败：${symbol} ${interval} 第 ${attempt} 次：${e.message}`);
+            break;
+        }
+
+        mergedBars = mergeBarsByTs([...mergedBars, ...rawBars.map((r) => r.toBar())]);
+        if (mergedBars.length >= barsCount) return mergedBars.slice(-barsCount);
+
+        const missing = barsCount - mergedBars.length;
+        const padBars = 40;
+        const expandBars = Math.ceil((missing + padBars) * (2 + attempt * 0.8));
+        const nextStartMs = cursorStartMs - expandBars * timeframeMs;
+        const clampedStartMs = Math.max(nextStartMs, earliestStartMs);
+
+        if (clampedStartMs >= cursorStartMs) break;
+        logger?.warn?.(
+            `Yahoo K线不足，回溯补拉：${symbol} ${interval} ${mergedBars.length}/${barsCount}，向前扩展至 ${new Date(clampedStartMs).toISOString()}`,
+        );
+        cursorStartMs = clampedStartMs;
+    }
+
+    return mergedBars;
+}
+
 async function loadFromExchange(
     { symbol, timeframe, barsCount, endTime, assetClass },
     { timeoutMs, logger, exchangeId = null, marketType = null, exchangeFallbacks = [] },
@@ -46,6 +117,16 @@ async function loadFromExchange(
     const dataSourceName = isYahoo ? 'Yahoo Finance' : '交易所';
     logger?.info?.(`加载K线: ${symbol} (${resolvedAssetClass}) -> ${dataSourceName}`);
 
+    if (isYahoo) {
+        const bars = await fetchYahooBarsWithBackfill(
+            { symbol, interval, barsCount, startMs, endMs },
+            { client, timeoutMs, logger },
+        );
+        if (bars.length > barsCount) return bars.slice(-barsCount);
+        if (bars.length < barsCount) logger?.warn(`${dataSourceName}K线不足：${bars.length}/${barsCount}`);
+        return bars;
+    }
+
     const rawBars = await withTimeout(
         client.fetchKlines({ symbol, interval, startMs, endMs, limit: 1000 }),
         timeoutMs,
@@ -54,7 +135,7 @@ async function loadFromExchange(
 
     const bars = rawBars.map((r) => r.toBar());
     if (bars.length > barsCount) return bars.slice(-barsCount);
-    if (bars.length < barsCount) logger?.warn(`${dataSourceName}K线不足：${bars.length}/${barsCount}`);
+    logger?.warn(`${dataSourceName}K线不足：${bars.length}/${barsCount}`);
     return bars;
 }
 
