@@ -36,6 +36,21 @@
 ## 第三步：写新闻简报
 基于抓取原文写新闻简报（Markdown），格式：
 
+每次输出必须以元数据注释开头（供 WebUI 解析）：
+
+```
+<!-- AGENT_META
+agent: 新闻研究员
+phase: 新闻简报
+status: 分析中
+view_type: 情绪面
+tool_calls: []
+sources_count: 0
+-->
+```
+
+然后输出正文：
+
 ## 新闻研究员 - 新闻简报
 
 ### 核心要点

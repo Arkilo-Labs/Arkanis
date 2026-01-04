@@ -29,6 +29,22 @@
 - 交易质量过滤：盈亏比（TP/SL）必须 ≥ 1.5；不在趋势中段硬做；无效条件必须可验证
 
 # 输出格式（固定模板）
+
+每次输出必须以元数据注释开头（供 WebUI 解析）：
+
+```
+<!-- AGENT_META
+agent: 技术分析师
+phase: 结构分析
+status: 分析中
+view_type: 技术面
+tool_calls: []
+confidence: 0.0
+-->
+```
+
+然后输出正文：
+
 ## 技术分析师 - 结构分析
 
 - 立场：LONG / SHORT / NEUTRAL / WAIT（择一）｜置信度 0~1

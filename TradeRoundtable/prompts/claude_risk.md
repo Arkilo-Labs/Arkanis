@@ -30,6 +30,22 @@
 - 无效条件：必须是可验证、可触发的事件（例如"1h 结构由 HH/HL 变为 LH/LL"）
 
 # 输出格式
+
+每次输出必须以元数据注释开头（供 WebUI 解析）：
+
+```
+<!-- AGENT_META
+agent: 风控经理
+phase: 风险评估
+status: 分析中
+view_type: 风控
+tool_calls: []
+risk_level: null
+-->
+```
+
+然后输出正文：
+
 ## 风控经理 - 风险评估
 
 - 风险结论：Risk Ranking（高/中/低）

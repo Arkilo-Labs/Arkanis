@@ -119,3 +119,87 @@
 | 未平仓量 | https://www.coinglass.com/zh/pro/futures/OpenInterest | OI 变化 |
 | 资金费率 | https://www.coinglass.com/zh/FundingRate | 拥挤交易风险 |
 | 爆仓数据 | https://www.coinglass.com/zh/LiquidationData | 爆仓统计 |
+
+---
+
+## 六、WebUI 元数据规范
+
+### 6.1 元数据格式
+所有非 JSON 输出的 Agent 必须在输出开头添加元数据注释：
+
+```
+<!-- AGENT_META
+agent: Agent名称
+phase: 当前阶段
+status: 状态
+view_type: 视图类型
+tool_calls: []
+-->
+```
+
+### 6.2 字段说明
+
+| 字段 | 类型 | 说明 | 可选值 |
+|------|------|------|--------|
+| `agent` | string | Agent 名称 | 技术分析师/情绪分析师/风控经理/图表阅读员/新闻研究员/会议记录员 |
+| `phase` | string | 当前执行阶段 | 结构分析/新闻面分析/风险评估/读图分析/新闻简报/轮次摘要 |
+| `status` | string | 执行状态 | 准备中/工具调用中/分析中/已完成 |
+| `view_type` | string | 视图类型 | 技术面/情绪面/风控/系统/决策 |
+| `tool_calls` | array | 当前调用的工具列表 | [] 或 ["searxng.search", ...] |
+| `confidence` | number | 置信度（可选） | 0.0~1.0 |
+
+### 6.3 主席 JSON 元数据
+主席输出的 JSON 必须包含 `meta` 字段：
+
+```json
+{
+  "meta": {
+    "agent": "主席",
+    "phase": "决策输出",
+    "timestamp": "2026-01-04T17:00:00+08:00"
+  },
+  // ... 其他字段
+}
+```
+
+---
+
+## 七、Todo 机制规范
+
+### 7.1 Todo 生命周期
+
+```
+PENDING → IN_PROGRESS → COMPLETED
+                    ↘ CANCELLED
+```
+
+### 7.2 Todo 结构
+
+```json
+{
+  "id": "todo_001",
+  "agent": "目标Agent名称",
+  "task": "任务描述",
+  "status": "pending|in_progress|completed|cancelled",
+  "created_at": "ISO8601时间",
+  "completed_at": "ISO8601时间（可选）"
+}
+```
+
+### 7.3 主席 Todo 管理
+主席 JSON 中的 `todos` 字段用于管理任务：
+
+```json
+{
+  "todos": {
+    "created": [{ "id": "todo_001", "agent": "...", "task": "...", "status": "pending" }],
+    "pending": ["todo_002"],
+    "completed": ["todo_003", "todo_004"]
+  }
+}
+```
+
+### 7.4 Todo 使用场景
+- 新闻研究员需要搜索新关键词时
+- 风控经理需要额外验证数据时
+- 主席需要指定 Agent 补充信息时
