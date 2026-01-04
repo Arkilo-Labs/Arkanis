@@ -98,7 +98,7 @@
     },
     {
       "name": "DeepSeek_Leader",
-      "provider_ref": "deepseek_api",
+      "provider_ref": "yunwu_grok_4_fast",
       "role": "DecisionMaker",
       "prompt": "deepseek_leader.md",
       "order": 5,

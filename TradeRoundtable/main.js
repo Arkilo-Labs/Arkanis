@@ -19,6 +19,7 @@ import { withRetries, withTimeout } from './core/runtime.js';
 import { SearxngClient } from './core/searxngClient.js';
 import { FirecrawlClient } from './core/firecrawlClient.js';
 import { runNewsPipeline } from './core/newsPipeline.js';
+import { Toolbox } from './core/toolbox.js';
 import { closeExchangeClient } from '../src/data/exchangeClient.js';
 import { closePools as closePgPools } from '../src/data/pgClient.js';
 
@@ -331,6 +332,34 @@ async function main() {
         }
 
         let newsBriefing = null;
+        let searxngClient = null;
+        let firecrawlClient = null;
+        const newsToolSettings = agentsConfig.news_pipeline_settings ?? null;
+        if (newsToolSettings) {
+            try {
+                const searxngCfg = newsToolSettings?.searxng ?? {};
+                const firecrawlCfg = newsToolSettings?.firecrawl ?? {};
+                const firecrawlApiKeyEnv = String(firecrawlCfg.api_key_env || '').trim();
+                const firecrawlApiKey = firecrawlApiKeyEnv ? String(process.env[firecrawlApiKeyEnv] || '').trim() : '';
+
+                searxngClient = new SearxngClient({
+                    baseUrl: searxngCfg.base_url,
+                    timeoutMs: searxngCfg.timeout_ms,
+                    dockerFallbackContainer: searxngCfg.docker_fallback_container,
+                    logger,
+                });
+                firecrawlClient = new FirecrawlClient({
+                    baseUrl: firecrawlCfg.base_url,
+                    timeoutMs: firecrawlCfg.timeout_ms,
+                    apiKey: firecrawlApiKey,
+                });
+            } catch (e) {
+                logger.warn(`[工具初始化失败] SearXNG/Firecrawl：${e.message}`);
+                searxngClient = null;
+                firecrawlClient = null;
+            }
+        }
+
         if (!opts.skipNews && agentsConfig.news_pipeline_settings?.enabled) {
             try {
                 const subagents = buildSubagents({ agentsConfig, providersConfig: providers, promptStore, logger });
@@ -340,22 +369,9 @@ async function main() {
                     throw new Error(`未找到 news_pipeline_settings.collector_agent 对应的 subagent：${collectorName}`);
                 }
 
-                const searxngCfg = agentsConfig.news_pipeline_settings?.searxng ?? {};
-                const firecrawlCfg = agentsConfig.news_pipeline_settings?.firecrawl ?? {};
-                const firecrawlApiKeyEnv = String(firecrawlCfg.api_key_env || '').trim();
-                const firecrawlApiKey = firecrawlApiKeyEnv ? String(process.env[firecrawlApiKeyEnv] || '').trim() : '';
-
-                const searxngClient = new SearxngClient({
-                    baseUrl: searxngCfg.base_url,
-                    timeoutMs: searxngCfg.timeout_ms,
-                    dockerFallbackContainer: searxngCfg.docker_fallback_container,
-                    logger,
-                });
-                const firecrawlClient = new FirecrawlClient({
-                    baseUrl: firecrawlCfg.base_url,
-                    timeoutMs: firecrawlCfg.timeout_ms,
-                    apiKey: firecrawlApiKey,
-                });
+                if (!searxngClient || !firecrawlClient) {
+                    throw new Error('SearXNG/Firecrawl 未就绪（请检查 news_pipeline_settings 与服务端）');
+                }
 
                 logger.info('新闻收集：SearXNG + Firecrawl');
                 newsBriefing = await runNewsPipeline({
@@ -364,7 +380,7 @@ async function main() {
                     firecrawlClient,
                     symbol: opts.symbol,
                     assetClass: opts.assetClass || undefined,
-                    settings: agentsConfig.news_pipeline_settings,
+                    settings: newsToolSettings,
                     logger,
                 });
 
@@ -392,12 +408,21 @@ async function main() {
             }
         }
 
+        const toolbox = new Toolbox({
+            searxngClient,
+            firecrawlClient,
+            mcpClient: opts.skipMcp ? null : mcpClient,
+            outputDir: sessionOut,
+            logger,
+        });
+
         const roundtable = new Roundtable({
             agents,
             settings: agentsConfig.roundtable_settings,
             mcpClient: opts.skipMcp ? { call: async () => null, stopAll: async () => {} } : mcpClient,
             logger,
             auditorAgent,
+            toolbox,
         });
 
         const contextSeed = [

@@ -26,3 +26,22 @@
   - B｜中风险：适中触发 + 适中仓位（0~1）+ 关键位 SL/TP + invalid_if
   - C｜高风险：更早入场/更激进触发 + 更大仓位（0~1）+ 关键位 SL/TP + invalid_if
 - 风控建议：仓位（0~1）、杠杆（若需要）、是否需要等待确认、以及“如何从 A 升级到 B/C 的条件”
+
+# 工具调用（每次发言都可用）
+当你发现关键论断缺证据、需要复核数据来源或需要截图“实锤”时，可以先请求工具，再输出风控结论。
+
+## 工具请求 JSON（固定格式）
+{
+  "action": "call_tools",
+  "calls": [
+    { "name": "searxng.search", "args": { "query": "…", "language": "zh-CN", "recency_hours": 168, "limit": 10 } },
+    { "name": "firecrawl.scrape", "args": { "url": "https://...", "max_markdown_chars": 8000 } },
+    { "name": "browser.screenshot", "args": { "url": "https://...", "wait_ms": 6000, "prefer_chart_clip": true } }
+  ]
+}
+
+## 风控常用外部验证入口（优先截图）
+- https://www.coinglass.com/zh/pro/futures/Liquidations（极端清算/波动风险）
+- https://www.coinglass.com/zh/pro/futures/LiquidationMap（清算密集区=潜在踩踏点）
+- https://www.coinglass.com/zh/pro/depth-delta（挂单压力失衡，易造成滑点/假突破）
+- https://www.coinglass.com/zh/FundingRate（资金费率异常提示拥挤交易风险）

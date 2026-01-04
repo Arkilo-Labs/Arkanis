@@ -12,9 +12,9 @@
     },
     "deepseek_api": {
       "type": "openai_compatible",
-      "base_url": "https://api.deepseek.com",
-      "api_key_env": "DEEPSEEK_API_KEY",
-      "model": "deepseek-reasoner",
+      "base_url": "https://api.yunwu.ai",
+      "api_key_env": "YUNWU_API_KEY",
+      "model": "deepseek-v3.2",
       "supports_vision": false,
       "temperature": 1.0,
       "max_tokens": 65536

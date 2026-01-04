@@ -1,3 +1,5 @@
+import { withRetries } from './runtime.js';
+
 function extractJsonObject(text) {
     const raw = String(text || '').trim();
     if (!raw) return null;
@@ -28,6 +30,45 @@ function canonicalUrl(u) {
     } catch {
         return String(u || '').trim();
     }
+}
+
+function extractHttpUrls(text, { limit } = {}) {
+    const raw = String(text || '');
+    const matches = raw.match(/https?:\/\/[^\s"'<>)\]]+/g) ?? [];
+    const seen = new Set();
+    const out = [];
+    for (const m of matches) {
+        const u = canonicalUrl(m);
+        if (!u) continue;
+        if (!seen.has(u)) {
+            seen.add(u);
+            out.push(u);
+        }
+        if (limit && out.length >= limit) break;
+    }
+    return out;
+}
+
+export function extractSelectedUrlsFromCollectorOutput(text, { maxUrls } = {}) {
+    const parsed = extractJsonObject(text);
+    const rawUrls = Array.isArray(parsed?.selected_urls) ? parsed.selected_urls : [];
+    const cleaned = rawUrls
+        .map((u) => canonicalUrl(String(u || '').trim()))
+        .filter((u) => u.startsWith('http://') || u.startsWith('https://'))
+        .filter(Boolean);
+
+    const seen = new Set();
+    const out = [];
+    for (const u of cleaned) {
+        if (!seen.has(u)) {
+            seen.add(u);
+            out.push(u);
+        }
+        if (maxUrls && out.length >= maxUrls) break;
+    }
+
+    if (out.length) return out;
+    return extractHttpUrls(text, { limit: maxUrls });
 }
 
 async function mapWithConcurrency(items, limit, fn) {
@@ -171,48 +212,76 @@ export async function runNewsPipeline({
     }
 
     logger?.info?.('新闻管线：选择 URL');
-    const selectionText = await collectorAgent.speak({
-        contextText: [
-            `# 任务`,
-            `从下面的 SearXNG 结果里挑选要抓取的新闻 URL，用于后续 Firecrawl 抓取原文。`,
-            ``,
-            `# URL 选择优先级`,
-            `1. 权威财经媒体 > 行业垂直媒体 > 社交平台`,
-            `2. 官方公告 > 深度分析 > 快讯`,
-            `3. 首发来源 > 转载`,
-            `4. 避开：纯视频页、登录墙、404风险页、论坛帖`,
-            ``,
-            `# 要求`,
-            `- 只选择与本次分析最相关的 ${maxUrls} 条以内`,
-            `- 去重：同一事件尽量选 1 个最权威/最原始来源`,
-            `- 优先选择能直接呈现信息的页面`,
-            ``,
-            `# 输入：SearXNG 结果（共 ${resultsByQuery.flat().length} 条）`,
-            formatSearchResultsForModel({ queries: clippedQueries, resultsByQuery, maxItems: 120 }),
-            ``,
-            `# 输出（必须是严格 JSON）`,
-            `你只能输出一个 JSON 对象：`,
-            `{`,
-            `  "selected_urls": ["https://..."],`,
-            `  "why": { "https://...": "一句话理由" }`,
-            `}`,
-            ``,
-            `# 约束`,
-            `- selected_urls 长度不超过 ${maxUrls}`,
-            `- why 只对 selected_urls 里的 URL 给理由`,
-            `- 不要输出解释性文字，不要加 Markdown。`,
-        ].join('\n'),
-        imagePaths: [],
-        toolResults: [],
-        callOptions: { retries: 1, timeoutMs: 120000 },
-    });
+    let selectionText = '';
+    let selectedUrls = [];
+    await withRetries(
+        async ({ attempt }) => {
+            const retryNote =
+                attempt > 1
+                    ? [
+                          ``,
+                          `# 上次输出问题（请修正）`,
+                          `- 你的输出无法解析为严格 JSON 或缺少 selected_urls。`,
+                          `- URL 必须是完整的 https://... 形式，不要出现 "https:/" 这种截断。`,
+                          `- 只输出 JSON，不要输出任何解释、不要加 Markdown/code block。`,
+                          ``,
+                          `# 上次原始输出（截断）`,
+                          safeTruncate(selectionText, 300),
+                      ].join('\n')
+                    : '';
 
-    const selection = extractJsonObject(selectionText);
-    const rawUrls = Array.isArray(selection?.selected_urls) ? selection.selected_urls : [];
-    const selectedUrls = rawUrls.map((u) => canonicalUrl(String(u || '').trim())).filter(Boolean).slice(0, maxUrls);
-    if (!selectedUrls.length) {
-        throw new Error(`新闻管线：collector 未返回 selected_urls（原始输出：${safeTruncate(selectionText, 300)}）`);
-    }
+            selectionText = await collectorAgent.speak({
+                contextText: [
+                    `# 任务`,
+                    `从下面的 SearXNG 结果里挑选要抓取的新闻 URL，用于后续 Firecrawl 抓取原文。`,
+                    ``,
+                    `# URL 选择优先级`,
+                    `1. 权威财经媒体 > 行业垂直媒体 > 社交平台`,
+                    `2. 官方公告 > 深度分析 > 快讯`,
+                    `3. 首发来源 > 转载`,
+                    `4. 避开：纯视频页、登录墙、404风险页、论坛帖`,
+                    ``,
+                    `# 要求`,
+                    `- 只选择与本次分析最相关的 ${maxUrls} 条以内`,
+                    `- 去重：同一事件尽量选 1 个最权威/最原始来源`,
+                    `- 优先选择能直接呈现信息的页面`,
+                    ``,
+                    `# 输入：SearXNG 结果（共 ${resultsByQuery.flat().length} 条）`,
+                    formatSearchResultsForModel({ queries: clippedQueries, resultsByQuery, maxItems: 120 }),
+                    ``,
+                    `# 输出（必须是严格 JSON）`,
+                    `你只能输出一个 JSON 对象：`,
+                    `{`,
+                    `  "selected_urls": ["https://..."],`,
+                    `  "why": { "https://...": "一句话理由" }`,
+                    `}`,
+                    ``,
+                    `# 约束`,
+                    `- selected_urls 长度不超过 ${maxUrls}`,
+                    `- why 只对 selected_urls 里的 URL 给理由`,
+                    `- 不要输出解释性文字，不要加 Markdown。`,
+                    retryNote,
+                ]
+                    .filter(Boolean)
+                    .join('\n'),
+                imagePaths: [],
+                toolResults: [],
+                callOptions: { retries: 0, timeoutMs: 120000 },
+            });
+
+            selectedUrls = extractSelectedUrlsFromCollectorOutput(selectionText, { maxUrls }).slice(0, maxUrls);
+            if (!selectedUrls.length) {
+                throw new Error(`collector 未返回 selected_urls（raw=${safeTruncate(selectionText, 300)}）`);
+            }
+        },
+        {
+            retries: 2,
+            baseDelayMs: 1500,
+            label: '新闻管线：选择 URL',
+            onRetry: ({ attempt, delay, error }) =>
+                logger?.warn?.(`[新闻管线] 选择 URL 第${attempt}次失败：${error.message}，${delay}ms 后重试`),
+        },
+    );
 
     logger?.info?.(`新闻管线：Firecrawl 抓取（urls=${selectedUrls.length}）`);
     const scrapeResults = await mapWithConcurrency(selectedUrls, concurrency, async (url) => {

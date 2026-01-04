@@ -1,10 +1,11 @@
 export class Roundtable {
-    constructor({ agents, settings, mcpClient, logger, auditorAgent = null }) {
+    constructor({ agents, settings, mcpClient, logger, auditorAgent = null, toolbox = null }) {
         this.agents = agents;
         this.settings = settings;
         this.mcpClient = mcpClient;
         this.logger = logger;
         this.auditorAgent = auditorAgent;
+        this.toolbox = toolbox;
         this.auditHistory = [];
     }
 
@@ -36,6 +37,75 @@ export class Roundtable {
         }
     }
 
+    _isToolRequest(obj) {
+        if (!obj || typeof obj !== 'object') return false;
+        const action = String(obj.action || '').trim();
+        if (action === 'call_tools') return true;
+        if (Array.isArray(obj.calls) && obj.calls.length) return true;
+        return false;
+    }
+
+    _normalizeToolCalls(obj, { maxCalls } = {}) {
+        const limit = Math.max(0, Number(maxCalls) || 0) || 4;
+        const calls = Array.isArray(obj?.calls) ? obj.calls : [];
+        return calls
+            .map((c) => (c && typeof c === 'object' ? { name: c.name, args: c.args } : null))
+            .filter(Boolean)
+            .slice(0, limit);
+    }
+
+    async _speakWithToolLoop({ turn, agent, contextText, imagePaths, callOptions } = {}) {
+        const baseToolResults = await this._runTools(agent.tools);
+        const toolResults = baseToolResults.slice();
+        const mergedImages = Array.isArray(imagePaths) ? imagePaths.slice() : [];
+
+        const maxIters = Math.max(0, Number(this.settings?.tool_loop_max_iters) || 0) || 3;
+        const maxCalls = Math.max(0, Number(this.settings?.tool_loop_max_calls) || 0) || 4;
+
+        for (let iter = 0; iter <= maxIters; iter++) {
+            const extraLimitNote =
+                iter >= maxIters
+                    ? '\n\n# 约束\n- 工具调用次数已到上限，请基于已有“外部工具数据”直接输出最终答案（不要再请求工具）。\n'
+                    : '';
+
+            const text = await agent.speak({
+                contextText: `${contextText}${extraLimitNote}`,
+                imagePaths: mergedImages,
+                toolResults,
+                callOptions,
+            });
+
+            const parsed = this._extractJsonObject(text);
+            if (!this._isToolRequest(parsed)) {
+                return { text, toolResults, imagePaths: mergedImages };
+            }
+
+            if (!this.toolbox) {
+                toolResults.push({ tool: 'toolbox', ok: false, error: 'toolbox 未注入，无法执行工具调用' });
+                continue;
+            }
+
+            const calls = this._normalizeToolCalls(parsed, { maxCalls });
+            if (!calls.length) {
+                toolResults.push({ tool: 'toolbox', ok: false, error: '工具请求 JSON 缺少 calls，已忽略' });
+                continue;
+            }
+
+            const { toolResults: newResults, imagePaths: newImages } = await this.toolbox.runCalls({
+                calls,
+                agentName: agent.name,
+                turn,
+            });
+
+            toolResults.push(...(newResults ?? []));
+            mergedImages.push(...(newImages ?? []));
+        }
+
+        // 理论不会走到这里（iter>=maxIters 时已强制要求输出最终答案）
+        const fallbackText = await agent.speak({ contextText, imagePaths: mergedImages, toolResults, callOptions });
+        return { text: fallbackText, toolResults, imagePaths: mergedImages };
+    }
+
     async _auditTurn({ turn, agent, text }) {
         if (!this.auditorAgent) {
             return null;
@@ -54,10 +124,11 @@ export class Roundtable {
             const llmTimeoutMs = this.settings.llm_timeout_ms ?? 60000;
             const llmRetries = this.settings.llm_retries ?? 1;
 
-            const auditResultText = await this.auditorAgent.speak({
+            const { text: auditResultText } = await this._speakWithToolLoop({
+                turn,
+                agent: this.auditorAgent,
                 contextText: auditPrompt,
                 imagePaths: [],
-                toolResults: [],
                 callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
             });
 
@@ -273,11 +344,11 @@ export class Roundtable {
             });
 
             this.logger.info(`发言：${agent.name} (${agent.role})`);
-            const toolResults = await this._runTools(agent.tools);
-            const text = await agent.speak({
+            const { text } = await this._speakWithToolLoop({
+                turn,
+                agent,
                 contextText: turnContext,
                 imagePaths,
-                toolResults,
                 callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
             });
 
@@ -313,11 +384,11 @@ export class Roundtable {
             });
 
             this.logger.info(`主席：${chairAgent.name} (${chairAgent.role})`);
-            const chairToolResults = await this._runTools(chairAgent.tools);
-            const chairText = await chairAgent.speak({
+            const { text: chairText } = await this._speakWithToolLoop({
+                turn,
+                agent: chairAgent,
                 contextText: chairContext,
                 imagePaths,
-                toolResults: chairToolResults,
                 callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
             });
 
@@ -379,11 +450,11 @@ export class Roundtable {
             });
 
             this.logger.info(`发言：${nextAgent.name} (${nextAgent.role})`);
-            const nextToolResults = await this._runTools(nextAgent.tools);
-            const nextText = await nextAgent.speak({
+            const { text: nextText } = await this._speakWithToolLoop({
+                turn,
+                agent: nextAgent,
                 contextText: nextTurnContext,
                 imagePaths,
-                toolResults: nextToolResults,
                 callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
             });
 
@@ -421,11 +492,11 @@ export class Roundtable {
             });
 
             this.logger.info(`主席收敛：${chairAgent.name} (${chairAgent.role})`);
-            const chairToolResults = await this._runTools(chairAgent.tools);
-            const chairText = await chairAgent.speak({
+            const { text: chairText } = await this._speakWithToolLoop({
+                turn: turn + 1,
+                agent: chairAgent,
                 contextText: chairContext,
                 imagePaths,
-                toolResults: chairToolResults,
                 callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
             });
 
@@ -455,11 +526,11 @@ export class Roundtable {
             ].join('\n');
 
             this.logger.info(`总结：${summaryAgent.name} (${summaryAgent.role})`);
-            const toolResults = await this._runTools(summaryAgent.tools);
-            const text = await summaryAgent.speak({
+            const { text } = await this._speakWithToolLoop({
+                turn: Math.min(turn + 1, maxTurns),
+                agent: summaryAgent,
                 contextText: summaryContext,
                 imagePaths,
-                toolResults,
                 callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
             });
             transcript.push({ name: summaryAgent.name, role: summaryAgent.role, text });

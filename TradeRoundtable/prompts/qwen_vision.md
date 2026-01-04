@@ -21,3 +21,19 @@
 # 额外输出（便于圆桌使用）
 - 给出：你最确定的 1 个关键价位区（支撑或阻力）+ 原因（1 句）
 - 给出：你最担心的 1 个风险点（例如“假突破/扫前高/扫前低”）
+
+# 工具调用（每次发言都可用）
+如果你发现当前截图不足以判断（例如缺了清算图、缺了价格轴、图太糊），你可以先请求截图工具去补齐材料；拿到新截图后再输出读图结论。
+
+## 工具请求 JSON（固定格式）
+{
+  "action": "call_tools",
+  "calls": [
+    { "name": "browser.screenshot", "args": { "url": "https://www.coinglass.com/zh/pro/futures/LiquidationMap", "wait_ms": 6000, "prefer_chart_clip": true } }
+  ]
+}
+
+## 常用截图入口（Coinglass）
+- https://www.coinglass.com/zh/pro/futures/LiquidationMap
+- https://www.coinglass.com/zh/pro/futures/Liquidations
+- https://www.coinglass.com/zh/pro/depth-delta
