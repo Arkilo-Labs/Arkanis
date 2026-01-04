@@ -58,6 +58,15 @@ node TradeRoundtable/main.js --symbol BTCUSDT --bars 250 --data-source exchange
 说明：
 - `charts/liquidation.png` 会默认提高截图分辨率，并尽量裁剪到主要图表区域，方便模型读取价格轴与结构。
 
+## Prompt 约定（改 prompt 前先看）
+
+- 工具调用是两段式：先输出工具请求 JSON（`action=call_tools`），系统执行后会把结果注入为 `# 外部工具数据`，下一次再输出最终内容。
+- 非工具请求时避免输出 JSON 片段（尤其包含 `action/calls` 的对象），否则可能被误判为工具请求而进入工具循环。
+- 需要“严格 JSON 输出”的环节必须只输出一个 JSON 对象，不要代码块/Markdown：
+  - 圆桌主席：`TradeRoundtable/prompts/deepseek_leader.md`
+  - 质量审计：`TradeRoundtable/prompts/auditor.md`
+  - 新闻管线前两步（queries / selected_urls）：`TradeRoundtable/prompts/news_collector.md`
+
 ## 常见问题
 
 - 数据库/补全：沿用仓库现有 `KlinesRepository` 行为（数据不足会自动从交易所补全并入库）。
