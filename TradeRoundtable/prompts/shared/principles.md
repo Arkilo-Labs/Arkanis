@@ -298,3 +298,61 @@ PENDING → IN_PROGRESS → COMPLETED
 - 当需要特定币种的数据时，**必须**使用 base_coin 拼接 URL
 - 不得使用通用 URL（如 `/FundingRate`）而忽略币种信息
 - 使用 `browser.screenshot` 工具时，URL 中的 `{base_coin}` 必须替换为实际值
+
+---
+
+## 九、场景感知规则
+
+### 9.1 周末/低流动性场景
+
+当检测到以下条件时，所有 Agent 应调整行为：
+
+1. **时间条件**：UTC 周六 00:00 - 周日 23:59
+2. **节假日条件**：美国/中国重大节假日（元旦、春节、感恩节、圣诞节等）
+
+**行为调整**：
+
+| Agent | 正常模式 | 周末模式 |
+|-------|----------|----------|
+| Grok_News | ETF/机构新闻 | 社交媒体情绪 + 链上异动 |
+| Claude_Risk | 标准风控 | 提高流动性风险权重 |
+| GPT_Technical | 标准技术分析 | 关注挂单薄深度/假突破概率 |
+| DeepSeek_Leader | 标准决策 | 倾向 WAIT，提高 RR 要求至 2.0 |
+| Qwen_Vision | 标准读图 | 重点关注成交量萎缩程度 |
+
+### 9.2 低流动性检测工具
+
+GPT_Technical 应优先调用：
+
+- `orderbook.depth`：获取 ±1% 范围内挂单量
+- 量化判断：如果挂单量 < 平时 50%，标记为"低流动性"
+
+### 9.3 场景标签注入
+
+主席在 JSON 输出中应包含场景标签：
+
+```json
+{
+  "meta": {
+    "scene": "weekend_low_liquidity",
+    "scene_adjustments": ["higher_rr_threshold", "social_sentiment_priority"]
+  }
+}
+```
+
+可用场景标签：
+- `normal`：正常交易时段
+- `weekend_low_liquidity`：周末低流动性
+- `high_volatility`：高波动期（刚发生重大事件）
+- `pre_event`：重大事件前夕（如 FOMC、CPI 公布前）
+
+### 9.4 增量模式规范
+
+所有 Agent 在后续轮次发言时应遵循增量模式：
+
+- **ChartReader**：只报告与上一轮相比的变化
+- **News Agent**：只报告新发现的事件
+- **Technical**：只更新有变化的分析结论
+- **Risk**：只强调新发现的风险点
+
+增量模式可节省 Token 并突出重点变化。

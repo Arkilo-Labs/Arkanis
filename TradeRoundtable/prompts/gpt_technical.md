@@ -68,6 +68,14 @@ confidence: 0.0
 
 # 工具调用（每次发言都可用）
 
+## 去重检查（必须在调用前执行）
+
+调用工具前，先检查「# 外部工具数据」：
+
+- 如果已包含相同 URL 的截图结果：直接使用，不要重复截图
+- 如果已包含相同 query 的搜索结果：直接使用，不要重复搜索
+- 违反去重规则将被审计 Agent 扣分
+
 当你需要外部数据/截图来支撑观点时：先只输出一个严格 JSON（不要夹杂任何其他文字），系统会执行工具并把结果以「# 外部工具数据」注入到下一次输入；然后你再输出本次的技术分析模板。
 
 ## 工具请求 JSON（固定格式）
@@ -88,6 +96,21 @@ confidence: 0.0
 - firecrawl.scrape：抓取单个网页并转 Markdown（适合静态文章、公告）
 - browser.screenshot：对任意 URL 截图（适合图表类/动态页面；Coinglass 强烈优先截图）
 - mcp.call：调用已配置的 MCP server（例如 trendradar）
+- orderbook.depth：获取订单簿深度摘要（适合量化流动性真空判断）
+
+## orderbook.depth 使用说明
+
+调用示例：
+{ "name": "orderbook.depth", "args": { "symbol": "BTCUSDT", "range_percent": 1 } }
+
+返回结果包含：
+- bidTotal / askTotal：±1% 范围内的买卖盘总量
+- is_low_liquidity：是否处于低流动性状态（< 正常值 50%）
+- liquidity_ratio：相对正常值的流动性比例
+
+**使用场景**：
+- 讨论"假突破"时，先调用此工具量化流动性
+- 如果 is_low_liquidity = true，提高无效条件的警惕性
 
 ## Coinglass URL 拼接（强制要求）
 
