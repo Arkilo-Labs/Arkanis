@@ -27,6 +27,15 @@
       "supports_vision": true,
       "temperature": 1.0,
       "max_tokens": 327680
+    },
+    "duojie_opus4.5": {
+      "type": "openai_compatible",
+      "base_url": "https://api.duojie.games",
+      "api_key_env": "duojie_api_key",
+      "model": "claude-opus-4-5-20251101",
+      "supports_vision": true,
+      "temperature": 1.0,
+      "max_tokens": 327680
     }
   }
 }
