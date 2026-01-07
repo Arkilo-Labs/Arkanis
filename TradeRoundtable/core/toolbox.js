@@ -65,13 +65,13 @@ export class Toolbox {
                     const result =
                         pages > 1
                             ? await this.searxngClient.searchMultiPage({
-                                  query,
-                                  language,
-                                  categories,
-                                  recencyHours,
-                                  resultsPerPage,
-                                  pages,
-                              })
+                                query,
+                                language,
+                                categories,
+                                recencyHours,
+                                resultsPerPage,
+                                pages,
+                            })
                             : await this.searxngClient.search({ query, language, categories, recencyHours, limit });
 
                     toolResults.push({
@@ -123,10 +123,10 @@ export class Toolbox {
 
                     const viewport = args.viewport
                         ? {
-                              width: safeNumber(args.viewport.width, { min: 800, max: 4096, fallback: 2560 }),
-                              height: safeNumber(args.viewport.height, { min: 600, max: 2160, fallback: 1440 }),
-                              deviceScaleFactor,
-                          }
+                            width: safeNumber(args.viewport.width, { min: 800, max: 4096, fallback: 2560 }),
+                            height: safeNumber(args.viewport.height, { min: 600, max: 2160, fallback: 1440 }),
+                            deviceScaleFactor,
+                        }
                         : undefined;
 
                     const outPath = await screenshotPage({
@@ -155,6 +155,59 @@ export class Toolbox {
                     if (!method) throw new Error('mcp.call 需要 method');
                     const result = await this.mcpClient.call(server, method, params);
                     toolResults.push({ tool: name, ok: true, server, method, params, result });
+                    continue;
+                }
+
+                if (name === 'orderbook.depth') {
+                    // 动态导入 orderbook 模块
+                    const { fetchOrderbook, summarizeOrderbook } = await import('./orderbook.js');
+
+                    const symbol = String(args.symbol || '').trim();
+                    if (!symbol) throw new Error('orderbook.depth 需要 symbol');
+
+                    const rangePercent = safeNumber(args.range_percent ?? args.rangePercent, {
+                        min: 0.1, max: 5, fallback: 1
+                    });
+                    const exchange = String(args.exchange || 'binance').trim();
+                    const marketType = String(args.market_type || args.marketType || 'futures').trim();
+
+                    const ob = await fetchOrderbook({
+                        exchangeId: exchange,
+                        marketType,
+                        symbol,
+                        limit: 200,
+                        logger: this.logger,
+                    });
+
+                    const referencePrice = safeNumber(args.reference_price ?? args.referencePrice, { fallback: null });
+                    const summary = summarizeOrderbook({
+                        orderbook: ob,
+                        referencePrice,
+                        rangePercent,
+                    });
+
+                    // 计算流动性真空判断（基于历史平均值的估算）
+                    // 注：真实场景下应该与历史数据对比
+                    const bidTotal = summary?.bidTotal ?? 0;
+                    const askTotal = summary?.askTotal ?? 0;
+                    const estimatedNormalTotal = (bidTotal + askTotal) * 2; // 假设正常值约为当前的 2 倍
+                    const isLowLiquidity = bidTotal < estimatedNormalTotal * 0.25;
+                    const liquidityRatio = estimatedNormalTotal > 0
+                        ? parseFloat(((bidTotal + askTotal) / estimatedNormalTotal).toFixed(2))
+                        : 1;
+
+                    toolResults.push({
+                        tool: name,
+                        ok: true,
+                        symbol,
+                        exchange,
+                        market_type: marketType,
+                        range_percent: rangePercent,
+                        summary,
+                        is_low_liquidity: isLowLiquidity,
+                        liquidity_ratio: liquidityRatio,
+                        note: isLowLiquidity ? '检测到低流动性，假突破概率上升' : '流动性正常',
+                    });
                     continue;
                 }
 

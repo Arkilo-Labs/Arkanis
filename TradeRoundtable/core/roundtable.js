@@ -1,3 +1,5 @@
+import { validateRR } from './rrValidator.js';
+
 export class Roundtable {
     constructor({ agents, settings, mcpClient, logger, auditorAgent = null, toolbox = null }) {
         this.agents = agents;
@@ -7,6 +9,11 @@ export class Roundtable {
         this.auditorAgent = auditorAgent;
         this.toolbox = toolbox;
         this.auditHistory = [];
+    }
+
+    _validateRR(leaderJson) {
+        const minRR = this.settings?.min_rr ?? 1.5;
+        return validateRR(leaderJson, { minRR });
     }
 
     _findLastTurn(transcript, predicate) {
@@ -54,6 +61,69 @@ export class Roundtable {
             .slice(0, limit);
     }
 
+    _deduplicateToolCalls(newCalls, existingToolResults) {
+        // 构建已执行工具的唯一标识集合
+        const existingKeys = new Set();
+        for (const r of existingToolResults || []) {
+            if (r.tool === 'browser.screenshot' && r.url) {
+                existingKeys.add(`screenshot:${r.url}`);
+            }
+            if (r.tool === 'searxng.search' && r.query) {
+                existingKeys.add(`search:${r.query}`);
+            }
+            if (r.tool === 'firecrawl.scrape' && r.url) {
+                existingKeys.add(`scrape:${r.url}`);
+            }
+            if (r.tool === 'orderbook.depth' && r.symbol) {
+                existingKeys.add(`orderbook:${r.symbol}`);
+            }
+        }
+
+        // 过滤重复调用
+        return newCalls.filter((call) => {
+            const name = String(call.name || '').trim();
+            const args = call.args || {};
+
+            if (name === 'browser.screenshot') {
+                const key = `screenshot:${args.url}`;
+                if (existingKeys.has(key)) {
+                    this.logger?.warn?.(`[去重] 跳过重复截图: ${args.url}`);
+                    return false;
+                }
+                existingKeys.add(key);
+            }
+
+            if (name === 'searxng.search') {
+                const key = `search:${args.query}`;
+                if (existingKeys.has(key)) {
+                    this.logger?.warn?.(`[去重] 跳过重复搜索: ${args.query}`);
+                    return false;
+                }
+                existingKeys.add(key);
+            }
+
+            if (name === 'firecrawl.scrape') {
+                const key = `scrape:${args.url}`;
+                if (existingKeys.has(key)) {
+                    this.logger?.warn?.(`[去重] 跳过重复抓取: ${args.url}`);
+                    return false;
+                }
+                existingKeys.add(key);
+            }
+
+            if (name === 'orderbook.depth') {
+                const key = `orderbook:${args.symbol}`;
+                if (existingKeys.has(key)) {
+                    this.logger?.warn?.(`[去重] 跳过重复挂单薄查询: ${args.symbol}`);
+                    return false;
+                }
+                existingKeys.add(key);
+            }
+
+            return true;
+        });
+    }
+
     async _speakWithToolLoop({ turn, agent, contextText, imagePaths, callOptions } = {}) {
         const baseToolResults = await this._runTools(agent.tools);
         const toolResults = baseToolResults.slice();
@@ -91,8 +161,15 @@ export class Roundtable {
                 continue;
             }
 
+            // 去重：过滤已调用过的相同工具
+            const deduplicatedCalls = this._deduplicateToolCalls(calls, toolResults);
+            if (!deduplicatedCalls.length) {
+                toolResults.push({ tool: 'toolbox', ok: false, error: '所有工具调用均已执行过，已跳过重复调用' });
+                continue;
+            }
+
             const { toolResults: newResults, imagePaths: newImages } = await this.toolbox.runCalls({
-                calls,
+                calls: deduplicatedCalls,
                 agentName: agent.name,
                 turn,
             });
@@ -407,6 +484,22 @@ export class Roundtable {
 
             const parsed = this._extractJsonObject(chairText);
             lastChairJson = parsed;
+
+            // RR 校验：如果是 ENTER 信号，自动计算并校验盈亏比
+            if (parsed?.signal === 'ENTER') {
+                const rrResult = this._validateRR(parsed);
+                if (!rrResult.valid && !rrResult.skipped) {
+                    this.logger.warn(`[RR校验] ${rrResult.reason}`);
+                    if (rrResult.suggestion) {
+                        this.logger.warn(`[RR校验] 建议入场价: ${rrResult.suggestion.adjustedEntry}`);
+                    }
+                    // 将校验结果注入上下文，供后续 Agent（如 Risk）参考
+                    context += `\n\n[系统校验] 盈亏比不合格：${rrResult.reason}。RR=${rrResult.rr}，最低要求=${rrResult.minRR}\n`;
+                } else if (rrResult.valid) {
+                    this.logger.info(`[RR校验] 通过，RR=${rrResult.rr}`);
+                }
+            }
+
             consensus = Boolean(parsed?.consensus);
             if (consensus) {
                 this.logger.info('主席判定已达成一致：提前结束讨论');
