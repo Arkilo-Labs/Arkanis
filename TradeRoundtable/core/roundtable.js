@@ -1,4 +1,6 @@
 import { validateRR } from './rrValidator.js';
+import { StructuredContext } from './structuredContext.js';
+import { BeliefTracker } from './beliefTracker.js';
 
 export class Roundtable {
     constructor({ agents, settings, mcpClient, logger, auditorAgent = null, toolbox = null }) {
@@ -9,6 +11,10 @@ export class Roundtable {
         this.auditorAgent = auditorAgent;
         this.toolbox = toolbox;
         this.auditHistory = [];
+        this.structuredContext = new StructuredContext();
+        this.beliefTracker = new BeliefTracker({
+            agentAccuracy: settings.agent_accuracy ?? {},
+        });
     }
 
     _validateRR(leaderJson) {
@@ -240,6 +246,99 @@ export class Roundtable {
         return { filteredText: text, isFiltered: false };
     }
 
+    _extractStructuredInfo(text, source) {
+        if (!text || !this.structuredContext) return;
+
+        // 提取方向性观点
+        const directionPatterns = [
+            { pattern: /看多|做多|LONG|买入|上涨趋势/i, direction: 'LONG' },
+            { pattern: /看空|做空|SHORT|卖出|下跌趋势/i, direction: 'SHORT' },
+            { pattern: /观望|等待|WAIT|不操作|暂不入场/i, direction: 'WAIT' },
+        ];
+
+        for (const { pattern, direction } of directionPatterns) {
+            if (pattern.test(text)) {
+                const confMatch = text.match(/置信度[：:]\s*([\d.]+)/);
+                const rawConfidence = confMatch ? parseFloat(confMatch[1]) : 0.6;
+
+                // 使用贝叶斯追踪器校准置信度
+                const calibratedConfidence = this.beliefTracker
+                    ? this.beliefTracker.calibrateConfidence(source, rawConfidence, direction)
+                    : rawConfidence;
+
+                const reasonMatch = text.match(/理由[：:]\s*([^\n]+)/);
+                this.structuredContext.addOpinion({
+                    source,
+                    direction,
+                    reason: reasonMatch ? reasonMatch[1].trim() : '',
+                    confidence: calibratedConfidence,
+                });
+
+                // 更新贝叶斯信念
+                if (this.beliefTracker) {
+                    this.beliefTracker.update(source, direction, calibratedConfidence);
+                }
+                break;
+            }
+        }
+
+        // 提取价格相关事实
+        const pricePatterns = [
+            { pattern: /RSI[=：:]\s*([\d.]+)/i, template: 'RSI=$1' },
+            { pattern: /支撑位?[=：:约]?\s*([\d,]+)/i, template: '支撑位=$1' },
+            { pattern: /阻力位?[=：:约]?\s*([\d,]+)/i, template: '阻力位=$1' },
+            { pattern: /止损[=：:]\s*([\d,]+)/i, template: '止损=$1' },
+            { pattern: /止盈[=：:]\s*([\d,]+)/i, template: '止盈=$1' },
+            { pattern: /入场[价位]?[=：:]\s*([\d,]+)/i, template: '入场价=$1' },
+        ];
+
+        for (const { pattern, template } of pricePatterns) {
+            const match = text.match(pattern);
+            if (match) {
+                this.structuredContext.addFact({
+                    source,
+                    content: template.replace('$1', match[1]),
+                    category: 'price_level',
+                    confidence: 0.85,
+                });
+            }
+        }
+
+        // 检测分歧
+        if (/不同意|质疑|反驳|但是|然而|相反/i.test(text)) {
+            const conflictMatch = text.match(/(?:不同意|质疑|反驳)[：:]*\s*([^\n。]+)/);
+            if (conflictMatch) {
+                this.structuredContext.addConflict({
+                    description: conflictMatch[1].trim().slice(0, 100),
+                    severity: 'medium',
+                });
+            }
+        }
+    }
+
+    _buildContextWithStructured(baseContext) {
+        const useStructured = this.settings.use_structured_context !== false;
+        if (!useStructured || !this.structuredContext) {
+            return baseContext;
+        }
+
+        const parts = [];
+
+        // 添加结构化信息摘要
+        const structuredSummary = this.structuredContext.toCompactString();
+        if (structuredSummary.trim()) {
+            parts.push(`# 结构化信息摘要\n${structuredSummary}`);
+        }
+
+        // 添加贝叶斯信念状态
+        if (this.beliefTracker && this.beliefTracker.updateHistory.length > 0) {
+            parts.push(this.beliefTracker.toSummaryString());
+        }
+
+        parts.push(`# 会议上下文\n${baseContext}`);
+        return parts.join('\n\n');
+    }
+
     async _runTools(tools) {
         const { withRetries, withTimeout } = await import('./runtime.js');
         const results = [];
@@ -312,7 +411,9 @@ export class Roundtable {
             );
         }
 
-        parts.push(`# 会议上下文（可能被截断）\n${baseContext}`);
+        // 使用结构化上下文增强
+        const enhancedContext = this._buildContextWithStructured(baseContext);
+        parts.push(`# 会议上下文（可能被截断）\n${enhancedContext}`);
         return parts.join('\n\n');
     }
 
@@ -334,6 +435,62 @@ export class Roundtable {
             .sort((x, y) => (x.order ?? 0) - (y.order ?? 0));
 
         return { participants, summaryAgent, chairAgent };
+    }
+
+    async _runParallelOpening({ participants, chairAgent, contextSeed, imagePaths, llmTimeoutMs, llmRetries }) {
+        const openingInstructions = this._buildOpeningInstructions({ chairAgent, participants });
+        const baseContext = this._truncateContext(contextSeed);
+
+        const parallelTasks = participants.map((agent, idx) => {
+            const turnContext = this._buildTurnContext({
+                baseContext,
+                turn: idx + 1,
+                maxTurns: participants.length,
+                agent,
+                lastTurn: null,
+                selfLastTurn: null,
+                debateRules: null,
+                extraSections: [openingInstructions],
+            });
+
+            return this._speakWithToolLoop({
+                turn: idx + 1,
+                agent,
+                contextText: turnContext,
+                imagePaths,
+                callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
+            }).then(async (result) => {
+                const auditResult = await this._auditTurn({ turn: idx + 1, agent, text: result.text });
+                return { agent, result, auditResult };
+            });
+        });
+
+        this.logger.info(`并行开场：${participants.length} 位参与者同时发言`);
+        const results = await Promise.all(parallelTasks);
+        return results;
+    }
+
+    _aggregateOpeningResults(results) {
+        const transcript = [];
+        let contextAdditions = '';
+
+        for (const { agent, result, auditResult } of results) {
+            const { filteredText, isFiltered } = this._applyAudit(result.text, auditResult);
+            transcript.push({
+                name: agent.name,
+                role: agent.role,
+                text: filteredText,
+                audited: !!auditResult,
+                filtered: isFiltered,
+            });
+            if (!isFiltered) {
+                contextAdditions += `\n\n【${agent.name}】\n${filteredText}\n`;
+                this._extractStructuredInfo(filteredText, agent.name);
+            }
+            this.logger.info(`开场完成：${agent.name} (${agent.role})`);
+        }
+
+        return { transcript, contextAdditions };
     }
 
     _buildOpeningInstructions({ chairAgent, participants }) {
@@ -372,6 +529,198 @@ export class Roundtable {
         return participants[0] ?? null;
     }
 
+    _classifyAgentStance(text) {
+        const bullPatterns = /看多|做多|LONG|买入|上涨|突破|支撑有效|反弹/i;
+        const bearPatterns = /看空|做空|SHORT|卖出|下跌|跌破|阻力有效|回调/i;
+        const waitPatterns = /观望|等待|WAIT|不操作|暂不入场|风险较高/i;
+
+        if (waitPatterns.test(text)) return 'WAIT';
+        if (bullPatterns.test(text) && !bearPatterns.test(text)) return 'BULL';
+        if (bearPatterns.test(text) && !bullPatterns.test(text)) return 'BEAR';
+        if (bullPatterns.test(text) && bearPatterns.test(text)) return 'MIXED';
+        return 'NEUTRAL';
+    }
+
+    _buildAdversarialTeams(openingResults) {
+        const bullTeam = [];
+        const bearTeam = [];
+        const neutralTeam = [];
+
+        for (const { agent, result } of openingResults) {
+            const stance = this._classifyAgentStance(result.text);
+            if (stance === 'BULL') {
+                bullTeam.push({ agent, stance, text: result.text });
+            } else if (stance === 'BEAR') {
+                bearTeam.push({ agent, stance, text: result.text });
+            } else {
+                neutralTeam.push({ agent, stance, text: result.text });
+            }
+        }
+
+        return { bullTeam, bearTeam, neutralTeam };
+    }
+
+    _buildCrossExaminationPrompt({ examiner, target, targetStance, targetText }) {
+        return [
+            `# 交叉质询任务`,
+            `你是 ${examiner.name}（${examiner.role}），现在需要质询 ${target.name} 的${targetStance === 'BULL' ? '看多' : '看空'}观点。`,
+            ``,
+            `# ${target.name} 的原始观点`,
+            targetText,
+            ``,
+            `# 质询要求`,
+            `1. 找出对方论点中最薄弱的环节`,
+            `2. 提出具体的反驳问题（至少 2 个）`,
+            `3. 指出在什么条件下对方的观点会失效`,
+            `4. 你的质询必须基于数据或逻辑，不能是主观臆断`,
+        ].join('\n');
+    }
+
+    _buildRebuttalPrompt({ defender, attackerName, attackText, originalText }) {
+        return [
+            `# 反驳任务`,
+            `你是 ${defender.name}（${defender.role}），${attackerName} 对你的观点提出了质疑。`,
+            ``,
+            `# 你的原始观点`,
+            originalText,
+            ``,
+            `# ${attackerName} 的质疑`,
+            attackText,
+            ``,
+            `# 反驳要求`,
+            `1. 直接回应对方提出的每个质疑点`,
+            `2. 提供额外的证据或逻辑支持你的观点`,
+            `3. 承认对方有道理的部分（如果有）`,
+            `4. 明确在什么条件下你会改变观点`,
+        ].join('\n');
+    }
+
+    async _runAdversarialDebate({ openingResults, chairAgent, imagePaths, llmTimeoutMs, llmRetries, maxDebateRounds = 2 }) {
+        const { bullTeam, bearTeam, neutralTeam } = this._buildAdversarialTeams(openingResults);
+        const debateTranscript = [];
+        let debateContext = '';
+
+        // 如果没有明显的对立阵营，跳过对抗性辩论
+        if (bullTeam.length === 0 || bearTeam.length === 0) {
+            this.logger.info('对抗性辩论：未检测到明显对立阵营，跳过');
+            return { transcript: [], context: '', skipped: true };
+        }
+
+        this.logger.info(`对抗性辩论：Bull=${bullTeam.length}, Bear=${bearTeam.length}, Neutral=${neutralTeam.length}`);
+
+        for (let round = 0; round < maxDebateRounds; round++) {
+            // Bull 质询 Bear
+            const bullExaminer = bullTeam[round % bullTeam.length];
+            const bearTarget = bearTeam[round % bearTeam.length];
+
+            const bullExamPrompt = this._buildCrossExaminationPrompt({
+                examiner: bullExaminer.agent,
+                target: bearTarget.agent,
+                targetStance: 'BEAR',
+                targetText: bearTarget.text,
+            });
+
+            this.logger.info(`交叉质询：${bullExaminer.agent.name} -> ${bearTarget.agent.name}`);
+            const { text: bullExamText } = await this._speakWithToolLoop({
+                turn: 100 + round * 4,
+                agent: bullExaminer.agent,
+                contextText: bullExamPrompt,
+                imagePaths,
+                callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
+            });
+
+            debateTranscript.push({
+                name: bullExaminer.agent.name,
+                role: bullExaminer.agent.role,
+                text: bullExamText,
+                phase: 'cross_examination',
+                target: bearTarget.agent.name,
+            });
+            debateContext += `\n\n【${bullExaminer.agent.name} 质询 ${bearTarget.agent.name}】\n${bullExamText}\n`;
+
+            // Bear 反驳
+            const bearRebuttalPrompt = this._buildRebuttalPrompt({
+                defender: bearTarget.agent,
+                attackerName: bullExaminer.agent.name,
+                attackText: bullExamText,
+                originalText: bearTarget.text,
+            });
+
+            this.logger.info(`反驳：${bearTarget.agent.name}`);
+            const { text: bearRebuttalText } = await this._speakWithToolLoop({
+                turn: 100 + round * 4 + 1,
+                agent: bearTarget.agent,
+                contextText: bearRebuttalPrompt,
+                imagePaths,
+                callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
+            });
+
+            debateTranscript.push({
+                name: bearTarget.agent.name,
+                role: bearTarget.agent.role,
+                text: bearRebuttalText,
+                phase: 'rebuttal',
+            });
+            debateContext += `\n\n【${bearTarget.agent.name} 反驳】\n${bearRebuttalText}\n`;
+
+            // Bear 质询 Bull
+            const bearExaminer = bearTeam[round % bearTeam.length];
+            const bullTarget = bullTeam[round % bullTeam.length];
+
+            const bearExamPrompt = this._buildCrossExaminationPrompt({
+                examiner: bearExaminer.agent,
+                target: bullTarget.agent,
+                targetStance: 'BULL',
+                targetText: bullTarget.text,
+            });
+
+            this.logger.info(`交叉质询：${bearExaminer.agent.name} -> ${bullTarget.agent.name}`);
+            const { text: bearExamText } = await this._speakWithToolLoop({
+                turn: 100 + round * 4 + 2,
+                agent: bearExaminer.agent,
+                contextText: bearExamPrompt,
+                imagePaths,
+                callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
+            });
+
+            debateTranscript.push({
+                name: bearExaminer.agent.name,
+                role: bearExaminer.agent.role,
+                text: bearExamText,
+                phase: 'cross_examination',
+                target: bullTarget.agent.name,
+            });
+            debateContext += `\n\n【${bearExaminer.agent.name} 质询 ${bullTarget.agent.name}】\n${bearExamText}\n`;
+
+            // Bull 反驳
+            const bullRebuttalPrompt = this._buildRebuttalPrompt({
+                defender: bullTarget.agent,
+                attackerName: bearExaminer.agent.name,
+                attackText: bearExamText,
+                originalText: bullTarget.text,
+            });
+
+            this.logger.info(`反驳：${bullTarget.agent.name}`);
+            const { text: bullRebuttalText } = await this._speakWithToolLoop({
+                turn: 100 + round * 4 + 3,
+                agent: bullTarget.agent,
+                contextText: bullRebuttalPrompt,
+                imagePaths,
+                callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
+            });
+
+            debateTranscript.push({
+                name: bullTarget.agent.name,
+                role: bullTarget.agent.role,
+                text: bullRebuttalText,
+                phase: 'rebuttal',
+            });
+            debateContext += `\n\n【${bullTarget.agent.name} 反驳】\n${bullRebuttalText}\n`;
+        }
+
+        return { transcript: debateTranscript, context: debateContext, skipped: false };
+    }
+
     async run({ contextSeed, imagePaths }) {
         const transcript = [];
         let context = contextSeed ?? '';
@@ -400,40 +749,78 @@ export class Roundtable {
 
         let turn = 0;
 
-        // 0) 开场：每位参与者各发一次，先把立场与逻辑讲给主席
-        this.logger.info('开场：全员立场陈述');
-        for (const agent of participants) {
-            if (turn >= maxTurns) break;
-            turn += 1;
-            const lastTurn = transcript.length ? transcript[transcript.length - 1] : null;
-            const selfLastTurn = this._findLastTurn(transcript, (t) => t?.name === agent.name);
-            const baseContext = this._truncateContext(context);
-            const opening = this._buildOpeningInstructions({ chairAgent, participants });
-            const turnContext = this._buildTurnContext({
-                baseContext,
-                turn,
-                maxTurns,
-                agent,
-                lastTurn,
-                selfLastTurn,
-                debateRules: null,
-                extraSections: [opening],
-            });
-
-            this.logger.info(`发言：${agent.name} (${agent.role})`);
-            const { text } = await this._speakWithToolLoop({
-                turn,
-                agent,
-                contextText: turnContext,
+        // 0) 并行开场：所有参与者同时发言，减少等待时间
+        const parallelOpening = this.settings.parallel_opening !== false;
+        let openingResults = null;
+        if (parallelOpening) {
+            this.logger.info('开场：并行立场陈述');
+            openingResults = await this._runParallelOpening({
+                participants,
+                chairAgent,
+                contextSeed: context,
                 imagePaths,
-                callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
+                llmTimeoutMs,
+                llmRetries,
             });
+            const { transcript: openingTranscript, contextAdditions } = this._aggregateOpeningResults(openingResults);
+            transcript.push(...openingTranscript);
+            context += contextAdditions;
+            turn = participants.length;
 
-            const auditResult = await this._auditTurn({ turn, agent, text });
-            const { filteredText, isFiltered } = this._applyAudit(text, auditResult);
-            transcript.push({ name: agent.name, role: agent.role, text: filteredText, audited: !!auditResult, filtered: isFiltered });
-            if (!isFiltered) {
-                context += `\n\n【${agent.name}】\n${filteredText}\n`;
+            // 对抗性辩论（可选）
+            const enableAdversarialDebate = this.settings.adversarial_debate === true;
+            if (enableAdversarialDebate && openingResults) {
+                const debateResult = await this._runAdversarialDebate({
+                    openingResults,
+                    chairAgent,
+                    imagePaths,
+                    llmTimeoutMs,
+                    llmRetries,
+                    maxDebateRounds: this.settings.adversarial_debate_rounds ?? 1,
+                });
+                if (!debateResult.skipped) {
+                    transcript.push(...debateResult.transcript);
+                    context += debateResult.context;
+                    turn += debateResult.transcript.length;
+                }
+            }
+        } else {
+            // 串行开场（兼容旧模式）
+            this.logger.info('开场：串行立场陈述');
+            for (const agent of participants) {
+                if (turn >= maxTurns) break;
+                turn += 1;
+                const lastTurn = transcript.length ? transcript[transcript.length - 1] : null;
+                const selfLastTurn = this._findLastTurn(transcript, (t) => t?.name === agent.name);
+                const baseContext = this._truncateContext(context);
+                const opening = this._buildOpeningInstructions({ chairAgent, participants });
+                const turnContext = this._buildTurnContext({
+                    baseContext,
+                    turn,
+                    maxTurns,
+                    agent,
+                    lastTurn,
+                    selfLastTurn,
+                    debateRules: null,
+                    extraSections: [opening],
+                });
+
+                this.logger.info(`发言：${agent.name} (${agent.role})`);
+                const { text } = await this._speakWithToolLoop({
+                    turn,
+                    agent,
+                    contextText: turnContext,
+                    imagePaths,
+                    callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
+                });
+
+                const auditResult = await this._auditTurn({ turn, agent, text });
+                const { filteredText, isFiltered } = this._applyAudit(text, auditResult);
+                transcript.push({ name: agent.name, role: agent.role, text: filteredText, audited: !!auditResult, filtered: isFiltered });
+                if (!isFiltered) {
+                    context += `\n\n【${agent.name}】\n${filteredText}\n`;
+                    this._extractStructuredInfo(filteredText, agent.name);
+                }
             }
         }
 
@@ -480,6 +867,7 @@ export class Roundtable {
             });
             if (!chairIsFiltered) {
                 context += `\n\n【${chairAgent.name}】\n${chairFilteredText}\n`;
+                this._extractStructuredInfo(chairFilteredText, chairAgent.name);
             }
 
             const parsed = this._extractJsonObject(chairText);
@@ -562,6 +950,7 @@ export class Roundtable {
             });
             if (!nextIsFiltered) {
                 context += `\n\n【${nextAgent.name}】\n${nextFilteredText}\n`;
+                this._extractStructuredInfo(nextFilteredText, nextAgent.name);
             }
         }
 

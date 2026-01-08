@@ -20,6 +20,7 @@ import { SearxngClient } from './core/searxngClient.js';
 import { FirecrawlClient } from './core/firecrawlClient.js';
 import { runNewsPipeline } from './core/newsPipeline.js';
 import { Toolbox } from './core/toolbox.js';
+import { DecisionHistory } from './core/decisionHistory.js';
 import { closeExchangeClient } from '../src/data/exchangeClient.js';
 import { closePools as closePgPools } from '../src/data/pgClient.js';
 
@@ -521,6 +522,55 @@ async function main() {
 
     logger.info(`已输出：${outJson}`);
     logger.info(`已输出：${outTxt}`);
+
+    // 记录历史决策
+    const historyDir = join(__dirname, 'history');
+    const decisionHistory = new DecisionHistory({ historyDir });
+
+    // 提取决策 JSON
+    let decisionJson = null;
+    try {
+      const jsonMatch = decisionText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        decisionJson = JSON.parse(jsonMatch[0]);
+      }
+    } catch {
+      // 解析失败时忽略
+    }
+
+    // 提取各 Agent 的贡献
+    const agentContributions = {};
+    for (const t of transcript) {
+      if (t.name && t.text) {
+        const dirMatch = t.text.match(/看多|做多|LONG|看空|做空|SHORT|观望|等待|WAIT/i);
+        const confMatch = t.text.match(/置信度[：:]\s*([\d.]+)/);
+        if (dirMatch) {
+          let direction = 'WAIT';
+          if (/看多|做多|LONG/i.test(dirMatch[0])) direction = 'LONG';
+          else if (/看空|做空|SHORT/i.test(dirMatch[0])) direction = 'SHORT';
+          agentContributions[t.name] = {
+            direction,
+            confidence: confMatch ? parseFloat(confMatch[1]) : null,
+          };
+        }
+      }
+    }
+
+    decisionHistory.addRecord({
+      sessionId,
+      symbol: opts.symbol,
+      timeframe: opts.primary,
+      decision: decisionJson,
+      agentContributions,
+      beliefState: roundtable.beliefTracker?.toJSON() ?? null,
+      structuredContext: roundtable.structuredContext?.toJSON() ?? null,
+    });
+    logger.info(`历史决策已记录：${historyDir}`);
+
+    // 生成历史统计报告
+    const historyReport = decisionHistory.generateReport();
+    writeText(join(sessionOut, 'history_stats.md'), historyReport);
+    logger.info(`历史统计已保存：${join(sessionOut, 'history_stats.md')}`);
 
     const auditReport = roundtable.generateAuditReport(sessionId);
     if (auditReport) {

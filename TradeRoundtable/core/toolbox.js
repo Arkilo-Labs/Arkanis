@@ -33,13 +33,98 @@ function defaultShotFileName({ agentName, turn, index }) {
     return `shot_${t}_${a}_${i}.png`;
 }
 
+/**
+ * 工具调用缓存管理器
+ * 用于避免重复调用相同参数的工具
+ */
+class ToolCache {
+    constructor({ ttlMs = 5 * 60 * 1000, maxSize = 100 } = {}) {
+        this.cache = new Map();
+        this.ttlMs = ttlMs;
+        this.maxSize = maxSize;
+    }
+
+    _generateKey(toolName, args) {
+        const sortedArgs = JSON.stringify(args, Object.keys(args || {}).sort());
+        return `${toolName}:${sortedArgs}`;
+    }
+
+    get(toolName, args) {
+        const key = this._generateKey(toolName, args);
+        const entry = this.cache.get(key);
+        if (!entry) return null;
+
+        if (Date.now() - entry.timestamp > this.ttlMs) {
+            this.cache.delete(key);
+            return null;
+        }
+
+        entry.hits++;
+        return entry.result;
+    }
+
+    set(toolName, args, result) {
+        // 清理过期条目
+        if (this.cache.size >= this.maxSize) {
+            this._evictOldest();
+        }
+
+        const key = this._generateKey(toolName, args);
+        this.cache.set(key, {
+            result,
+            timestamp: Date.now(),
+            hits: 0,
+        });
+    }
+
+    _evictOldest() {
+        let oldestKey = null;
+        let oldestTime = Infinity;
+
+        for (const [key, entry] of this.cache) {
+            if (entry.timestamp < oldestTime) {
+                oldestTime = entry.timestamp;
+                oldestKey = key;
+            }
+        }
+
+        if (oldestKey) {
+            this.cache.delete(oldestKey);
+        }
+    }
+
+    getStats() {
+        let totalHits = 0;
+        let validEntries = 0;
+        const now = Date.now();
+
+        for (const entry of this.cache.values()) {
+            if (now - entry.timestamp <= this.ttlMs) {
+                validEntries++;
+                totalHits += entry.hits;
+            }
+        }
+
+        return {
+            size: this.cache.size,
+            validEntries,
+            totalHits,
+        };
+    }
+
+    clear() {
+        this.cache.clear();
+    }
+}
+
 export class Toolbox {
-    constructor({ searxngClient = null, firecrawlClient = null, mcpClient = null, outputDir = null, logger = null } = {}) {
+    constructor({ searxngClient = null, firecrawlClient = null, mcpClient = null, outputDir = null, logger = null, cacheOptions = {} } = {}) {
         this.searxngClient = searxngClient;
         this.firecrawlClient = firecrawlClient;
         this.mcpClient = mcpClient;
         this.outputDir = outputDir;
         this.logger = logger;
+        this.cache = new ToolCache(cacheOptions);
     }
 
     async runCalls({ calls, agentName, turn } = {}) {
@@ -51,6 +136,21 @@ export class Toolbox {
             const call = list[i] ?? {};
             const name = String(call.name || '').trim();
             const args = call.args ?? {};
+
+            // 检查缓存（截图工具不缓存，因为页面可能变化）
+            const cacheable = name !== 'browser.screenshot';
+            if (cacheable) {
+                const cached = this.cache.get(name, args);
+                if (cached) {
+                    this.logger?.info?.(`[Toolbox] 缓存命中: ${name}`);
+                    toolResults.push({ ...cached, fromCache: true });
+                    if (cached.image_path) {
+                        imagePaths.push(cached.image_path);
+                    }
+                    continue;
+                }
+            }
+
             try {
                 if (name === 'searxng.search') {
                     if (!this.searxngClient) throw new Error('SearXNG 未配置/未注入');
@@ -74,7 +174,7 @@ export class Toolbox {
                             })
                             : await this.searxngClient.search({ query, language, categories, recencyHours, limit });
 
-                    toolResults.push({
+                    const toolResult = {
                         tool: name,
                         ok: true,
                         query,
@@ -82,7 +182,9 @@ export class Toolbox {
                         categories,
                         recency_hours: recencyHours,
                         result,
-                    });
+                    };
+                    toolResults.push(toolResult);
+                    this.cache.set(name, args, toolResult);
                     continue;
                 }
 
@@ -96,13 +198,15 @@ export class Toolbox {
                         fallback: 8000,
                     });
                     const { markdown, metadata } = await this.firecrawlClient.scrapeToMarkdown({ url });
-                    toolResults.push({
+                    const toolResult = {
                         tool: name,
                         ok: true,
                         url,
                         markdown: safeTruncate(markdown, maxChars),
                         metadata: metadata ?? null,
-                    });
+                    };
+                    toolResults.push(toolResult);
+                    this.cache.set(name, args, toolResult);
                     continue;
                 }
 
@@ -154,7 +258,9 @@ export class Toolbox {
                     if (!server) throw new Error('mcp.call 需要 server');
                     if (!method) throw new Error('mcp.call 需要 method');
                     const result = await this.mcpClient.call(server, method, params);
-                    toolResults.push({ tool: name, ok: true, server, method, params, result });
+                    const toolResult = { tool: name, ok: true, server, method, params, result };
+                    toolResults.push(toolResult);
+                    this.cache.set(name, args, toolResult);
                     continue;
                 }
 
@@ -186,17 +292,15 @@ export class Toolbox {
                         rangePercent,
                     });
 
-                    // 计算流动性真空判断（基于历史平均值的估算）
-                    // 注：真实场景下应该与历史数据对比
                     const bidTotal = summary?.bidTotal ?? 0;
                     const askTotal = summary?.askTotal ?? 0;
-                    const estimatedNormalTotal = (bidTotal + askTotal) * 2; // 假设正常值约为当前的 2 倍
+                    const estimatedNormalTotal = (bidTotal + askTotal) * 2;
                     const isLowLiquidity = bidTotal < estimatedNormalTotal * 0.25;
                     const liquidityRatio = estimatedNormalTotal > 0
                         ? parseFloat(((bidTotal + askTotal) / estimatedNormalTotal).toFixed(2))
                         : 1;
 
-                    toolResults.push({
+                    const toolResult = {
                         tool: name,
                         ok: true,
                         symbol,
@@ -207,7 +311,9 @@ export class Toolbox {
                         is_low_liquidity: isLowLiquidity,
                         liquidity_ratio: liquidityRatio,
                         note: isLowLiquidity ? '检测到低流动性，假突破概率上升' : '流动性正常',
-                    });
+                    };
+                    toolResults.push(toolResult);
+                    this.cache.set(name, args, toolResult);
                     continue;
                 }
 
