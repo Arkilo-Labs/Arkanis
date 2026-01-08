@@ -9,6 +9,17 @@
     "llm_retries": 1,
     "mcp_timeout_ms": 60000,
     "debate_rules": "- 必须指出至少 1 条你不同意/质疑的点（引用\"上一位发言\"或上下文原话）。\n- 你的反驳必须给出可验证条件：什么情况下对方成立/你成立。\n- 如果你同意，也要补充一个可能失败的反例或风险触发条件。\n- 禁止纯复述；每段必须新增信息或更严格约束。",
+    "parallel_opening": true,
+    "use_structured_context": true,
+    "adversarial_debate": false,
+    "adversarial_debate_rounds": 1,
+    "min_rr": 1.5,
+    "agent_accuracy": {
+      "Qwen_Vision": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 },
+      "Grok_News": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 },
+      "GPT_Technical": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 },
+      "Claude_Risk": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 }
+    },
     "audit_settings": {
       "enabled": true,
       "auditor_agent": "Quality_Auditor",
