@@ -1,0 +1,128 @@
+{
+  "version": 1,
+  "roundtable_settings": {
+    "max_rounds": 5,
+    "summary_agent": "Gemini_Scribe",
+    "final_agent": "DeepSeek_Leader",
+    "max_context_chars": 24000,
+    "llm_timeout_ms": 150000,
+    "llm_retries": 1,
+    "mcp_timeout_ms": 60000,
+    "debate_rules": "- 必须指出至少 1 条你不同意/质疑的点（引用\"上一位发言\"或上下文原话）。\n- 你的反驳必须给出可验证条件：什么情况下对方成立/你成立。\n- 如果你同意，也要补充一个可能失败的反例或风险触发条件。\n- 禁止纯复述；每段必须新增信息或更严格约束。",
+    "parallel_opening": true,
+    "use_structured_context": true,
+    "adversarial_debate": false,
+    "adversarial_debate_rounds": 1,
+    "min_rr": 1.5,
+    "agent_accuracy": {
+      "Qwen_Vision": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 },
+      "Grok_News": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 },
+      "GPT_Technical": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 },
+      "Claude_Risk": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 }
+    },
+    "audit_settings": {
+      "enabled": true,
+      "auditor_agent": "Quality_Auditor",
+      "strict_mode": "moderate",
+      "log_filtered": true,
+      "filter_threshold": 0.6,
+      "chairman_relax_factor": 0.1
+    }
+  },
+  "news_pipeline_settings": {
+    "enabled": true,
+    "collector_agent": "News_Collector",
+    "searxng": {
+      "base_url": "http://localhost:8080",
+      "timeout_ms": 15000,
+      "docker_fallback_container": "searxng"
+    },
+    "firecrawl": {
+      "base_url": "http://localhost:3002",
+      "timeout_ms": 30000,
+      "api_key_env": ""
+    },
+    "search": {
+      "queries_max": 6,
+      "results_per_query": 15,
+      "pages_per_query": 2,
+      "language": "zh-CN",
+      "recency_hours": 24
+    },
+    "fetch": {
+      "max_urls": 10,
+      "concurrency": 3,
+      "max_markdown_chars_per_url": 6000,
+      "max_total_markdown_chars": 35000
+    }
+  },
+  "subagents": [
+    {
+      "name": "News_Collector",
+      "provider_ref": "duojie_opus4.5",
+      "role": "NewsCollector",
+      "prompt": "news_collector.md",
+      "order": 0,
+      "can_see_images": false
+    },
+    {
+      "name": "Quality_Auditor",
+      "provider_ref": "duojie_opus4.5",
+      "role": "Auditor",
+      "prompt": "auditor.md",
+      "order": -1,
+      "can_see_images": false
+    }
+  ],
+  "agents": [
+    {
+      "name": "Qwen_Vision",
+      "provider_ref": "duojie_opus4.5",
+      "role": "ChartReader",
+      "prompt": "qwen_vision.md",
+      "order": 1,
+      "can_see_images": true
+    },
+    {
+      "name": "Grok_News",
+      "provider_ref": "duojie_opus4.5",
+      "role": "SentimentAnalyst",
+      "prompt": "grok_news.md",
+      "order": 2,
+      "can_see_images": true
+    },
+    {
+      "name": "GPT_Technical",
+      "provider_ref": "duojie_opus4.5",
+      "role": "TechnicalTrader",
+      "prompt": "gpt_technical.md",
+      "order": 3,
+      "can_see_images": true
+    },
+    {
+      "name": "Claude_Risk",
+      "provider_ref": "duojie_opus4.5",
+      "role": "RiskManager",
+      "prompt": "claude_risk.md",
+      "order": 4,
+      "can_see_images": true
+    },
+    {
+      "name": "DeepSeek_Leader",
+      "provider_ref": "duojie_opus4.5",
+      "role": "DecisionMaker",
+      "prompt": "deepseek_leader.md",
+      "order": 5,
+      "can_see_images": false,
+      "is_final_decision": true
+    },
+    {
+      "name": "Gemini_Scribe",
+      "provider_ref": "duojie_opus4.5",
+      "role": "Summarizer",
+      "prompt": "gemini_scribe.md",
+      "order": 99,
+      "can_see_images": true
+    }
+  ]
+}
