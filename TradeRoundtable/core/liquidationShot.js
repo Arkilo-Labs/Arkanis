@@ -1,6 +1,6 @@
 import { join } from 'path';
-import puppeteer from 'puppeteer';
 import { withRetries, withTimeout } from './runtime.js';
+import { launchPuppeteerBrowser } from '../../src/utils/puppeteerLaunch.js';
 
 function clamp(n, min, max) {
     return Math.max(min, Math.min(max, n));
@@ -58,10 +58,7 @@ export async function screenshotPage({
 }) {
     return withRetries(
         async () => {
-            const browser = await puppeteer.launch({
-                headless: 'new',
-                args: ['--no-sandbox', '--disable-setuid-sandbox'],
-            });
+            const browser = await launchPuppeteerBrowser({ purpose: 'trade-roundtable.screenshot' });
 
             try {
                 const page = await browser.newPage();

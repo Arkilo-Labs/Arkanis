@@ -6,9 +6,9 @@
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { readFileSync, mkdirSync, writeFileSync } from 'fs';
-import puppeteer from 'puppeteer';
 
 import { chartConfig } from '../config/index.js';
+import { launchPuppeteerBrowser } from '../utils/puppeteerLaunch.js';
 import { CoordMapper } from './coordMapper.js';
 import { AnchorMode, OverlayType, ValueAnchor } from './models.js';
 
@@ -248,10 +248,7 @@ export class ChartBuilder {
         html = this._replaceToken(html, 'WATERMARK_JSON', this._safeJson(watermark));
 
         // 使用 Puppeteer 渲染
-        const browser = await puppeteer.launch({
-            headless: 'new',
-            args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        });
+        const browser = await launchPuppeteerBrowser({ purpose: 'chart.render' });
 
         try {
             const page = await browser.newPage();

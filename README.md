@@ -38,6 +38,9 @@ docker compose up -d postgres
 pnpm install
 ```
 
+本仓库是一个多项目（workspace）结构：根目录 + `server/` + `web/` + `web_console/` + `docs/` 都各自有 `package.json`。
+正常情况下只需要在根目录执行一次 `pnpm install`，就会把这些子项目的依赖一起装好；不要只在某个子目录里单独 `npm install`，否则很容易出现“能跑一部分、另一部分缺包”的情况。
+
 如果安装后看到 `Ignored build scripts: puppeteer, sharp`，执行一次：
 
 ```bash
@@ -96,7 +99,7 @@ pnpm main -- --symbol BTCUSDT --timeframe 5m --bars 200
 pnpm dev:server
 
 # 终端 B：启动 web（Vite dev server）
-pnpm web
+pnpm dev:web
 ```
 
 Web 通过 Socket.IO 订阅日志；server 负责派生脚本进程并转发 stdout/stderr。
@@ -111,6 +114,19 @@ pnpm dev:console
 Windows PowerShell 里不要用 `&&`，请用两行命令或用 `;` 分隔。
 
 如果安装依赖时看到 `Ignored build scripts: esbuild`，执行一次 `pnpm rebuild --pending`。
+
+### 2.6 常见安装/启动问题
+
+- `Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'express' imported from server/index.mjs`  
+  说明 `server/` 的依赖没装上（或没被纳入 workspace）。回到根目录执行 `pnpm install`；如果你只想补装 server，也可以跑 `pnpm -C server install`。
+
+- `ERR_PNPM_META_FETCH_FAIL` / `getaddrinfo ENOTFOUND registry.npmjs.org`  
+  这是网络/DNS 无法访问 npm 官方源导致的，包自然就“缺”。请先确认能访问 npm 源；在受限网络环境可以切换镜像源：  
+  - `pnpm config set registry https://registry.npmmirror.com`  
+  - `npm config set registry https://registry.npmmirror.com`
+
+- `ERR_PNPM_OUTDATED_LOCKFILE` / `frozen-lockfile`  
+  通常发生在 CI 或你显式启用了 frozen lockfile。需要更新锁文件时用：`pnpm install --no-frozen-lockfile`。
 
 SaaS Console 里新增了 `AI 策略` 页面，会走受控接口（需要登录 + 订阅）：
 
@@ -240,7 +256,7 @@ Invoke-RestMethod -Method Post http://localhost:3000/api/run-script `
 Run Tab 的交互说明见 `docs/RUN_TAB_GUIDE.md`。最小配置：
 
 - `.env` 里配置 `TG_BOT_TOKEN`、`TG_CHAT_ID`
-- 启动 `pnpm server`、`pnpm web`
+- 启动 `pnpm dev:server`、`pnpm dev:web`
 - 在 Run Tab 开启定时运行，并打开 Telegram 通知开关
 
 ### 3.5 静态原型：`surface/` 与 `web_console/`
@@ -399,4 +415,5 @@ pnpm test
 
 - Postgres 权限不足导致 `pnpm db:setup` 创建库失败：确认 `DB_USER` 有 `CREATE DATABASE` 权限。
 - Puppeteer/Sharp 安装异常：优先跑 `pnpm rebuild puppeteer sharp`，再检查系统依赖与代理环境。
+- macOS 上 `Failed to launch the browser process!`（尤其伴随 crashpad / crash info 日志）：优先设置 `CHART_PUPPETEER_CHANNEL=chrome` 使用系统 Chrome，其次清理 `~/.cache/puppeteer` 后重试。
 - Web 改了 `.env` 但脚本仍用旧配置：如上所述，重启 `pnpm server` 再试。
