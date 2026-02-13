@@ -24,6 +24,14 @@
 - pnpm（建议启用 corepack）
 - PostgreSQL `>= 14`（本地或容器均可）
 
+推荐用 Docker 部署 PostgreSQL（仓库提供 `docker-compose.yml`）：
+
+```bash
+docker compose up -d postgres
+```
+
+如果你的机器上已安装并运行了本地 PostgreSQL，注意端口冲突：要么先停掉本地服务，要么把 `.env` 的 `DB_PORT` 改成其他端口。
+
 安装依赖：
 
 ```bash
@@ -58,6 +66,14 @@ Copy-Item .env.example .env
 执行一次：
 
 ```bash
+pnpm db:setup
+```
+
+如果你用的是 Docker 版 PostgreSQL，想“清空重来”（仅本地/测试）：
+
+```bash
+docker compose down -v
+docker compose up -d postgres
 pnpm db:setup
 ```
 
