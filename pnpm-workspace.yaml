@@ -1,7 +1,7 @@
 packages:
   - '.'
-  - 'web_console'
   - 'docs'
+  - 'src/apps/*'
 
 onlyBuiltDependencies:
   - esbuild
