@@ -35,6 +35,8 @@ CLAUDE.MD
 notes/
 
 ai-providers.json
+secrets*.json
+data/
 
 .VSCodeCounter
 

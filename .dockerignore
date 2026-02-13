@@ -1,0 +1,38 @@
+# 依赖与构建产物
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+
+# Git 元数据
+.git/
+
+# 本地环境与敏感文件
+.env
+.env.*
+!.env.example
+ai-providers.json
+secrets*.json
+data/
+
+# 运行输出
+outputs/
+logs/
+*.log
+
+# IDE / 工具
+.vscode/
+.idea/
+.VSCodeCounter/
+.claude/
+
+# 历史/临时
+tmp/
+temp/
+
+# 本地笔记（不进镜像）
+notes/
+
+# VitePress 构建产物
+docs/.vitepress/cache/
+docs/.vitepress/dist/
