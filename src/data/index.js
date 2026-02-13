@@ -40,20 +40,3 @@ export {
     closeAllMarketDataClients,
     detectAssetClass,
 } from './marketDataClient.js';
-
-export { getPrimaryOrganizationForUserId } from './orgRepository.js';
-export {
-    insertActivationCode,
-    lockActivationCodeByHash,
-    incrementActivationCodeRedeemedCount,
-    insertActivationCodeRedemption,
-    listActivationCodes,
-    revokeActivationCodeById,
-} from './activationCodeRepository.js';
-export {
-    lockActivationCodeSubscriptionForOrg,
-    insertActivationCodeSubscription,
-    updateSubscriptionPeriodEnd,
-    getSubscriptionById,
-    getLatestSubscriptionForOrganizationId,
-} from './subscriptionRepository.js';
