@@ -29,7 +29,7 @@ function buildTransportFromEnv(env) {
 }
 
 export function createMailer({ env = process.env, logger = console } = {}) {
-    const from = String(env.SMTP_FROM || 'no-reply@arkilo.dev').trim();
+    const from = String(env.SMTP_FROM || 'no-reply@arkanis.dev').trim();
     const { kind, transport } = buildTransportFromEnv(env);
 
     async function send({ to, subject, html, text }) {
@@ -51,4 +51,3 @@ export function createMailer({ env = process.env, logger = console } = {}) {
 
     return { send, kind, from };
 }
-

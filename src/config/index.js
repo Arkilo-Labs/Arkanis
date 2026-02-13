@@ -69,8 +69,8 @@ export const databaseConfig = {
     password: getEnv('DB_PASSWORD', 'skeet'),
 
     adminDatabase: getEnv('DB_ADMIN_DATABASE', 'postgres'),
-    coreDatabase: getEnv('DB_CORE_DATABASE', 'arkilo_core'),
-    marketDatabase: getEnv('DB_MARKET_DATABASE', getEnv('DB_DATABASE', 'arkilo_market_data')),
+    coreDatabase: getEnv('DB_CORE_DATABASE', 'arkanis_core'),
+    marketDatabase: getEnv('DB_MARKET_DATABASE', getEnv('DB_DATABASE', 'arkanis_market_data')),
 
     minPoolSize: getEnvInt('DB_POOL_MIN', 2),
     maxPoolSize: getEnvInt('DB_POOL_MAX', 10),

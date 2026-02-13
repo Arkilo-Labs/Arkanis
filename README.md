@@ -1,20 +1,20 @@
-# Arkilo（arkilo.dev）内部开发手册
+# Arkanis（arkanis.dev）内部开发手册
 
-面向内部开发者的工作说明文档，用于快速上手本仓库的“VLM 交易决策实验环境”，以及后续把它演进为 Arkilo SaaS 后端底座时的落点与扩展方式。
+面向内部开发者的工作说明文档，用于快速上手本仓库的“VLM 交易决策实验环境”，以及后续把它演进为 Arkanis SaaS 后端底座时的落点与扩展方式。
 
-如果你要做 SaaS 化（多租户/登录/订阅/审计/任务系统等），先读 `docs/arkilo-saas-backend-plan.md`，本 README 只抽取关键信息并补齐“怎么跑、怎么改、怎么扩”。
+如果你要做 SaaS 化（多租户/登录/订阅/审计/任务系统等），先读 `docs/arkanis-saas-backend-plan.md`，本 README 只抽取关键信息并补齐“怎么跑、怎么改、怎么扩”。
 
 ## 1. 项目定位（现状 vs 目标）
 
 ### 现状：可跑的实验环境
 
 - **脚本驱动**：`scripts/main.js` / `scripts/backtest.js` 负责拉 K 线、渲图、调用 VLM、产出结果。
-- **数据底座**：PostgreSQL 双库（`arkilo_core` + `arkilo_market_data`）已落地，迁移体系已落地。
+- **数据底座**：PostgreSQL 双库（`arkanis_core` + `arkanis_market_data`）已落地，迁移体系已落地。
 - **开发控制台**：`server/` + `web/` 提供“运行脚本 / 日志推送 / 配置编辑 / Provider 管理 / Telegram 推送”等能力。
 
-### 目标：Arkilo SaaS 后端底座
+### 目标：Arkanis SaaS 后端底座
 
-面向商业化的硬性要求（多租户、安全、可审计、可扩展、可回滚迁移、数据分层、可运维）在 `docs/arkilo-saas-backend-plan.md` 里有完整说明。本仓库当前已经把**数据库拆分 + 迁移体系 + Core 预留表结构 + 最小 auth 会话**落在代码里，后续演进围绕这些骨架扩展，而不是推翻重写。
+面向商业化的硬性要求（多租户、安全、可审计、可扩展、可回滚迁移、数据分层、可运维）在 `docs/arkanis-saas-backend-plan.md` 里有完整说明。本仓库当前已经把**数据库拆分 + 迁移体系 + Core 预留表结构 + 最小 auth 会话**落在代码里，后续演进围绕这些骨架扩展，而不是推翻重写。
 
 ## 2. 快速开始（本地）
 
@@ -52,8 +52,8 @@ Copy-Item .env.example .env
 
 项目默认使用两个 PostgreSQL 数据库：
 
-- `arkilo_core`：核心业务（用户/组织/会话/订阅骨架等）
-- `arkilo_market_data`：市场数据（K 线等）
+- `arkanis_core`：核心业务（用户/组织/会话/订阅骨架等）
+- `arkanis_market_data`：市场数据（K 线等）
 
 执行一次：
 
@@ -109,7 +109,7 @@ SaaS Console 里新增了 `AI 策略` 页面，会走受控接口（需要登录
 - 年度：每月 `500.00` credit
 - 重置时间：以订阅的 `current_period_start` 为锚点，每满 1 个月在同一“日”重置（遇到短月则按月末对齐）
 
-管理员账号白名单通过环境变量配置：`ARKILO_ADMIN_EMAILS=admin@yourdomain.com,other@yourdomain.com`（用于激活码管理）。
+管理员账号白名单通过环境变量配置：`ARKANIS_ADMIN_EMAILS=admin@yourdomain.com,other@yourdomain.com`（用于激活码管理）。
 
 `AI Provider` 的 apiKey 会加密存储在数据库中，需要配置 `PROVIDER_SECRET`（见 `.env.example`）。
 
@@ -231,7 +231,7 @@ Run Tab 的交互说明见 `docs/RUN_TAB_GUIDE.md`。最小配置：
 
 这两个目录目前是**静态页面原型**（不走 `server/`、不连数据库），用于产品展示/交互草图：
 
-- `surface/`：Arkilo 落地页/产品介绍的静态页面（品牌与文案方向参考）。
+- `surface/`：Arkanis 落地页/产品介绍的静态页面（品牌与文案方向参考）。
 - `web_console/`：Console/订阅管理的静态原型（包含激活码、管理页等 UI 形态）。
 
 运行方式（任选其一）：
@@ -241,7 +241,7 @@ Run Tab 的交互说明见 `docs/RUN_TAB_GUIDE.md`。最小配置：
 
 重要说明（避免误用）：
 
-- `web_console/app.js` 与 `web_console/admin.json` 里存在演示用的硬编码管理员信息与模拟数据，仅用于原型展示，**不具备真实安全性**，也未与 `arkilo_core` 的 `users/subscriptions` 等表打通。
+- `web_console/app.js` 与 `web_console/admin.json` 里存在演示用的硬编码管理员信息与模拟数据，仅用于原型展示，**不具备真实安全性**，也未与 `arkanis_core` 的 `users/subscriptions` 等表打通。
 
 ## 4. 配置与密钥（务必认真对待）
 
@@ -280,8 +280,8 @@ VLM 的“模型/网关/Key”等不放在 `.env`，而是由 `ai-providers.json
 
 ### 5.1 两个数据库
 
-- `arkilo_core`：用户、组织、会话、订阅等（商业化骨架）
-- `arkilo_market_data`：市场数据（目前主存 `klines_1m`，应用侧重采样生成任意周期）
+- `arkanis_core`：用户、组织、会话、订阅等（商业化骨架）
+- `arkanis_market_data`：市场数据（目前主存 `klines_1m`，应用侧重采样生成任意周期）
 
 ### 5.2 迁移命令
 
@@ -315,7 +315,7 @@ pnpm db:migrate:market
                     │                              │ query/insert
                     ▼                              ▼
           ┌─────────────────┐            ┌────────────────────┐
-          │ arkilo_core     │            │ arkilo_market_data  │
+          │ arkanis_core     │            │ arkanis_market_data  │
           │ users/orgs/...  │            │ instruments/klines_1m│
           └─────────────────┘            └────────────────────┘
 ```
@@ -336,7 +336,7 @@ pnpm db:migrate:market
 - API Server：认证/账单/数据查询/任务创建
 - Worker：队列消费（回测、批量分析、数据采集、VLM 调用）
 
-对应路线与注意事项见 `docs/arkilo-saas-backend-plan.md`（任务系统、幂等、进度、可取消、重试、配额）。
+对应路线与注意事项见 `docs/arkanis-saas-backend-plan.md`（任务系统、幂等、进度、可取消、重试、配额）。
 
 ### 7.2 新交易所 / 新市场
 
@@ -368,7 +368,7 @@ pnpm db:migrate:market
 
 - 前端：优先复用 `web/`（Vue3）技术栈，或单独建 Console 应用但沿用同一套 API 契约与鉴权方式。
 - 鉴权：复用 `server/index.mjs` 已有的最小 auth（后续再升级 refresh/access 双 token、RBAC 等）。
-- 订阅：对齐 `arkilo_core` 的 `billing_customers`、`subscriptions` 设计（provider-agnostic），不要把 Stripe/加密货币逻辑硬编码进 UI。
+- 订阅：对齐 `arkanis_core` 的 `billing_customers`、`subscriptions` 设计（provider-agnostic），不要把 Stripe/加密货币逻辑硬编码进 UI。
 - 激活码：若继续保留“激活码”发放模式，应落库并审计（而不是前端本地 state/localStorage）。
 
 ## 8. 开发与自检

@@ -34,8 +34,8 @@ function getDbEnv() {
     const user = process.env.DB_USER || 'postgres';
     const password = String(process.env.DB_PASSWORD ?? '');
 
-    const coreDb = (process.env.DB_CORE_DATABASE || 'arkilo_core').trim();
-    const marketDb = (process.env.DB_MARKET_DATABASE || process.env.DB_DATABASE || 'arkilo_market_data').trim();
+    const coreDb = (process.env.DB_CORE_DATABASE || 'arkanis_core').trim();
+    const marketDb = (process.env.DB_MARKET_DATABASE || process.env.DB_DATABASE || 'arkanis_market_data').trim();
 
     return { host, port, user, password, coreDb, marketDb };
 }

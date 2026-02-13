@@ -68,7 +68,7 @@ export async function sendEmailVerification({ userId, publicUrl, env = process.e
 
         await mailer.send({
             to: user.email,
-            subject: 'Arkilo 邮箱验证',
+            subject: 'Arkanis 邮箱验证',
             text: `请打开链接完成邮箱验证：${url}`,
             html: `<p>请打开链接完成邮箱验证：</p><p><a href="${url}">${url}</a></p>`,
         });

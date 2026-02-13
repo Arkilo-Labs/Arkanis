@@ -9,8 +9,8 @@
                 </button>
 
                 <RouterLink to="/app" class="logo">
-                    <img src="/logo.png" alt="Arkilo" />
-                    <span>Arkilo</span>
+                    <img src="/logo.png" alt="Arkanis" />
+                    <span>Arkanis</span>
                 </RouterLink>
 
                 <div class="nav-links">
@@ -40,8 +40,8 @@
         <aside class="drawer" :class="{ open: drawerOpen }">
             <div class="drawer-header">
                 <RouterLink to="/app" class="logo" @click="closeDrawer">
-                    <img src="/logo.png" alt="Arkilo" />
-                    <span>Arkilo</span>
+                    <img src="/logo.png" alt="Arkanis" />
+                    <span>Arkanis</span>
                 </RouterLink>
                 <button class="drawer-close" type="button" @click="closeDrawer">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -353,4 +353,3 @@ onMounted(async () => {
     }
 }
 </style>
-

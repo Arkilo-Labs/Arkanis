@@ -165,7 +165,7 @@ function getClientIp(req) {
 }
 
 function parseAdminEmailSet() {
-    const raw = String(process.env.ARKILO_ADMIN_EMAILS || '')
+    const raw = String(process.env.ARKANIS_ADMIN_EMAILS || '')
         .split(',')
         .map((s) => s.trim().toLowerCase())
         .filter(Boolean);
@@ -467,7 +467,7 @@ app.post('/api/saas/run-script', async (req, res) => {
                 ...process.env,
                 FORCE_COLOR: '1',
                 CHART_WRITE_TOKEN: writeToken,
-                ARKILO_PROVIDER_OVERRIDE_JSON: JSON.stringify(providerOverride),
+                ARKANIS_PROVIDER_OVERRIDE_JSON: JSON.stringify(providerOverride),
             },
             stdio: ['ignore', 'pipe', 'pipe'],
         });

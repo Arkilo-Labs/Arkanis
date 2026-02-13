@@ -1,7 +1,7 @@
 import { computed, reactive } from 'vue';
 import { api } from '../lib/apiClient.js';
 
-const TOKEN_KEY = 'arkilo_session_token';
+const TOKEN_KEY = 'arkanis_session_token';
 
 const state = reactive({
     token: sessionStorage.getItem(TOKEN_KEY) || null,

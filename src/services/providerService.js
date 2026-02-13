@@ -7,7 +7,7 @@ const PROJECT_ROOT = join(__dirname, '../..');
 const PROVIDERS_FILE = join(PROJECT_ROOT, 'ai-providers.json');
 
 function tryParseProviderOverride() {
-    const raw = String(process.env.ARKILO_PROVIDER_OVERRIDE_JSON || '').trim();
+    const raw = String(process.env.ARKANIS_PROVIDER_OVERRIDE_JSON || '').trim();
     if (!raw) return null;
     try {
         const obj = JSON.parse(raw);

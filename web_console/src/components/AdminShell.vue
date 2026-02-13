@@ -9,7 +9,7 @@
                 </button>
 
                 <RouterLink to="/admin" class="logo">
-                    <img src="/logo.png" alt="Arkilo" />
+                    <img src="/logo.png" alt="Arkanis" />
                     <span>Admin</span>
                 </RouterLink>
 
@@ -34,7 +34,7 @@
         <aside class="drawer" :class="{ open: drawerOpen }">
             <div class="drawer-header">
                 <RouterLink to="/admin" class="logo" @click="closeDrawer">
-                    <img src="/logo.png" alt="Arkilo" />
+                    <img src="/logo.png" alt="Arkanis" />
                     <span>Admin</span>
                 </RouterLink>
                 <button class="drawer-close" type="button" @click="closeDrawer">
@@ -303,4 +303,3 @@ async function onSendVerify() {
     }
 }
 </style>
-

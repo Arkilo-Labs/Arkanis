@@ -4,8 +4,8 @@
             <div class="auth-card">
                 <div class="auth-header">
                     <div class="auth-logo">
-                        <img src="/logo.png" alt="Arkilo" />
-                        <span>Arkilo</span>
+                        <img src="/logo.png" alt="Arkanis" />
+                        <span>Arkanis</span>
                     </div>
                     <h1 class="auth-title">登录</h1>
                     <p class="auth-subtitle">进入 SaaS 控制台</p>
@@ -72,4 +72,3 @@ async function onSubmit() {
     }
 }
 </script>
-

@@ -4,8 +4,8 @@
             <div class="auth-card">
                 <div class="auth-header">
                     <div class="auth-logo">
-                        <img src="/logo.png" alt="Arkilo" />
-                        <span>Arkilo</span>
+                        <img src="/logo.png" alt="Arkanis" />
+                        <span>Arkanis</span>
                     </div>
                     <h1 class="auth-title">注册</h1>
                     <p class="auth-subtitle">创建账号并开始使用</p>
