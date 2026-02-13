@@ -30,7 +30,9 @@ temp/
 nul
 
 CLAUDE.MD
-docs
+
+# 本地笔记（不提交）
+notes/
 
 ai-providers.json
 
@@ -43,3 +45,7 @@ readme_yingxiao.md
 TradeRoundtable/history
 .claude
 TradeRoundtable/config/providers.json
+
+# VitePress 构建产物
+docs/.vitepress/cache/
+docs/.vitepress/dist/

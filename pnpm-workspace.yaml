@@ -1,6 +1,7 @@
 packages:
   - '.'
   - 'web_console'
+  - 'docs'
 
 onlyBuiltDependencies:
   - esbuild
