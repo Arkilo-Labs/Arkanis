@@ -8,9 +8,9 @@
 
 ### 现状：可跑的实验环境
 
-- **脚本驱动**：`scripts/main.js` / `scripts/backtest.js` 负责拉 K 线、渲图、调用 VLM、产出结果。
+- **脚本驱动**：`src/cli/vlm/main.js` / `src/cli/vlm/backtest.js` 负责拉 K 线、渲图、调用 VLM、产出结果。
 - **数据底座**：PostgreSQL 双库（`arkanis_core` + `arkanis_market_data`）已落地，迁移体系已落地。
-- **开发控制台**：`server/` + `web/` 提供“运行脚本 / 日志推送 / 配置编辑 / Provider 管理 / Telegram 推送”等能力。
+- **开发控制台**：`src/apps/server/` + `src/apps/web/` 提供“运行脚本 / 日志推送 / 配置编辑 / Provider 管理 / Telegram 推送”等能力。
 
 ### 目标：Arkanis SaaS 后端底座
 
@@ -38,7 +38,7 @@ docker compose up -d postgres
 pnpm install
 ```
 
-本仓库是一个多项目（workspace）结构：根目录 + `server/` + `web/` + `web_console/` + `docs/` 都各自有 `package.json`。
+本仓库是一个多项目（workspace）结构：根目录 + `src/apps/server/` + `src/apps/web/` + `src/apps/web_console/` + `docs/` 都各自有 `package.json`。
 正常情况下只需要在根目录执行一次 `pnpm install`，就会把这些子项目的依赖一起装好；不要只在某个子目录里单独 `npm install`，否则很容易出现“能跑一部分、另一部分缺包”的情况。
 
 如果安装后看到 `Ignored build scripts: puppeteer, sharp`，执行一次：
@@ -104,7 +104,7 @@ pnpm dev:web
 
 Web 通过 Socket.IO 订阅日志；server 负责派生脚本进程并转发 stdout/stderr。
 
-如果你要跑 SaaS 终端（`web_console/`，含登录/订阅/激活码），启动方式：
+如果你要跑 SaaS 终端（`src/apps/web_console/`，含登录/订阅/激活码），启动方式：
 
 ```bash
 # 终端 C：启动 SaaS Console（Vite dev server，默认 5174）
@@ -117,8 +117,8 @@ Windows PowerShell 里不要用 `&&`，请用两行命令或用 `;` 分隔。
 
 ### 2.6 常见安装/启动问题
 
-- `Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'express' imported from server/index.mjs`  
-  说明 `server/` 的依赖没装上（或没被纳入 workspace）。回到根目录执行 `pnpm install`；如果你只想补装 server，也可以跑 `pnpm -C server install`。
+- `Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'express' imported from src/apps/server/index.mjs`  
+  说明依赖未正确安装。回到根目录执行 `pnpm install`；如果你只想补装 server，也可以跑 `pnpm -C src/apps/server install`。
 
 - `ERR_PNPM_META_FETCH_FAIL` / `getaddrinfo ENOTFOUND registry.npmjs.org`  
   这是网络/DNS 无法访问 npm 官方源导致的，包自然就“缺”。请先确认能访问 npm 源；在受限网络环境可以切换镜像源：  
@@ -162,7 +162,7 @@ pnpm main -- --symbol BTCUSDT --timeframe 1h --bars 200 --enable-4x-chart
 pnpm main -- --skip-png --skip-vlm
 ```
 
-`scripts/main.js` 参数一览：
+`src/cli/vlm/main.js` 参数一览：
 
 | 参数 | 说明 | 默认值 |
 |---|---|---|
@@ -189,7 +189,7 @@ pnpm backtest -- --symbol BTCUSDT --timeframe 1h --start-time "2024-12-01" --end
 pnpm backtest -- --start-time "2024-12-01" --end-time "2024-12-03" --save-charts
 ```
 
-`scripts/backtest.js` 参数一览：
+`src/cli/vlm/backtest.js` 参数一览：
 
 | 参数 | 说明 | 默认值 |
 |---|---|---|
@@ -209,11 +209,11 @@ pnpm backtest -- --start-time "2024-12-01" --end-time "2024-12-03" --save-charts
 
 ### 3.3 Web 控制台：运行脚本 + 看日志 + 改配置
 
-server 暴露了这些能力（见 `server/index.mjs`）：
+server 暴露了这些能力（见 `src/apps/server/index.mjs`）：
 
 - 运行脚本：`POST /api/run-script`（支持 `main` / `backtest`）
 - 日志推送：Socket.IO 广播事件 `log` / `process-exit`
-- Prompt 列表：`GET /api/prompts`（来自 `prompts/`）
+- Prompt 列表：`GET /api/prompts`（来自 `src/resources/prompts/vlm/`）
 - 配置读取/写入：`GET /api/config` / `POST /api/config`（白名单写 `.env`）
 - Provider 管理：`/api/ai-providers`（读写 `ai-providers.json`，支持激活）
 - Telegram 推送：`POST /api/send-telegram`
@@ -224,7 +224,7 @@ server 暴露了这些能力（见 `server/index.mjs`）：
 以 `http://localhost:3000` 为例（按需改 `PORT`）：
 
 ```bash
-# 运行 main 脚本（args 会原样透传给 scripts/main.js）
+# 运行 main 脚本（args 会原样透传给 src/cli/vlm/main.js）
 curl -X POST http://localhost:3000/api/run-script \
   -H "Content-Type: application/json" \
   -d "{\"script\":\"main\",\"args\":[\"--symbol\",\"BTCUSDT\",\"--timeframe\",\"5m\",\"--bars\",\"200\"]}"
@@ -259,21 +259,21 @@ Run Tab 的交互说明见 `docs/RUN_TAB_GUIDE.md`。最小配置：
 - 启动 `pnpm dev:server`、`pnpm dev:web`
 - 在 Run Tab 开启定时运行，并打开 Telegram 通知开关
 
-### 3.5 静态原型：`surface/` 与 `web_console/`
+### 3.5 静态原型：`src/apps/surface/` 与 `src/apps/web_console/`
 
-这两个目录目前是**静态页面原型**（不走 `server/`、不连数据库），用于产品展示/交互草图：
+这两个目录目前是**静态页面原型**（不走 `src/apps/server/`、不连数据库），用于产品展示/交互草图：
 
-- `surface/`：Arkanis 落地页/产品介绍的静态页面（品牌与文案方向参考）。
-- `web_console/`：Console/订阅管理的静态原型（包含激活码、管理页等 UI 形态）。
+- `src/apps/surface/`：Arkanis 落地页/产品介绍的静态页面（品牌与文案方向参考）。
+- `src/apps/web_console/`：Console/订阅管理的静态原型（包含激活码、管理页等 UI 形态）。
 
 运行方式（任选其一）：
 
-- 直接用浏览器打开 `surface/index.html` 或 `web_console/index.html`
+- 直接用浏览器打开 `src/apps/surface/index.html` 或 `src/apps/web_console/index.html`
 - 或用任意静态服务器起一个目录（方便相对路径与缓存行为更接近线上）
 
 重要说明（避免误用）：
 
-- `web_console/app.js` 与 `web_console/admin.json` 里存在演示用的硬编码管理员信息与模拟数据，仅用于原型展示，**不具备真实安全性**，也未与 `arkanis_core` 的 `users/subscriptions` 等表打通。
+- `src/apps/web_console/` 内可能包含演示用硬编码与模拟数据，仅用于原型展示，**不具备真实安全性**。
 
 ## 4. 配置与密钥（务必认真对待）
 
@@ -283,7 +283,7 @@ Run Tab 的交互说明见 `docs/RUN_TAB_GUIDE.md`。最小配置：
 
 - 数据库：`DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_*_DATABASE`
 - 市场数据：`MARKET_EXCHANGE`、`MARKET_MARKET_TYPE`、`MARKET_EXCHANGE_FALLBACKS`（兼容旧的 `BINANCE_MARKET`）
-- Prompt：`PROMPT_NAME`（对应 `prompts/<name>.md`）
+- Prompt：`PROMPT_NAME`（对应 `src/resources/prompts/vlm/<name>.md`）
 - 图表：`CHART_*`
 - 日志：`LOG_LEVEL`
 - Telegram：`TG_BOT_TOKEN`、`TG_CHAT_ID`
@@ -293,7 +293,7 @@ Run Tab 的交互说明见 `docs/RUN_TAB_GUIDE.md`。最小配置：
 
 VLM 的“模型/网关/Key”等不放在 `.env`，而是由 `ai-providers.json` 管理，并支持“多 Provider + 激活”。
 
-- 读取位置：`src/services/providerService.js`
+- 读取位置：`src/core/services/providerService.js`
 - 激活 Provider：`VLMClient.fromActiveProvider()` 会选中 `isActive=true` 的那一条
 - 维护方式：建议通过 Web UI 的 Provider 管理页面；也可手动编辑（谨慎）
 
@@ -304,9 +304,9 @@ VLM 的“模型/网关/Key”等不放在 `.env`，而是由 `ai-providers.json
 
 ### 4.3 Prompt（策略输出的“契约”）
 
-- 目录：`prompts/`
-- 选择：`.env PROMPT_NAME=<name>` → 使用 `prompts/<name>.md`
-- 约束：VLM 输出会走 schema 校验（`src/vlm/schema.js`），Prompt 变更要保持可解析与可校验。
+- 目录：`src/resources/prompts/vlm/`
+- 选择：`.env PROMPT_NAME=<name>` → 使用 `src/resources/prompts/vlm/<name>.md`
+- 约束：VLM 输出会走 schema 校验（`src/core/vlm/schema.js`），Prompt 变更要保持可解析与可校验。
 
 ## 5. 数据库：双库拆分与迁移
 
@@ -340,7 +340,7 @@ pnpm db:migrate:market
                     │ Socket.IO(log/config-reload/providers-updated)
                     ▼
             ┌───────────────┐        ┌──────────────────────┐
-            │ server (Express)│ spawn │ scripts/main/backtest │
+            │ server (Express)│ spawn │ src/cli/vlm/main/backtest │
             │ /api/run-script │──────▶│ 渲图 + VLM + 产出结果 │
             └───────┬────────┘        └───────────┬──────────┘
                     │                              │
@@ -354,10 +354,10 @@ pnpm db:migrate:market
 
 关键实现入口：
 
-- 数据：`src/data/klinesRepository.js`（不足时从交易所补全并落库）
-- 渲图：`src/chart/chartBuilder.js`（Puppeteer + `src/chart/template.html`）
-- VLM：`src/vlm/`（Provider、Prompt、schema、overlay 转换）
-- 控制台后端：`server/index.mjs`
+- 数据：`src/core/data/klinesRepository.js`（不足时从交易所补全并落库）
+- 渲图：`src/core/chart/chartBuilder.js`（Puppeteer + `src/core/chart/template.html`）
+- VLM：`src/core/vlm/`（Provider、Prompt、schema、overlay 转换）
+- 控制台后端：`src/apps/server/index.mjs`
 
 ## 7. 如何拓展（面向后续团队的“落点清单”）
 
@@ -372,7 +372,7 @@ pnpm db:migrate:market
 
 ### 7.2 新交易所 / 新市场
 
-落点：`src/data/exchangeClient.js`（ccxt + failover）
+落点：`src/core/data/exchangeClient.js`（ccxt + failover）
 
 - 先把“拉 1m 原始 K 线”的接口对齐
 - 保持 `instruments(exchange, market, symbol)` 的唯一键不变（便于多来源扩展）
@@ -394,12 +394,12 @@ pnpm db:migrate:market
 - Billing：`subscriptions` / `billing_customers` 先保持 provider-agnostic（Stripe/加密货币都能接）
 - 审计与可观测：日志结构化、request id、user/org 维度打点，别等上线再补
 
-### 7.5 让 `web_console/` 变成“真实 Console”的落点（建议路线）
+### 7.5 让 `src/apps/web_console/` 变成“真实 Console”的落点（建议路线）
 
-`web_console/` 当前是纯静态原型。要产品化，建议不要在原型上堆逻辑，而是把它当作“UI 参考”，按现有后端骨架落地：
+`src/apps/web_console/` 当前是纯静态原型。要产品化，建议不要在原型上堆逻辑，而是把它当作“UI 参考”，按现有后端骨架落地：
 
-- 前端：优先复用 `web/`（Vue3）技术栈，或单独建 Console 应用但沿用同一套 API 契约与鉴权方式。
-- 鉴权：复用 `server/index.mjs` 已有的最小 auth（后续再升级 refresh/access 双 token、RBAC 等）。
+- 前端：优先复用 `src/apps/web/`（Vue3）技术栈，或单独建 Console 应用但沿用同一套 API 契约与鉴权方式。
+- 鉴权：复用 `src/apps/server/index.mjs` 已有的最小 auth（后续再升级 refresh/access 双 token、RBAC 等）。
 - 订阅：对齐 `arkanis_core` 的 `billing_customers`、`subscriptions` 设计（provider-agnostic），不要把 Stripe/加密货币逻辑硬编码进 UI。
 - 激活码：若继续保留“激活码”发放模式，应落库并审计（而不是前端本地 state/localStorage）。
 
