@@ -25,44 +25,44 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="glass-card w-full max-w-xl p-8">
+        <div className="auth-card">
             <div className="mb-6">
-                <span className="text-subtitle-en mb-2 block">Admin sign in</span>
-                <h1 className="text-hero-cn text-apple-gradient">登录</h1>
-                <p className="text-sm text-white/50 mt-2">请输入管理员账号密码。</p>
+                <div className="text-xs tracking-wide text-text-muted">Admin sign in</div>
+                <h1 className="text-3xl font-bold mt-2">登录</h1>
+                <p className="text-sm text-text-muted mt-2">请输入管理员账号密码。</p>
             </div>
 
             <form className="space-y-4" onSubmit={submit}>
                 <div>
-                    <label className="text-label block mb-2">用户名</label>
+                    <label className="form-label">用户名</label>
                     <input
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        className="input-glass"
+                        className="form-input"
                         type="text"
                         autoComplete="username"
                     />
                 </div>
 
                 <div>
-                    <label className="text-label block mb-2">密码</label>
+                    <label className="form-label">密码</label>
                     <input
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="input-glass"
+                        className="form-input"
                         type="password"
                         autoComplete="current-password"
                     />
                 </div>
 
                 {error ? (
-                    <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-200 text-sm">
+                    <div className="rounded-xl border border-error/25 bg-error/10 p-4 text-error text-sm">
                         {error}
                     </div>
                 ) : null}
 
                 <button
-                    className="btn-glass w-full h-14 justify-center"
+                    className="btn btn-primary btn-full"
                     disabled={!canSubmit || isSubmitting}
                     type="submit"
                 >
@@ -73,7 +73,7 @@ export default function LoginPage() {
                                 : 'fas fa-right-to-bracket'
                         }
                     ></i>
-                    <span className="font-bold">登录</span>
+                    登录
                 </button>
             </form>
         </div>

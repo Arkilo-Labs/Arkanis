@@ -15,9 +15,9 @@
         "test": "node --test",
         "dev:server": "pnpm -C src/apps/server start",
         "dev:web": "pnpm -C src/apps/web dev",
-        "dev:console": "pnpm -C src/apps/web_console dev",
+        "dev:console": "pnpm -C src/apps/web dev",
         "web": "pnpm -C src/apps/web dev",
-        "web:console": "pnpm -C src/apps/web_console dev"
+        "web:console": "pnpm -C src/apps/web dev"
     },
     "keywords": [
         "vlm",

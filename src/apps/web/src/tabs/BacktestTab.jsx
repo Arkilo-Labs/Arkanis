@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import CustomSelect from '../components/CustomSelect.jsx';
 import LogTerminal from '../components/LogTerminal.jsx';
 import { authedFetch } from '../composables/useAuth.js';
 import { useSocket } from '../composables/useSocket.js';
@@ -39,10 +38,6 @@ export default function BacktestTab() {
     const pidRef = useRef(null);
 
     const timeframes = useMemo(() => ['5m', '15m', '1h', '4h'], []);
-    const timeframeOptions = useMemo(
-        () => timeframes.map((tf) => ({ value: tf, label: tf })),
-        [timeframes],
-    );
 
     const addLog = useCallback((type, data) => {
         setLogs((prev) => [...prev, { type, data, timestamp: Date.now() }]);
@@ -148,84 +143,99 @@ export default function BacktestTab() {
 
     return (
         <div className="space-y-6">
-            <div className="glass-card p-8 animate-slide-up">
-                <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-                    <div>
-                        <span className="text-subtitle-en mb-2 block">
-                            Historical Strategy Validation
-                        </span>
-                        <h1 className="text-hero-cn text-apple-gradient">回测系统</h1>
+            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+                <div>
+                    <div className="text-xs tracking-wide text-text-muted">
+                        Historical Strategy Validation
                     </div>
-                    <div className="flex items-center gap-4">
-                        {isRunning ? (
-                            <div className="badge-blue flex items-center gap-2">
-                                <i className="fas fa-spinner fa-spin"></i>
-                                {config.workers} Workers
-                            </div>
-                        ) : null}
+                    <h1 className="text-2xl md:text-3xl font-bold mt-2">
+                        回测系统
+                    </h1>
+                    {isRunning && pid ? (
+                        <div className="text-xs text-text-muted mt-2">
+                            PID: <span className="font-mono">{pid}</span>
+                        </div>
+                    ) : null}
+                </div>
 
-                        {!isRunning ? (
-                            <button
-                                type="button"
-                                onClick={runBacktest}
-                                className="btn-glass h-14 px-8"
-                            >
-                                <i className="fas fa-play"></i>
-                                <span className="font-bold">开始回测</span>
-                            </button>
-                        ) : (
-                            <button
-                                type="button"
-                                onClick={stopBacktest}
-                                className="btn-glass btn-glass-danger h-14 px-8"
-                            >
-                                <i className="fas fa-stop"></i>
-                                <span className="font-bold">停止</span>
-                            </button>
-                        )}
-                    </div>
+                <div className="flex items-center gap-3">
+                    {isRunning ? (
+                        <span className="badge badge-accent">
+                            <i className="fas fa-spinner fa-spin"></i>
+                            {config.workers} Workers
+                        </span>
+                    ) : null}
+
+                    {!isRunning ? (
+                        <button
+                            type="button"
+                            onClick={runBacktest}
+                            className="btn btn-primary"
+                        >
+                            <i className="fas fa-play"></i>
+                            开始回测
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={stopBacktest}
+                            className="btn btn-danger"
+                        >
+                            <i className="fas fa-stop"></i>
+                            停止
+                        </button>
+                    )}
                 </div>
             </div>
 
-            <div className="bento-grid">
-                <div className="bento-md glass-card p-6 animate-slide-up stagger-1">
-                    <h2 className="text-label flex items-center gap-2 mb-6">
-                        <i className="fas fa-calendar-alt"></i>
-                        Backtest Config
-                    </h2>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="card card-hover p-6 lg:col-span-2">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-sm font-semibold">回测配置</h2>
+                        <span className="text-xs text-text-muted">Backtest Config</span>
+                    </div>
 
-                    <div className="space-y-5">
-                        <div>
-                            <label className="text-label block mb-2">交易对 Symbol</label>
-                            <input
-                                value={config.symbol}
-                                onChange={(e) =>
-                                    setConfig((prev) => ({
-                                        ...prev,
-                                        symbol: e.target.value,
-                                    }))
-                                }
-                                type="text"
-                                className="input-glass font-mono"
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="text-label block mb-2">周期 Timeframe</label>
-                                <CustomSelect
-                                    value={config.timeframe}
-                                    options={timeframeOptions}
-                                    onChange={(nextValue) =>
+                                <label className="form-label">交易对 Symbol</label>
+                                <input
+                                    value={config.symbol}
+                                    onChange={(e) =>
                                         setConfig((prev) => ({
                                             ...prev,
-                                            timeframe: nextValue,
+                                            symbol: e.target.value,
                                         }))
                                     }
+                                    type="text"
+                                    className="form-input font-mono"
+                                    disabled={isRunning}
                                 />
                             </div>
+
                             <div>
-                                <label className="text-label block mb-2">K线数 Bars</label>
+                                <label className="form-label">周期 Timeframe</label>
+                                <select
+                                    value={config.timeframe}
+                                    onChange={(e) =>
+                                        setConfig((prev) => ({
+                                            ...prev,
+                                            timeframe: e.target.value,
+                                        }))
+                                    }
+                                    className="form-input font-mono"
+                                    disabled={isRunning}
+                                >
+                                    {timeframes.map((tf) => (
+                                        <option key={tf} value={tf}>
+                                            {tf}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="form-label">K线数 Bars</label>
                                 <input
                                     value={config.bars}
                                     onChange={(e) =>
@@ -235,127 +245,13 @@ export default function BacktestTab() {
                                         }))
                                     }
                                     type="number"
-                                    className="input-glass font-mono"
+                                    className="form-input font-mono"
+                                    disabled={isRunning}
                                 />
                             </div>
-                        </div>
 
-                        <div>
-                            <label className="text-label block mb-2">开始时间 Start Time</label>
-                            <div className="grid grid-cols-[1fr_auto_auto] gap-2">
-                                <input
-                                    value={config.startDate}
-                                    onChange={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            startDate: e.target.value,
-                                        }))
-                                    }
-                                    type="date"
-                                    className="input-glass text-sm"
-                                />
-                                <input
-                                    value={config.startHour}
-                                    onChange={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            startHour: e.target.value,
-                                        }))
-                                    }
-                                    onBlur={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            startHour: normalizeHour(e.target.value),
-                                        }))
-                                    }
-                                    type="text"
-                                    maxLength={2}
-                                    placeholder="00"
-                                    className="input-glass text-sm w-16 text-center font-mono"
-                                />
-                                <input
-                                    value={config.startMinute}
-                                    onChange={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            startMinute: e.target.value,
-                                        }))
-                                    }
-                                    onBlur={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            startMinute: normalizeMinute(e.target.value),
-                                        }))
-                                    }
-                                    type="text"
-                                    maxLength={2}
-                                    placeholder="00"
-                                    className="input-glass text-sm w-16 text-center font-mono"
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="text-label block mb-2">结束时间 End Time</label>
-                            <div className="grid grid-cols-[1fr_auto_auto] gap-2">
-                                <input
-                                    value={config.endDate}
-                                    onChange={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            endDate: e.target.value,
-                                        }))
-                                    }
-                                    type="date"
-                                    className="input-glass text-sm"
-                                />
-                                <input
-                                    value={config.endHour}
-                                    onChange={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            endHour: e.target.value,
-                                        }))
-                                    }
-                                    onBlur={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            endHour: normalizeHour(e.target.value),
-                                        }))
-                                    }
-                                    type="text"
-                                    maxLength={2}
-                                    placeholder="23"
-                                    className="input-glass text-sm w-16 text-center font-mono"
-                                />
-                                <input
-                                    value={config.endMinute}
-                                    onChange={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            endMinute: e.target.value,
-                                        }))
-                                    }
-                                    onBlur={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            endMinute: normalizeMinute(e.target.value),
-                                        }))
-                                    }
-                                    type="text"
-                                    maxLength={2}
-                                    placeholder="59"
-                                    className="input-glass text-sm w-16 text-center font-mono"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 pt-4 border-t border-white/10">
                             <div>
-                                <label className="text-label flex items-center gap-1 mb-2">
-                                    <i className="fas fa-microchip text-[10px]"></i>
-                                    Workers
-                                </label>
+                                <label className="form-label">Workers</label>
                                 <input
                                     value={config.workers}
                                     onChange={(e) =>
@@ -367,54 +263,190 @@ export default function BacktestTab() {
                                     type="number"
                                     min="1"
                                     max="10"
-                                    className="input-glass font-mono"
+                                    className="form-input font-mono"
+                                    disabled={isRunning}
                                 />
                             </div>
-                            <div className="flex items-end pb-2">
-                                <label className="toggle-glass">
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                            <div>
+                                <label className="form-label">开始时间 Start Time</label>
+                                <div className="grid grid-cols-[1fr_auto_auto] gap-2">
                                     <input
-                                        checked={config.enable4x}
+                                        value={config.startDate}
                                         onChange={(e) =>
                                             setConfig((prev) => ({
                                                 ...prev,
-                                                enable4x: e.target.checked,
+                                                startDate: e.target.value,
                                             }))
                                         }
-                                        type="checkbox"
+                                        type="date"
+                                        className="form-input text-sm"
+                                        disabled={isRunning}
                                     />
-                                    <div className="toggle-track"></div>
-                                    <div className="toggle-thumb"></div>
-                                    <span className="ml-3 text-xs text-white/70">4x</span>
-                                </label>
+                                    <input
+                                        value={config.startHour}
+                                        onChange={(e) =>
+                                            setConfig((prev) => ({
+                                                ...prev,
+                                                startHour: e.target.value,
+                                            }))
+                                        }
+                                        onBlur={(e) =>
+                                            setConfig((prev) => ({
+                                                ...prev,
+                                                startHour: normalizeHour(e.target.value),
+                                            }))
+                                        }
+                                        type="text"
+                                        maxLength={2}
+                                        placeholder="00"
+                                        className="form-input text-sm w-16 text-center font-mono"
+                                        disabled={isRunning}
+                                    />
+                                    <input
+                                        value={config.startMinute}
+                                        onChange={(e) =>
+                                            setConfig((prev) => ({
+                                                ...prev,
+                                                startMinute: e.target.value,
+                                            }))
+                                        }
+                                        onBlur={(e) =>
+                                            setConfig((prev) => ({
+                                                ...prev,
+                                                startMinute: normalizeMinute(e.target.value),
+                                            }))
+                                        }
+                                        type="text"
+                                        maxLength={2}
+                                        placeholder="00"
+                                        className="form-input text-sm w-16 text-center font-mono"
+                                        disabled={isRunning}
+                                    />
+                                </div>
                             </div>
+
+                            <div>
+                                <label className="form-label">结束时间 End Time</label>
+                                <div className="grid grid-cols-[1fr_auto_auto] gap-2">
+                                    <input
+                                        value={config.endDate}
+                                        onChange={(e) =>
+                                            setConfig((prev) => ({
+                                                ...prev,
+                                                endDate: e.target.value,
+                                            }))
+                                        }
+                                        type="date"
+                                        className="form-input text-sm"
+                                        disabled={isRunning}
+                                    />
+                                    <input
+                                        value={config.endHour}
+                                        onChange={(e) =>
+                                            setConfig((prev) => ({
+                                                ...prev,
+                                                endHour: e.target.value,
+                                            }))
+                                        }
+                                        onBlur={(e) =>
+                                            setConfig((prev) => ({
+                                                ...prev,
+                                                endHour: normalizeHour(e.target.value),
+                                            }))
+                                        }
+                                        type="text"
+                                        maxLength={2}
+                                        placeholder="23"
+                                        className="form-input text-sm w-16 text-center font-mono"
+                                        disabled={isRunning}
+                                    />
+                                    <input
+                                        value={config.endMinute}
+                                        onChange={(e) =>
+                                            setConfig((prev) => ({
+                                                ...prev,
+                                                endMinute: e.target.value,
+                                            }))
+                                        }
+                                        onBlur={(e) =>
+                                            setConfig((prev) => ({
+                                                ...prev,
+                                                endMinute: normalizeMinute(e.target.value),
+                                            }))
+                                        }
+                                        type="text"
+                                        maxLength={2}
+                                        placeholder="59"
+                                        className="form-input text-sm w-16 text-center font-mono"
+                                        disabled={isRunning}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="pt-4 border-t border-border-light/10">
+                            <label
+                                className={[
+                                    'switch',
+                                    isRunning ? 'opacity-60 cursor-not-allowed' : '',
+                                ].join(' ')}
+                            >
+                                <input
+                                    checked={config.enable4x}
+                                    onChange={(e) =>
+                                        setConfig((prev) => ({
+                                            ...prev,
+                                            enable4x: e.target.checked,
+                                        }))
+                                    }
+                                    type="checkbox"
+                                    disabled={isRunning}
+                                />
+                                <span className="switch-control">
+                                    <span className="switch-track"></span>
+                                    <span className="switch-thumb"></span>
+                                </span>
+                                <span className="text-sm text-text-muted">4x</span>
+                            </label>
                         </div>
                     </div>
                 </div>
 
-                <div className="bento-sm glass-card p-6 flex flex-col justify-center animate-slide-up stagger-2">
-                    <span className="text-subtitle-en mb-2">Total Trades</span>
-                    <span className="text-giant-number text-white">--</span>
-                    <span className="text-label mt-2">交易次数</span>
+                <div className="space-y-6 lg:col-span-1">
+                    <div className="card card-hover p-6">
+                        <div className="text-xs tracking-wide text-text-muted">
+                            Total Trades
+                        </div>
+                        <div className="text-4xl font-bold mt-2">--</div>
+                        <div className="text-xs text-text-muted mt-2">交易次数</div>
+                    </div>
+
+                    <div className="card card-hover p-6">
+                        <div className="text-xs tracking-wide text-text-muted">
+                            Win Rate
+                        </div>
+                        <div className="text-4xl font-bold mt-2 text-success">--%</div>
+                        <div className="text-xs text-text-muted mt-2">胜率</div>
+                    </div>
+
+                    <div className="card card-hover p-6">
+                        <div className="text-xs tracking-wide text-text-muted">
+                            Profit Factor
+                        </div>
+                        <div className="text-4xl font-bold mt-2">--</div>
+                        <div className="text-xs text-text-muted mt-2">盈亏比</div>
+                    </div>
                 </div>
 
-                <div className="bento-sm glass-card p-6 flex flex-col justify-center animate-slide-up stagger-3">
-                    <span className="text-subtitle-en mb-2">Win Rate</span>
-                    <span className="text-giant-number text-green-400">--%</span>
-                    <span className="text-label mt-2">胜率</span>
-                </div>
-
-                <div className="bento-sm glass-card p-6 flex flex-col justify-center animate-slide-up stagger-4">
-                    <span className="text-subtitle-en mb-2">Profit Factor</span>
-                    <span className="text-giant-number text-apple-gradient">--</span>
-                    <span className="text-label mt-2">盈亏比</span>
-                </div>
-
-                <div className="bento-full glass-card p-6 animate-slide-up">
-                    <h3 className="text-label flex items-center gap-2 mb-4">
-                        <i className="fas fa-terminal"></i>
-                        回测日志 Backtest Logs
-                    </h3>
-                    <LogTerminal logs={logs} className="min-h-[400px]" />
+                <div className="card card-hover p-6 lg:col-span-3">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-sm font-semibold">回测日志</h3>
+                        <span className="text-xs text-text-muted">Backtest Logs</span>
+                    </div>
+                    <LogTerminal logs={logs} className="min-h-[420px]" />
                 </div>
             </div>
         </div>

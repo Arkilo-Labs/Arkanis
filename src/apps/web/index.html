@@ -3,12 +3,12 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <link rel="icon" type="image/png" href="/logo.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VLM Trade - 智能交易分析</title>
+  <title>Arkanis Console</title>
 
   <!-- SEO Meta -->
-  <meta name="description" content="VLM Trade - AI-powered trading analysis platform" />
+  <meta name="description" content="Arkanis Console - AI-powered trading analysis" />
 
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,22 +19,9 @@
 
   <!-- Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-
-  <!-- Apache ECharts -->
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js"></script>
 </head>
 
 <body>
-  <!-- SVG Filter for Liquid Glass Distortion -->
-  <svg style="position: absolute; width: 0; height: 0;">
-    <defs>
-      <filter id="glass-distortion" x="-50%" y="-50%" width="200%" height="200%">
-        <feTurbulence type="fractalNoise" baseFrequency="0.01" numOctaves="3" result="noise" seed="1" />
-        <feDisplacementMap in="SourceGraphic" in2="noise" scale="3" xChannelSelector="R" yChannelSelector="G" />
-      </filter>
-    </defs>
-  </svg>
-
   <div id="app"></div>
   <script type="module" src="/src/main.jsx"></script>
 </body>

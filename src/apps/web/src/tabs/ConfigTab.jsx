@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import CustomSelect from '../components/CustomSelect.jsx';
 import { authedFetch } from '../composables/useAuth.js';
 
 const groupIcons = {
@@ -36,14 +35,6 @@ export default function ConfigTab() {
 
     const hasSelectOptions = useCallback((key) => key in selectOptions, [selectOptions]);
     const getInputType = useCallback((key) => inputTypes[key] || 'text', []);
-
-    const getSelectOptions = useCallback(
-        (key) => {
-            const options = selectOptions[key] || [];
-            return options.map((opt) => ({ value: opt, label: opt }));
-        },
-        [selectOptions],
-    );
 
     const loadConfig = useCallback(async () => {
         setIsLoading(true);
@@ -97,76 +88,91 @@ export default function ConfigTab() {
 
     return (
         <div className="space-y-6">
-            <div className="glass-card p-8 animate-slide-up">
-                <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-                    <div>
-                        <span className="text-subtitle-en mb-2 block">Environment Variables</span>
-                        <h1 className="text-hero-cn text-apple-gradient">系统配置</h1>
+            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+                <div>
+                    <div className="text-xs tracking-wide text-text-muted">
+                        Environment Variables
                     </div>
-                    <div className="flex items-center gap-4">
-                        <button
-                            type="button"
-                            onClick={saveConfig}
-                            disabled={isSaving}
-                            className="btn-glass h-14 px-8"
-                        >
-                            <i className={isSaving ? 'fas fa-spinner fa-spin' : 'fas fa-save'}></i>
-                            <span className="font-bold">保存配置</span>
-                        </button>
-                    </div>
+                    <h1 className="text-2xl md:text-3xl font-bold mt-2">
+                        系统配置
+                    </h1>
                 </div>
+
+                <button
+                    type="button"
+                    onClick={saveConfig}
+                    disabled={isSaving}
+                    className="btn btn-primary"
+                >
+                    <i className={isSaving ? 'fas fa-spinner fa-spin' : 'fas fa-save'}></i>
+                    保存配置
+                </button>
             </div>
 
             {saveStatus === 'success' ? (
-                <div className="glass-card p-4 flex items-center gap-3 border-green-500/30">
-                    <i className="fas fa-check-circle text-green-400"></i>
-                    <span className="text-green-400">
-                        保存成功，重启后生效 Saved. Restart to apply.
-                    </span>
+                <div className="card p-4 border-success/25 bg-success/10">
+                    <div className="flex items-center gap-3 text-success">
+                        <i className="fas fa-check-circle"></i>
+                        <span className="text-sm font-medium">
+                            保存成功，重启后生效
+                        </span>
+                    </div>
                 </div>
             ) : saveStatus === 'error' ? (
-                <div className="glass-card p-4 flex items-center gap-3 border-red-500/30">
-                    <i className="fas fa-exclamation-circle text-red-400"></i>
-                    <span className="text-red-400">保存失败 Failed to save.</span>
+                <div className="card p-4 border-error/25 bg-error/10">
+                    <div className="flex items-center gap-3 text-error">
+                        <i className="fas fa-exclamation-circle"></i>
+                        <span className="text-sm font-medium">保存失败</span>
+                    </div>
                 </div>
             ) : null}
 
             {isLoading ? (
-                <div className="flex justify-center py-20">
-                    <div className="flex flex-col items-center gap-4">
-                        <i className="fas fa-spinner fa-spin text-4xl text-white/30"></i>
-                        <span className="text-white/50">Loading configuration...</span>
+                <div className="card p-8 flex items-center justify-center">
+                    <div className="flex items-center gap-3 text-text-muted">
+                        <i className="fas fa-spinner fa-spin"></i>
+                        <span className="text-sm">Loading configuration...</span>
                     </div>
                 </div>
             ) : (
                 <div className="space-y-6">
                     {schemaEntries.map(([groupKey, group]) => (
-                        <div key={groupKey} className="glass-card p-6 animate-slide-up">
-                            <h2 className="text-label flex items-center gap-2 mb-6 pb-4 border-b border-white/10">
-                                <i className={groupIcons[groupKey] || 'fas fa-sliders-h'}></i>
-                                {group.label}
-                            </h2>
+                        <div key={groupKey} className="card card-hover p-6">
+                            <div className="flex items-center justify-between gap-4 mb-4 pb-4 border-b border-border-light/10">
+                                <div className="flex items-center gap-2">
+                                    <i className={groupIcons[groupKey] || 'fas fa-sliders-h'}></i>
+                                    <span className="text-sm font-semibold">
+                                        {group.label}
+                                    </span>
+                                </div>
+                                <span className="text-xs text-text-muted">
+                                    {groupKey}
+                                </span>
+                            </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                 {group.items.map((key) => (
                                     <div key={key}>
-                                        <label
-                                            className="text-label block mb-2 truncate"
-                                            title={key}
-                                        >
+                                        <label className="form-label truncate" title={key}>
                                             {key}
                                         </label>
                                         {hasSelectOptions(key) ? (
-                                            <CustomSelect
+                                            <select
                                                 value={config[key] ?? ''}
-                                                options={getSelectOptions(key)}
-                                                onChange={(nextValue) =>
+                                                onChange={(e) =>
                                                     setConfig((prev) => ({
                                                         ...prev,
-                                                        [key]: nextValue,
+                                                        [key]: e.target.value,
                                                     }))
                                                 }
-                                            />
+                                                className="form-input font-mono text-sm"
+                                            >
+                                                {(selectOptions[key] || []).map((opt) => (
+                                                    <option key={opt} value={opt}>
+                                                        {opt}
+                                                    </option>
+                                                ))}
+                                            </select>
                                         ) : (
                                             <input
                                                 value={config[key] ?? ''}
@@ -177,7 +183,7 @@ export default function ConfigTab() {
                                                     }))
                                                 }
                                                 type={getInputType(key)}
-                                                className="input-glass font-mono text-sm"
+                                                className="form-input font-mono text-sm"
                                             />
                                         )}
                                     </div>

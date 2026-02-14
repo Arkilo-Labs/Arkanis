@@ -40,7 +40,7 @@ function drawOverlays({ data, candlestickSeries }) {
                 if (price == null) return;
                 candlestickSeries.createPriceLine({
                     price,
-                    color: overlay.color || 'rgba(0, 122, 255, 0.8)',
+                    color: overlay.color || 'rgba(255, 69, 0, 0.85)',
                     lineWidth: overlay.width || 2,
                     lineStyle: 2,
                     axisLabelVisible: true,
@@ -57,7 +57,7 @@ function drawOverlays({ data, candlestickSeries }) {
                     newMarkers.push({
                         time,
                         position: toMarkerPosition(overlay.position),
-                        color: overlay.color || 'rgba(0, 122, 255, 0.9)',
+                        color: overlay.color || 'rgba(255, 69, 0, 0.9)',
                         shape: toMarkerShape(overlay.shape),
                         text: overlay.text || '',
                     });
@@ -73,7 +73,7 @@ function drawOverlays({ data, candlestickSeries }) {
                 if (!startBar || !endBar || price == null) return;
                 candlestickSeries.createPriceLine({
                     price,
-                    color: overlay.color || 'rgba(255, 152, 0, 0.8)',
+                    color: overlay.color || 'rgba(255, 69, 0, 0.85)',
                     lineWidth: overlay.width || 2,
                     lineStyle: 0,
                     axisLabelVisible: false,
@@ -164,22 +164,22 @@ export default function ChartView({ data, title, height = 500 }) {
                     width,
                     height: safeHeight,
                     layout: {
-                        background: { color: 'rgba(17, 17, 27, 0.95)' },
+                        background: { color: 'rgba(0, 0, 0, 0.35)' },
                         textColor: 'rgba(255, 255, 255, 0.7)',
                     },
                     grid: {
-                        vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
-                        horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
+                        vertLines: { color: 'rgba(255, 255, 255, 0.06)' },
+                        horzLines: { color: 'rgba(255, 255, 255, 0.06)' },
                     },
                     crosshair: {
                         mode: CrosshairMode.Normal,
                         vertLine: {
                             color: 'rgba(255, 255, 255, 0.3)',
-                            labelBackgroundColor: 'rgba(0, 122, 255, 0.8)',
+                            labelBackgroundColor: 'rgba(255, 69, 0, 0.85)',
                         },
                         horzLine: {
                             color: 'rgba(255, 255, 255, 0.3)',
-                            labelBackgroundColor: 'rgba(0, 122, 255, 0.8)',
+                            labelBackgroundColor: 'rgba(255, 69, 0, 0.85)',
                         },
                     },
                     rightPriceScale: {

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import CustomSelect from '../components/CustomSelect.jsx';
 import ProviderCard from '../components/ProviderCard.jsx';
 import { authedFetch } from '../composables/useAuth.js';
 import { useSocket } from '../composables/useSocket.js';
@@ -176,83 +175,76 @@ export default function AIProvidersTab() {
     const providerList = useMemo(() => providers || [], [providers]);
 
     return (
-        <div className="ai-providers-tab space-y-6">
-            <div className="glass-card p-8 animate-slide-up">
-                <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-                    <div>
-                        <span className="text-subtitle-en mb-2 block">
-                            AI Models Management
-                        </span>
-                        <h1 className="text-hero-cn text-apple-gradient">AI Provider</h1>
-                        <p className="text-sm text-white/50 mt-2">
-                            管理多个 AI Provider 配置
-                        </p>
+        <div className="space-y-6">
+            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+                <div>
+                    <div className="text-xs tracking-wide text-text-muted">
+                        AI Models Management
                     </div>
-                    <button
-                        type="button"
-                        onClick={openAddModal}
-                        className="btn-glass h-14 px-8"
-                    >
-                        <i className="fas fa-plus"></i>
-                        <span className="font-bold">添加 Provider</span>
-                    </button>
+                    <h1 className="text-2xl md:text-3xl font-bold mt-2">模型</h1>
+                    <p className="text-sm text-text-muted mt-2">
+                        管理多个 AI Provider 配置
+                    </p>
                 </div>
+
+                <button type="button" onClick={openAddModal} className="btn btn-primary">
+                    <i className="fas fa-plus"></i>
+                    添加 Provider
+                </button>
             </div>
 
             {isLoading ? (
-                <div className="flex justify-center py-20">
-                    <div className="flex flex-col items-center gap-4">
-                        <i className="fas fa-spinner fa-spin text-4xl text-white/30"></i>
-                        <span className="text-white/50">Loading providers...</span>
+                <div className="card p-8 flex items-center justify-center">
+                    <div className="flex items-center gap-3 text-text-muted">
+                        <i className="fas fa-spinner fa-spin"></i>
+                        <span className="text-sm">Loading providers...</span>
                     </div>
                 </div>
             ) : providerList.length > 0 ? (
-                <div className="provider-list-grid">
-                    {providerList.map((provider, index) => (
-                        <div
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {providerList.map((provider) => (
+                        <ProviderCard
                             key={provider.id}
-                            className="animate-slide-up"
-                            style={{ animationDelay: `${index * 0.05}s` }}
-                        >
-                            <ProviderCard
-                                provider={provider}
-                                onUpdate={updateProvider}
-                                onDelete={deleteProvider}
-                                onActivate={activateProvider}
-                            />
-                        </div>
+                            provider={provider}
+                            onUpdate={updateProvider}
+                            onDelete={deleteProvider}
+                            onActivate={activateProvider}
+                        />
                     ))}
                 </div>
             ) : (
-                <div className="glass-card p-12 text-center animate-slide-up">
-                    <div className="empty-state-icon">
-                        <i className="fas fa-brain"></i>
+                <div className="card card-hover p-10 text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-white/5 border border-border-light/10 flex items-center justify-center mx-auto">
+                        <i className="fas fa-brain text-white/40 text-3xl"></i>
                     </div>
-                    <h3 className="text-xl text-white/70 mb-2 font-semibold">暂无 Provider</h3>
-                    <p className="text-sm text-white/50 mb-6">
+                    <h3 className="text-lg font-semibold mt-5">暂无 Provider</h3>
+                    <p className="text-sm text-text-muted mt-2">
                         点击上方按钮添加您的第一个 AI Provider
                     </p>
-                    <button type="button" onClick={openAddModal} className="btn-glass">
-                        <i className="fas fa-plus"></i>
-                        <span>添加 Provider</span>
-                    </button>
+                    <div className="mt-6">
+                        <button type="button" onClick={openAddModal} className="btn btn-primary">
+                            <i className="fas fa-plus"></i>
+                            添加 Provider
+                        </button>
+                    </div>
                 </div>
             )}
 
             {showAddModal ? (
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+                    className="modal-overlay"
                     onClick={(e) => {
                         if (e.target === e.currentTarget) setShowAddModal(false);
                     }}
                 >
-                    <div className="glass-card max-w-3xl w-full max-h-[90vh] overflow-y-auto p-8">
+                    <div className="modal-card max-w-3xl p-8" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-2xl font-bold text-white">添加 Provider</h2>
+                            <h2 className="text-xl font-bold">添加 Provider</h2>
                             <button
                                 type="button"
                                 onClick={() => setShowAddModal(false)}
-                                className="p-2 rounded-lg hover:bg-white/10 text-white/60 transition-colors"
+                                className="p-2 rounded-lg hover:bg-white/10 text-white/70 transition-colors"
+                                aria-label="关闭"
                             >
                                 <i className="fas fa-times"></i>
                             </button>
@@ -261,10 +253,7 @@ export default function AIProvidersTab() {
                         <div className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="text-label block mb-2">
-                                        <i className="fas fa-tag text-xs mr-1"></i>
-                                        显示名称 *
-                                    </label>
+                                    <label className="form-label">Provider 名称</label>
                                     <input
                                         value={newProvider.name}
                                         onChange={(e) =>
@@ -274,37 +263,14 @@ export default function AIProvidersTab() {
                                             }))
                                         }
                                         type="text"
-                                        className="input-glass"
-                                        placeholder="Claude Sonnet 4.5"
+                                        className="form-input"
+                                        placeholder="OpenAI / DeepSeek / 自建网关..."
                                         required
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="text-label block mb-2">
-                                        <i className="fas fa-link text-xs mr-1"></i>
-                                        API Base URL *
-                                    </label>
-                                    <input
-                                        value={newProvider.baseUrl}
-                                        onChange={(e) =>
-                                            setNewProvider((prev) => ({
-                                                ...prev,
-                                                baseUrl: e.target.value,
-                                            }))
-                                        }
-                                        type="text"
-                                        className="input-glass"
-                                        placeholder="https://api.example.com"
-                                        required
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="text-label block mb-2">
-                                        <i className="fas fa-cube text-xs mr-1"></i>
-                                        模型名称 *
-                                    </label>
+                                    <label className="form-label">Model Name</label>
                                     <input
                                         value={newProvider.modelName}
                                         onChange={(e) =>
@@ -314,17 +280,31 @@ export default function AIProvidersTab() {
                                             }))
                                         }
                                         type="text"
-                                        className="input-glass"
-                                        placeholder="claude-sonnet-4-5"
+                                        className="form-input"
+                                        placeholder="gpt-4.1 / deepseek-chat ..."
                                         required
                                     />
                                 </div>
 
-                                <div>
-                                    <label className="text-label block mb-2">
-                                        <i className="fas fa-key text-xs mr-1"></i>
-                                        API Key *
-                                    </label>
+                                <div className="md:col-span-2">
+                                    <label className="form-label">API Base URL</label>
+                                    <input
+                                        value={newProvider.baseUrl}
+                                        onChange={(e) =>
+                                            setNewProvider((prev) => ({
+                                                ...prev,
+                                                baseUrl: e.target.value,
+                                            }))
+                                        }
+                                        type="text"
+                                        className="form-input font-mono"
+                                        placeholder="https://api.openai.com/v1"
+                                        required
+                                    />
+                                </div>
+
+                                <div className="md:col-span-2">
+                                    <label className="form-label">API Key</label>
                                     <input
                                         value={newProvider.apiKey}
                                         onChange={(e) =>
@@ -334,30 +314,34 @@ export default function AIProvidersTab() {
                                             }))
                                         }
                                         type="password"
-                                        className="input-glass"
+                                        className="form-input font-mono"
                                         placeholder="sk-..."
                                         required
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="text-label block mb-2">
-                                        Thinking Mode
-                                    </label>
-                                    <CustomSelect
+                                    <label className="form-label">Thinking Mode</label>
+                                    <select
                                         value={newProvider.thinkingMode}
-                                        options={thinkingModeOptions}
-                                        onChange={(nextValue) =>
+                                        onChange={(e) =>
                                             setNewProvider((prev) => ({
                                                 ...prev,
-                                                thinkingMode: nextValue,
+                                                thinkingMode: e.target.value,
                                             }))
                                         }
-                                    />
+                                        className="form-input font-mono"
+                                    >
+                                        {thinkingModeOptions.map((opt) => (
+                                            <option key={opt.value} value={opt.value}>
+                                                {opt.label}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
 
                                 <div>
-                                    <label className="text-label block mb-2">Max Tokens</label>
+                                    <label className="form-label">Max Tokens</label>
                                     <input
                                         value={newProvider.maxTokens}
                                         onChange={(e) =>
@@ -367,12 +351,12 @@ export default function AIProvidersTab() {
                                             }))
                                         }
                                         type="number"
-                                        className="input-glass"
+                                        className="form-input font-mono"
                                     />
                                 </div>
 
                                 <div>
-                                    <label className="text-label block mb-2">Temperature</label>
+                                    <label className="form-label">Temperature</label>
                                     <input
                                         value={newProvider.temperature}
                                         onChange={(e) =>
@@ -383,13 +367,13 @@ export default function AIProvidersTab() {
                                         }
                                         type="number"
                                         step="0.1"
-                                        className="input-glass"
+                                        className="form-input font-mono"
                                     />
                                 </div>
                             </div>
 
                             <div>
-                                <label className="text-label block mb-2">描述</label>
+                                <label className="form-label">描述</label>
                                 <textarea
                                     value={newProvider.description}
                                     onChange={(e) =>
@@ -398,28 +382,28 @@ export default function AIProvidersTab() {
                                             description: e.target.value,
                                         }))
                                     }
-                                    className="input-glass min-h-[80px]"
+                                    className="form-input min-h-[96px]"
                                     rows={3}
                                     placeholder="Provider 描述..."
                                 ></textarea>
                             </div>
 
-                            <div className="flex gap-3 pt-4">
+                            <div className="flex gap-3 pt-2">
                                 <button
                                     type="button"
                                     onClick={createProvider}
-                                    className="btn-glass flex-1 !border-green-500/30 !text-green-400"
+                                    className="btn btn-primary flex-1"
                                 >
                                     <i className="fas fa-save"></i>
-                                    <span>创建</span>
+                                    创建
                                 </button>
                                 <button
                                     type="button"
                                     onClick={() => setShowAddModal(false)}
-                                    className="btn-glass flex-1"
+                                    className="btn btn-secondary flex-1"
                                 >
                                     <i className="fas fa-times"></i>
-                                    <span>取消</span>
+                                    取消
                                 </button>
                             </div>
                         </div>
@@ -428,18 +412,18 @@ export default function AIProvidersTab() {
             ) : null}
 
             {toast.show ? (
-                <div className="fixed top-24 right-4 z-50 glass-card px-6 py-3 flex items-center gap-3 shadow-xl">
+                <div className="toast">
                     <i
                         className={[
                             'fas',
                             toast.type === 'success'
-                                ? 'fa-check-circle text-green-400'
+                                ? 'fa-check-circle text-success'
                                 : toast.type === 'error'
-                                  ? 'fa-exclamation-circle text-red-400'
-                                  : 'fa-info-circle text-blue-400',
+                                  ? 'fa-exclamation-circle text-error'
+                                  : 'fa-info-circle text-accent-light',
                         ].join(' ')}
                     ></i>
-                    <span className="text-sm text-white/90">{toast.message}</span>
+                    <span className="text-sm text-text">{toast.message}</span>
                 </div>
             ) : null}
         </div>

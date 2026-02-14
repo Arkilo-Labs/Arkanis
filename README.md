@@ -114,12 +114,12 @@ pnpm dev:web
 
 Web 通过 Socket.IO 订阅日志；server 负责派生脚本进程并转发 stdout/stderr。
 
-如果你要跑 SaaS 终端（`src/apps/web_console/`，含登录/订阅/激活码），启动方式：
+提示：`pnpm dev:console` 现在等价于 `pnpm dev:web`（兼容旧命令）。
 
-```bash
-# 终端 C：启动 SaaS Console（Vite dev server，默认 5174）
-pnpm dev:console
-```
+`src/apps/web_console/` 仅保留为静态原型参考（不接入 `src/apps/server/`，不具备真实安全性）。如需查看原型：
+
+- 直接打开 `src/apps/web_console/index.html`
+- 或执行：`pnpm -C src/apps/web_console dev`
 
 Windows PowerShell 里不要用 `&&`，请用两行命令或用 `;` 分隔。
 
@@ -137,23 +137,6 @@ Windows PowerShell 里不要用 `&&`，请用两行命令或用 `;` 分隔。
 
 - `ERR_PNPM_OUTDATED_LOCKFILE` / `frozen-lockfile`  
   通常发生在 CI 或你显式启用了 frozen lockfile。需要更新锁文件时用：`pnpm install --no-frozen-lockfile`。
-
-SaaS Console 里新增了 `AI 策略` 页面，会走受控接口（需要登录 + 订阅）：
-
-- 执行：`POST /api/saas/run-script`
-- 拉取图表：`GET /api/saas/chart-data/:sessionId`
-
-并且加入了按订阅的 monthly credit：
-
-- 免费：`10.00` credit（体验）
-- 月度：每月 `300.00` credit
-- 季度：每月 `400.00` credit
-- 年度：每月 `500.00` credit
-- 重置时间：以订阅的 `current_period_start` 为锚点，每满 1 个月在同一“日”重置（遇到短月则按月末对齐）
-
-管理员账号白名单通过环境变量配置：`ARKANIS_ADMIN_EMAILS=admin@yourdomain.com,other@yourdomain.com`（用于激活码管理）。
-
-`AI Provider` 的 apiKey 会加密存储在数据库中，需要配置 `PROVIDER_SECRET`（见 `.env.example`）。
 
 ## 3. 运行方式清单（按场景）
 

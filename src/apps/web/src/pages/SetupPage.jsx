@@ -62,37 +62,35 @@ export default function SetupPage({ setupToken }) {
     }
 
     return (
-        <div className="glass-card w-full max-w-xl p-8">
+        <div className="auth-card">
             <div className="mb-6">
-                <span className="text-subtitle-en mb-2 block">First time setup</span>
-                <h1 className="text-hero-cn text-apple-gradient">初始化管理员</h1>
-                <p className="text-sm text-white/50 mt-2">
+                <div className="text-xs tracking-wide text-text-muted">First time setup</div>
+                <h1 className="text-3xl font-bold mt-2">初始化管理员</h1>
+                <p className="text-sm text-text-muted mt-2">
                     首次部署需要创建管理员账号，用于后续登录。
                 </p>
             </div>
 
             <form className="space-y-4" onSubmit={submit}>
                 <div>
-                    <label className="text-label block mb-2">用户名</label>
+                    <label className="form-label">用户名</label>
                     <input
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        className="input-glass"
+                        className="form-input"
                         type="text"
                         placeholder="admin"
                         autoComplete="username"
                     />
-                    <p className="text-xs text-white/40 mt-2">
-                        仅允许字母/数字/_/-，长度 3-64。
-                    </p>
+                    <p className="form-hint">仅允许字母/数字/_/-，长度 3-64。</p>
                 </div>
 
                 <div>
-                    <label className="text-label block mb-2">密码</label>
+                    <label className="form-label">密码</label>
                     <input
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="input-glass"
+                        className="form-input"
                         type="password"
                         placeholder="至少 8 位"
                         autoComplete="new-password"
@@ -100,11 +98,11 @@ export default function SetupPage({ setupToken }) {
                 </div>
 
                 <div>
-                    <label className="text-label block mb-2">确认密码</label>
+                    <label className="form-label">确认密码</label>
                     <input
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="input-glass"
+                        className="form-input"
                         type="password"
                         placeholder="再输入一次"
                         autoComplete="new-password"
@@ -112,17 +110,17 @@ export default function SetupPage({ setupToken }) {
                 </div>
 
                 {!error && !canSubmit ? (
-                    <p className="text-xs text-white/40">{validationMessage}</p>
+                    <p className="form-hint">{validationMessage}</p>
                 ) : null}
 
                 {error ? (
-                    <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-200 text-sm">
+                    <div className="rounded-xl border border-error/25 bg-error/10 p-4 text-error text-sm">
                         {error}
                     </div>
                 ) : null}
 
                 <button
-                    className="btn-glass w-full h-14 justify-center"
+                    className="btn btn-primary btn-full"
                     disabled={isSubmitting}
                     type="submit"
                 >
@@ -131,7 +129,7 @@ export default function SetupPage({ setupToken }) {
                             isSubmitting ? 'fas fa-spinner fa-spin' : 'fas fa-wrench'
                         }
                     ></i>
-                    <span className="font-bold">完成初始化</span>
+                    完成初始化
                 </button>
             </form>
         </div>

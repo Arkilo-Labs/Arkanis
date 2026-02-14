@@ -7,64 +7,32 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Liquid Glass - 极简灰白配色
-        // 背景层次
-        'canvas': '#f5f5f7',            // 主背景 - 苹果灰
-        'surface': '#ffffff',           // 卡片表面
-        'elevated': '#fafafa',          // 悬浮表面
-        'sunken': '#ebebed',            // 凹陷区域
-
-        // 文字层次
-        'ink': {
-          DEFAULT: '#1d1d1f',           // 主文字 - 苹果黑
-          'secondary': '#424245',       // 次级文字
-          'tertiary': '#6e6e73',        // 辅助文字
-          'muted': '#aeaeb2',           // 禁用/占位
-        },
-
-        // 边框和分隔
-        'border': {
-          DEFAULT: 'rgba(0, 0, 0, 0.06)',
-          'strong': 'rgba(0, 0, 0, 0.1)',
-        },
-
-        // 玻璃效果
-        'glass': {
-          'bg': 'rgba(255, 255, 255, 0.72)',
-          'border': 'rgba(0, 0, 0, 0.04)',
-          'highlight': 'rgba(255, 255, 255, 0.9)',
-        },
-
-        // 单一强调色 - 极简蓝（仅用于CTA和链接）
-        'blue': {
-          DEFAULT: '#007aff',           // iOS 系统蓝
-          'light': '#5ac8fa',
-          'hover': '#0066d6',
-        },
-
-        // 状态色（仅在需要时使用）
-        'green': '#34c759',
-        'red': '#ff3b30',
-        'orange': '#ff9500',
+        // web_console / surface 暗色设计 tokens（CSS 变量驱动）
+        'bg': 'rgb(var(--color-bg) / <alpha-value>)',
+        'bg-alt': 'rgb(var(--color-bg-alt) / <alpha-value>)',
+        'card': 'rgb(var(--color-card) / <alpha-value>)',
+        'border': 'rgb(var(--color-border) / <alpha-value>)',
+        'border-light': 'rgb(var(--color-border-light) / <alpha-value>)',
+        'text': 'rgb(var(--color-text) / <alpha-value>)',
+        'text-muted': 'rgb(var(--color-text-muted) / <alpha-value>)',
+        'accent': 'rgb(var(--color-accent) / <alpha-value>)',
+        'accent-light': 'rgb(var(--color-accent-light) / <alpha-value>)',
+        'success': 'rgb(var(--color-success) / <alpha-value>)',
+        'error': 'rgb(var(--color-error) / <alpha-value>)',
       },
 
       fontFamily: {
-        sans: ['Inter', 'SF Pro Display', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        sans: ['Inter', 'Noto Sans SC', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
         mono: ['SF Mono', 'JetBrains Mono', 'Consolas', 'monospace'],
       },
 
       borderRadius: {
-        'glass': '16px',
-        'glass-lg': '20px',
-        'glass-xl': '24px',
+        'pill': '9999px',
       },
 
       boxShadow: {
-        'glass': '0 2px 8px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06)',
-        'glass-lg': '0 4px 16px rgba(0, 0, 0, 0.06), 0 12px 40px rgba(0, 0, 0, 0.08)',
-        'glass-sm': '0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04)',
-        'inset': 'inset 0 1px 2px rgba(0, 0, 0, 0.04)',
-        'button': '0 1px 2px rgba(0, 0, 0, 0.1), 0 4px 12px rgba(0, 122, 255, 0.15)',
+        'panel': '0 8px 32px rgba(0, 0, 0, 0.4)',
+        'glow': '0 0 20px rgb(var(--color-accent) / 0.15)',
       },
 
       animation: {

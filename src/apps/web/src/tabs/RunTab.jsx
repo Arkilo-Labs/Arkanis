@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import CustomSelect from '../components/CustomSelect.jsx';
 import IndicatorViewsCard from '../components/IndicatorViewsCard.jsx';
 import LogTerminal from '../components/LogTerminal.jsx';
 import { authedFetch } from '../composables/useAuth.js';
@@ -33,14 +32,9 @@ export default function RunTab() {
         isRunningRef.current = isRunning;
     }, [isRunning]);
 
-    const timeframes = useMemo(() => ['1m', '5m', '15m', '30m', '1h', '4h', '1d'], []);
-    const timeframeOptions = useMemo(
-        () => timeframes.map((tf) => ({ value: tf, label: tf })),
-        [timeframes],
-    );
-    const auxTimeframeOptions = useMemo(
-        () => [{ value: '', label: 'Auto' }, ...timeframes.map((tf) => ({ value: tf, label: tf }))],
-        [timeframes],
+    const timeframes = useMemo(
+        () => ['1m', '5m', '15m', '30m', '1h', '4h', '1d'],
+        [],
     );
 
     const countdown = useMemo(() => {
@@ -127,9 +121,7 @@ export default function RunTab() {
         setPid(null);
         pidRef.current = null;
 
-        const sessionId = `session_${Date.now()}_${Math.random()
-            .toString(36)
-            .substr(2, 9)}`;
+        const sessionId = `session_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
         sessionIdRef.current = sessionId;
 
         const args = [
@@ -309,256 +301,284 @@ export default function RunTab() {
     }
 
     return (
-        <div className="run-tab space-y-6">
-            <div className="glass-card p-8 animate-slide-up">
-                <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-                    <div>
-                        <span className="text-subtitle-en mb-2 block">
-                            Automated Trading Analysis
-                        </span>
-                        <h1 className="text-hero-cn text-apple-gradient">自动运行</h1>
+        <div className="space-y-6">
+            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+                <div>
+                    <div className="text-xs tracking-wide text-text-muted">
+                        Automated Trading Analysis
                     </div>
-                    <div className="flex items-center gap-4">
-                        {isRunning && nextRunTime ? (
-                            <div className="text-right">
-                                <span className="text-label block mb-1">下次运行</span>
-                                <span className="text-big-number text-apple-gradient">
-                                    {countdown}
-                                </span>
-                            </div>
-                        ) : null}
+                    <h1 className="text-2xl md:text-3xl font-bold mt-2">自动运行</h1>
+                    {isRunning && pid ? (
+                        <div className="text-xs text-text-muted mt-2">
+                            PID: <span className="font-mono">{pid}</span>
+                        </div>
+                    ) : null}
+                </div>
 
-                        {!isRunning ? (
-                            <button
-                                type="button"
-                                onClick={startAutoRun}
-                                className="btn-glass h-14 px-8"
-                            >
-                                <i className="fas fa-play"></i>
-                                <span className="font-bold">启动自动运行</span>
-                            </button>
-                        ) : (
-                            <button
-                                type="button"
-                                onClick={stopAutoRun}
-                                className="btn-glass btn-glass-danger h-14 px-8"
-                            >
-                                <i className="fas fa-stop"></i>
-                                <span className="font-bold">停止</span>
-                            </button>
-                        )}
-                    </div>
+                <div className="flex items-center gap-3">
+                    {isRunning && nextRunTime ? (
+                        <div className="hidden sm:block text-right mr-2">
+                            <div className="text-xs tracking-wide text-text-muted">
+                                下次运行
+                            </div>
+                            <div className="text-2xl font-bold">{countdown}</div>
+                        </div>
+                    ) : null}
+
+                    {!isRunning ? (
+                        <button
+                            type="button"
+                            onClick={startAutoRun}
+                            className="btn btn-primary"
+                        >
+                            <i className="fas fa-play"></i>
+                            启动自动运行
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={stopAutoRun}
+                            className="btn btn-danger"
+                        >
+                            <i className="fas fa-stop"></i>
+                            停止
+                        </button>
+                    )}
                 </div>
             </div>
 
-            <div className="bento-grid">
-                <div className="bento-md glass-card p-6 animate-slide-up stagger-1">
-                    <div className="liquidGlass-content">
-                        <h2 className="text-label flex items-center gap-2 mb-6">
-                            <i className="fas fa-sliders-h"></i>
-                            Configuration
-                        </h2>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="card card-hover p-6 lg:col-span-1">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-sm font-semibold">运行配置</h2>
+                        <span className="text-xs text-text-muted">Configuration</span>
+                    </div>
 
-                        <div className="space-y-5">
+                    <div className="space-y-4">
+                        <div>
+                            <label className="form-label">交易对 Symbol</label>
+                            <input
+                                value={config.symbol}
+                                onChange={(e) =>
+                                    setConfig((prev) => ({
+                                        ...prev,
+                                        symbol: e.target.value,
+                                    }))
+                                }
+                                type="text"
+                                className="form-input font-mono"
+                                placeholder="BTCUSDT"
+                                disabled={isRunning}
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <label className="text-label block mb-2">
-                                    交易对 Symbol
-                                </label>
-                                <input
-                                    value={config.symbol}
+                                <label className="form-label">周期 Timeframe</label>
+                                <select
+                                    value={config.timeframe}
                                     onChange={(e) =>
                                         setConfig((prev) => ({
                                             ...prev,
-                                            symbol: e.target.value,
+                                            timeframe: e.target.value,
                                         }))
                                     }
-                                    type="text"
-                                    className="input-glass font-mono"
-                                    placeholder="BTCUSDT"
+                                    className="form-input font-mono"
                                     disabled={isRunning}
-                                />
+                                >
+                                    {timeframes.map((tf) => (
+                                        <option key={tf} value={tf}>
+                                            {tf}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="text-label block mb-2">
-                                        周期 Timeframe
-                                    </label>
-                                    <CustomSelect
-                                        value={config.timeframe}
-                                        options={timeframeOptions}
-                                        onChange={(nextValue) =>
-                                            setConfig((prev) => ({
-                                                ...prev,
-                                                timeframe: nextValue,
-                                            }))
-                                        }
-                                        disabled={isRunning}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-label block mb-2">K线数 Bars</label>
-                                    <input
-                                        value={config.bars}
-                                        onChange={(e) =>
-                                            setConfig((prev) => ({
-                                                ...prev,
-                                                bars: Number(e.target.value || 0),
-                                            }))
-                                        }
-                                        type="number"
-                                        className="input-glass font-mono"
-                                        disabled={isRunning}
-                                    />
-                                </div>
-                            </div>
-
                             <div>
-                                <label className="text-label block mb-2">
-                                    运行间隔 (分钟)
-                                </label>
+                                <label className="form-label">K线数 Bars</label>
                                 <input
-                                    value={config.intervalMinutes}
+                                    value={config.bars}
                                     onChange={(e) =>
                                         setConfig((prev) => ({
                                             ...prev,
-                                            intervalMinutes: Number(e.target.value || 0),
+                                            bars: Number(e.target.value || 0),
                                         }))
                                     }
                                     type="number"
-                                    min="1"
-                                    className="input-glass font-mono"
+                                    className="form-input font-mono"
                                     disabled={isRunning}
                                 />
                             </div>
+                        </div>
 
-                            <div className="pt-4 border-t border-white/10">
-                                <label className="toggle-glass">
-                                    <input
-                                        checked={config.enable4x}
-                                        onChange={(e) =>
-                                            setConfig((prev) => ({
-                                                ...prev,
-                                                enable4x: e.target.checked,
-                                            }))
-                                        }
-                                        type="checkbox"
-                                        disabled={isRunning}
-                                    />
-                                    <div className="toggle-track"></div>
-                                    <div className="toggle-thumb"></div>
-                                    <span className="ml-3 text-sm text-white/70">
-                                        4x Chart Mode
-                                    </span>
-                                </label>
+                        <div>
+                            <label className="form-label">运行间隔（分钟）</label>
+                            <input
+                                value={config.intervalMinutes}
+                                onChange={(e) =>
+                                    setConfig((prev) => ({
+                                        ...prev,
+                                        intervalMinutes: Number(e.target.value || 0),
+                                    }))
+                                }
+                                type="number"
+                                min="1"
+                                className="form-input font-mono"
+                                disabled={isRunning}
+                            />
+                            <div className="form-hint">
+                                运行中会自动按间隔触发分析，并在有入场信号时发送通知（可选）。
                             </div>
+                        </div>
 
-                            {config.enable4x ? (
-                                <div className="animate-fade-in">
-                                    <label className="text-label block mb-2">
-                                        辅助周期 Aux Timeframe
-                                    </label>
-                                    <CustomSelect
-                                        value={config.auxTimeframe}
-                                        options={auxTimeframeOptions}
-                                        onChange={(nextValue) =>
-                                            setConfig((prev) => ({
-                                                ...prev,
-                                                auxTimeframe: nextValue,
-                                            }))
-                                        }
-                                        disabled={isRunning}
-                                    />
-                                </div>
-                            ) : null}
+                        <div className="pt-4 border-t border-border-light/10">
+                            <label
+                                className={[
+                                    'switch',
+                                    isRunning ? 'opacity-60 cursor-not-allowed' : '',
+                                ].join(' ')}
+                            >
+                                <input
+                                    checked={config.enable4x}
+                                    onChange={(e) =>
+                                        setConfig((prev) => ({
+                                            ...prev,
+                                            enable4x: e.target.checked,
+                                        }))
+                                    }
+                                    type="checkbox"
+                                    disabled={isRunning}
+                                />
+                                <span className="switch-control">
+                                    <span className="switch-track"></span>
+                                    <span className="switch-thumb"></span>
+                                </span>
+                                <span className="text-sm text-text-muted">
+                                    4x Chart Mode
+                                </span>
+                            </label>
+                        </div>
 
-                            <div className="pt-4 border-t border-white/10">
-                                <label className="toggle-glass">
-                                    <input
-                                        checked={config.enableTelegram}
-                                        onChange={(e) =>
-                                            setConfig((prev) => ({
-                                                ...prev,
-                                                enableTelegram: e.target.checked,
-                                            }))
-                                        }
-                                        type="checkbox"
-                                    />
-                                    <div className="toggle-track"></div>
-                                    <div className="toggle-thumb"></div>
-                                    <span className="ml-3 text-sm text-white/70">
-                                        入场时发送 Telegram 通知
-                                    </span>
+                        {config.enable4x ? (
+                            <div>
+                                <label className="form-label">
+                                    辅助周期 Aux Timeframe
                                 </label>
+                                <select
+                                    value={config.auxTimeframe}
+                                    onChange={(e) =>
+                                        setConfig((prev) => ({
+                                            ...prev,
+                                            auxTimeframe: e.target.value,
+                                        }))
+                                    }
+                                    className="form-input font-mono"
+                                    disabled={isRunning}
+                                >
+                                    <option value="">Auto</option>
+                                    {timeframes.map((tf) => (
+                                        <option key={tf} value={tf}>
+                                            {tf}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
+                        ) : null}
+
+                        <div className="pt-4 border-t border-border-light/10">
+                            <label
+                                className={[
+                                    'switch',
+                                    isRunning ? 'opacity-60 cursor-not-allowed' : '',
+                                ].join(' ')}
+                            >
+                                <input
+                                    checked={config.enableTelegram}
+                                    onChange={(e) =>
+                                        setConfig((prev) => ({
+                                            ...prev,
+                                            enableTelegram: e.target.checked,
+                                        }))
+                                    }
+                                    type="checkbox"
+                                    disabled={isRunning}
+                                />
+                                <span className="switch-control">
+                                    <span className="switch-track"></span>
+                                    <span className="switch-thumb"></span>
+                                </span>
+                                <span className="text-sm text-text-muted">
+                                    入场时发送 Telegram 通知
+                                </span>
+                            </label>
                         </div>
                     </div>
                 </div>
 
-                <div className="bento-lg glass-card p-6 animate-slide-up stagger-2">
-                    <h3 className="text-label flex items-center gap-2 mb-4">
-                        <i className="fas fa-history"></i>
-                        运行历史 History
-                    </h3>
+                <div className="card card-hover p-6 lg:col-span-2">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-sm font-semibold">运行历史</h2>
+                        <span className="text-xs text-text-muted">History</span>
+                    </div>
 
-                    <div className="space-y-2 max-h-[400px] overflow-y-auto scrollbar-glass">
+                    <div className="space-y-2 max-h-[440px] overflow-y-auto scrollbar">
                         {history.map((item, index) => (
                             <div
                                 key={index}
-                                className="p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/[0.07] transition-colors"
+                                className="p-4 rounded-xl bg-white/5 border border-border-light/10"
                             >
                                 <div className="flex items-start justify-between mb-2">
                                     <div className="flex items-center gap-3">
-                                        <span className="text-xs text-white/40">
+                                        <span className="text-xs text-text-muted">
                                             {formatTime(item.timestamp)}
                                         </span>
-                                        <span className="text-sm font-mono text-white/70">
+                                        <span className="text-sm font-mono text-white/80">
                                             {item.symbol} {item.timeframe}
                                         </span>
                                     </div>
+
                                     {item.enter ? (
                                         <div className="flex items-center gap-2">
                                             <i
                                                 className={[
                                                     'fas text-sm',
                                                     item.direction === 'long'
-                                                        ? 'fa-arrow-up text-green-400'
-                                                        : 'fa-arrow-down text-red-400',
+                                                        ? 'fa-arrow-up text-success'
+                                                        : 'fa-arrow-down text-error',
                                                 ].join(' ')}
                                             ></i>
                                             <span
                                                 className={[
                                                     'text-sm font-bold',
                                                     item.direction === 'long'
-                                                        ? 'text-green-400'
-                                                        : 'text-red-400',
+                                                        ? 'text-success'
+                                                        : 'text-error',
                                                 ].join(' ')}
                                             >
                                                 {item.direction?.toUpperCase()}
                                             </span>
-                                            <span className="text-xs text-white/50 ml-2">
+                                            <span className="text-xs text-text-muted ml-2">
                                                 {(item.confidence * 100).toFixed(0)}%
                                             </span>
                                         </div>
                                     ) : (
-                                        <span className="text-xs text-white/30">WAIT</span>
+                                        <span className="text-xs text-white/40">WAIT</span>
                                     )}
                                 </div>
 
                                 {item.enter && item.entry_price ? (
-                                    <div className="text-xs text-white/50 font-mono">
+                                    <div className="text-xs text-text-muted font-mono">
                                         入场: {formatPrice(item.entry_price)}
                                     </div>
                                 ) : null}
 
                                 {item.error ? (
-                                    <div className="text-xs text-red-400 mt-2">
+                                    <div className="text-xs text-error mt-2">
                                         错误: {item.error}
                                     </div>
                                 ) : null}
 
                                 {item.reason ? (
-                                    <div className="text-xs text-white/40 mt-2 line-clamp-2">
+                                    <div className="text-xs text-text-muted mt-2 line-clamp-2">
                                         {item.reason}
                                     </div>
                                 ) : null}
@@ -576,9 +596,9 @@ export default function RunTab() {
 
                         {history.length === 0 ? (
                             <div className="py-12 text-center">
-                                <div className="flex flex-col items-center gap-4 opacity-40">
-                                    <i className="fas fa-inbox text-white/30 text-3xl"></i>
-                                    <span className="text-white/50 text-sm">
+                                <div className="flex flex-col items-center gap-4 opacity-70">
+                                    <i className="fas fa-inbox text-white/40 text-3xl"></i>
+                                    <span className="text-text-muted text-sm">
                                         暂无运行记录
                                     </span>
                                 </div>
@@ -587,15 +607,12 @@ export default function RunTab() {
                     </div>
                 </div>
 
-                <div className="bento-full glass-card p-6 animate-slide-up stagger-3">
-                    <h3 className="text-label flex items-center gap-2 mb-4">
-                        <i className="fas fa-terminal"></i>
-                        日志输出 Logs
-                    </h3>
-                    <LogTerminal
-                        logs={logs}
-                        className="min-h-[200px] max-h-[300px]"
-                    />
+                <div className="card card-hover p-6 lg:col-span-3">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-sm font-semibold">日志输出</h2>
+                        <span className="text-xs text-text-muted">Logs</span>
+                    </div>
+                    <LogTerminal logs={logs} className="min-h-[220px] max-h-[340px]" />
                 </div>
             </div>
         </div>

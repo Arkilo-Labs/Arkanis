@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import CustomSelect from './CustomSelect.jsx';
 
 const thinkingModeOptions = [
     { value: 'enabled', label: 'Enabled' },
@@ -62,43 +61,49 @@ export default function ProviderCard({ provider, onUpdate, onDelete, onActivate 
         <>
             <div
                 className={[
-                    'provider-card glass-card p-6 transition-all duration-300 cursor-pointer',
-                    provider.isActive ? 'provider-card-active' : '',
+                    'card card-hover p-6 cursor-pointer',
+                    provider.isActive ? 'border-success/25' : '',
                 ].join(' ')}
                 onClick={openDetailModal}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') openDetailModal();
+                }}
             >
-                <div className="flex items-start justify-between">
-                    <div className="flex-1">
+                <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-3">
-                            <div className="provider-icon">
-                                <i className="fas fa-brain"></i>
+                            <div className="w-10 h-10 rounded-xl bg-white/5 border border-border-light/10 flex items-center justify-center flex-shrink-0">
+                                <i className="fas fa-brain text-white/70"></i>
                             </div>
-                            <div className="flex-1">
+
+                            <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
-                                    <h3 className="text-base font-bold text-white">
+                                    <h3 className="text-base font-bold truncate">
                                         {provider.name}
                                     </h3>
                                     {provider.isActive ? (
-                                        <span className="badge-glass badge-green animate-pulse-subtle">
-                                            <span className="status-dot"></span>
+                                        <span className="badge badge-success">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-success"></span>
                                             当前使用
                                         </span>
                                     ) : null}
                                 </div>
-                                <div className="text-xs text-white/40 font-mono">
+                                <div className="text-xs text-text-muted font-mono truncate">
                                     {provider.modelName}
                                 </div>
                             </div>
                         </div>
 
-                        <div className="space-y-2 text-sm text-white/50">
-                            <div className="flex items-center gap-2">
-                                <i className="fas fa-link text-xs w-4"></i>
+                        <div className="space-y-2 text-sm text-text-muted">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <i className="fas fa-link text-xs w-4 flex-shrink-0"></i>
                                 <span className="font-mono truncate text-xs">
                                     {provider.baseUrl}
                                 </span>
                             </div>
-                            <div className="flex items-center gap-3 text-xs">
+                            <div className="flex flex-wrap items-center gap-3 text-xs">
                                 <div className="flex items-center gap-1.5">
                                     <i className="fas fa-layer-group w-4"></i>
                                     <span>{provider.thinkingMode || 'none'}</span>
@@ -115,13 +120,14 @@ export default function ProviderCard({ provider, onUpdate, onDelete, onActivate 
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 ml-4">
+                    <div className="flex items-center gap-2">
                         {canActivate ? (
                             <button
                                 type="button"
                                 onClick={handleActivate}
-                                className="action-btn action-btn-activate"
+                                className="btn btn-secondary btn-sm"
                                 title="激活此 Provider"
+                                aria-label="激活此 Provider"
                             >
                                 <i className="fas fa-check-circle"></i>
                             </button>
@@ -132,28 +138,29 @@ export default function ProviderCard({ provider, onUpdate, onDelete, onActivate 
 
             {showDetailModal ? (
                 <div
-                    className="provider-card-modal fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+                    className="modal-overlay"
                     onClick={(e) => {
                         if (e.target === e.currentTarget) closeDetailModal();
                     }}
                 >
                     <div
-                        className="glass-card max-w-3xl w-full max-h-[90vh] overflow-y-auto p-8 animate-modal-in"
+                        className="modal-card max-w-3xl p-8"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="flex items-center justify-between mb-6">
-                            <div>
-                                <h2 className="text-2xl font-bold text-white mb-1">
+                            <div className="min-w-0">
+                                <h2 className="text-xl font-bold truncate">
                                     {provider.name}
                                 </h2>
-                                <p className="text-sm text-white/50 font-mono">
+                                <p className="text-sm text-text-muted font-mono truncate mt-1">
                                     {provider.modelName}
                                 </p>
                             </div>
                             <button
                                 type="button"
                                 onClick={closeDetailModal}
-                                className="p-2 rounded-lg hover:bg-white/10 text-white/60 transition-colors"
+                                className="p-2 rounded-lg hover:bg-white/10 text-white/70 transition-colors"
+                                aria-label="关闭"
                             >
                                 <i className="fas fa-times"></i>
                             </button>
@@ -163,48 +170,36 @@ export default function ProviderCard({ provider, onUpdate, onDelete, onActivate 
                             <div className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
-                                        <label className="text-label block mb-2">
-                                            <i className="fas fa-link text-xs mr-1"></i>
-                                            API Base URL
-                                        </label>
-                                        <div className="font-mono text-sm text-white/70 bg-white/5 p-3 rounded-lg">
+                                        <label className="form-label">API Base URL</label>
+                                        <div className="rounded-xl bg-white/5 border border-border-light/10 p-3 font-mono text-sm text-white/80 break-all">
                                             {provider.baseUrl}
                                         </div>
                                     </div>
 
                                     <div>
-                                        <label className="text-label block mb-2">
-                                            <i className="fas fa-key text-xs mr-1"></i>
-                                            API Key
-                                        </label>
-                                        <div className="font-mono text-sm text-white/70 bg-white/5 p-3 rounded-lg">
+                                        <label className="form-label">API Key</label>
+                                        <div className="rounded-xl bg-white/5 border border-border-light/10 p-3 font-mono text-sm text-white/80 break-all">
                                             {String(provider.apiKey || '').slice(0, 20)}...
                                         </div>
                                     </div>
 
                                     <div>
-                                        <label className="text-label block mb-2">
-                                            Thinking Mode
-                                        </label>
-                                        <div className="text-sm text-white/70 bg-white/5 p-3 rounded-lg">
+                                        <label className="form-label">Thinking Mode</label>
+                                        <div className="rounded-xl bg-white/5 border border-border-light/10 p-3 text-sm text-white/80">
                                             {provider.thinkingMode || 'none'}
                                         </div>
                                     </div>
 
                                     <div>
-                                        <label className="text-label block mb-2">
-                                            Max Tokens
-                                        </label>
-                                        <div className="text-sm text-white/70 bg-white/5 p-3 rounded-lg">
+                                        <label className="form-label">Max Tokens</label>
+                                        <div className="rounded-xl bg-white/5 border border-border-light/10 p-3 text-sm text-white/80">
                                             {provider.maxTokens ?? 'N/A'}
                                         </div>
                                     </div>
 
                                     <div>
-                                        <label className="text-label block mb-2">
-                                            Temperature
-                                        </label>
-                                        <div className="text-sm text-white/70 bg-white/5 p-3 rounded-lg">
+                                        <label className="form-label">Temperature</label>
+                                        <div className="rounded-xl bg-white/5 border border-border-light/10 p-3 text-sm text-white/80">
                                             {provider.temperature ?? 'N/A'}
                                         </div>
                                     </div>
@@ -212,8 +207,8 @@ export default function ProviderCard({ provider, onUpdate, onDelete, onActivate 
 
                                 {provider.description ? (
                                     <div>
-                                        <label className="text-label block mb-2">描述</label>
-                                        <div className="text-sm text-white/70 bg-white/5 p-3 rounded-lg">
+                                        <label className="form-label">描述</label>
+                                        <div className="rounded-xl bg-white/5 border border-border-light/10 p-3 text-sm text-white/80 whitespace-pre-wrap">
                                             {provider.description}
                                         </div>
                                     </div>
@@ -223,18 +218,18 @@ export default function ProviderCard({ provider, onUpdate, onDelete, onActivate 
                                     <button
                                         type="button"
                                         onClick={startEdit}
-                                        className="btn-glass flex-1"
+                                        className="btn btn-secondary flex-1"
                                     >
                                         <i className="fas fa-edit"></i>
-                                        <span>编辑</span>
+                                        编辑
                                     </button>
                                     <button
                                         type="button"
                                         onClick={handleDelete}
-                                        className="btn-glass btn-glass-danger flex-1"
+                                        className="btn btn-danger flex-1"
                                     >
                                         <i className="fas fa-trash"></i>
-                                        <span>删除</span>
+                                        删除
                                     </button>
                                 </div>
                             </div>
@@ -242,9 +237,7 @@ export default function ProviderCard({ provider, onUpdate, onDelete, onActivate 
                             <div className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
-                                        <label className="text-label block mb-2">
-                                            显示名称 *
-                                        </label>
+                                        <label className="form-label">显示名称 *</label>
                                         <input
                                             value={editForm.name || ''}
                                             onChange={(e) =>
@@ -254,15 +247,13 @@ export default function ProviderCard({ provider, onUpdate, onDelete, onActivate 
                                                 }))
                                             }
                                             type="text"
-                                            className="input-glass"
+                                            className="form-input"
                                             required
                                         />
                                     </div>
 
                                     <div>
-                                        <label className="text-label block mb-2">
-                                            API Base URL *
-                                        </label>
+                                        <label className="form-label">API Base URL *</label>
                                         <input
                                             value={editForm.baseUrl || ''}
                                             onChange={(e) =>
@@ -272,13 +263,13 @@ export default function ProviderCard({ provider, onUpdate, onDelete, onActivate 
                                                 }))
                                             }
                                             type="text"
-                                            className="input-glass"
+                                            className="form-input font-mono"
                                             required
                                         />
                                     </div>
 
                                     <div>
-                                        <label className="text-label block mb-2">模型名称 *</label>
+                                        <label className="form-label">模型名称 *</label>
                                         <input
                                             value={editForm.modelName || ''}
                                             onChange={(e) =>
@@ -288,13 +279,13 @@ export default function ProviderCard({ provider, onUpdate, onDelete, onActivate 
                                                 }))
                                             }
                                             type="text"
-                                            className="input-glass"
+                                            className="form-input font-mono"
                                             required
                                         />
                                     </div>
 
                                     <div>
-                                        <label className="text-label block mb-2">API Key *</label>
+                                        <label className="form-label">API Key *</label>
                                         <input
                                             value={editForm.apiKey || ''}
                                             onChange={(e) =>
@@ -304,27 +295,33 @@ export default function ProviderCard({ provider, onUpdate, onDelete, onActivate 
                                                 }))
                                             }
                                             type="password"
-                                            className="input-glass"
+                                            className="form-input font-mono"
                                             required
                                         />
                                     </div>
 
                                     <div>
-                                        <label className="text-label block mb-2">Thinking Mode</label>
-                                        <CustomSelect
+                                        <label className="form-label">Thinking Mode</label>
+                                        <select
                                             value={editForm.thinkingMode || 'none'}
-                                            options={thinkingModeOptions}
-                                            onChange={(nextValue) =>
+                                            onChange={(e) =>
                                                 setEditForm((prev) => ({
                                                     ...prev,
-                                                    thinkingMode: nextValue,
+                                                    thinkingMode: e.target.value,
                                                 }))
                                             }
-                                        />
+                                            className="form-input font-mono"
+                                        >
+                                            {thinkingModeOptions.map((opt) => (
+                                                <option key={opt.value} value={opt.value}>
+                                                    {opt.label}
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
 
                                     <div>
-                                        <label className="text-label block mb-2">Max Tokens</label>
+                                        <label className="form-label">Max Tokens</label>
                                         <input
                                             value={editForm.maxTokens ?? ''}
                                             onChange={(e) =>
@@ -334,12 +331,12 @@ export default function ProviderCard({ provider, onUpdate, onDelete, onActivate 
                                                 }))
                                             }
                                             type="number"
-                                            className="input-glass"
+                                            className="form-input font-mono"
                                         />
                                     </div>
 
                                     <div>
-                                        <label className="text-label block mb-2">Temperature</label>
+                                        <label className="form-label">Temperature</label>
                                         <input
                                             value={editForm.temperature ?? ''}
                                             onChange={(e) =>
@@ -350,13 +347,13 @@ export default function ProviderCard({ provider, onUpdate, onDelete, onActivate 
                                             }
                                             type="number"
                                             step="0.1"
-                                            className="input-glass"
+                                            className="form-input font-mono"
                                         />
                                     </div>
                                 </div>
 
                                 <div>
-                                    <label className="text-label block mb-2">描述</label>
+                                    <label className="form-label">描述</label>
                                     <textarea
                                         value={editForm.description || ''}
                                         onChange={(e) =>
@@ -365,7 +362,7 @@ export default function ProviderCard({ provider, onUpdate, onDelete, onActivate 
                                                 description: e.target.value,
                                             }))
                                         }
-                                        className="input-glass min-h-[80px]"
+                                        className="form-input min-h-[96px]"
                                         rows={3}
                                     ></textarea>
                                 </div>
@@ -374,18 +371,18 @@ export default function ProviderCard({ provider, onUpdate, onDelete, onActivate 
                                     <button
                                         type="button"
                                         onClick={saveEdit}
-                                        className="btn-glass flex-1 btn-glass-success"
+                                        className="btn btn-primary flex-1"
                                     >
                                         <i className="fas fa-save"></i>
-                                        <span>保存</span>
+                                        保存
                                     </button>
                                     <button
                                         type="button"
                                         onClick={cancelEdit}
-                                        className="btn-glass btn-glass-secondary flex-1"
+                                        className="btn btn-secondary flex-1"
                                     >
                                         <i className="fas fa-times"></i>
-                                        <span>取消</span>
+                                        取消
                                     </button>
                                 </div>
                             </div>

@@ -12,12 +12,12 @@ export default function LogTerminal({ logs = [], className = '' }) {
         <div
             ref={containerRef}
             className={[
-                'terminal-glass p-4 overflow-y-auto h-full min-h-[inherit] scrollbar-glass text-left',
+                'terminal p-4 overflow-y-auto h-full min-h-[inherit] scrollbar text-left',
                 className,
             ].join(' ')}
         >
             {logs.length === 0 ? (
-                <div className="flex items-center gap-2 text-white/30 italic">
+                <div className="flex items-center gap-2 text-text-muted italic">
                     <i className="fas fa-terminal"></i>
                     <span>Waiting for output...</span>
                 </div>

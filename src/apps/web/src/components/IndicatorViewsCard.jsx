@@ -22,9 +22,9 @@ function strengthLabel(level) {
 
 function badgeClassByBias(bias) {
     const b = normalizeText(bias);
-    if (b === 'bullish') return 'iv-badge iv-badge--bullish';
-    if (b === 'bearish') return 'iv-badge iv-badge--bearish';
-    return 'iv-badge iv-badge--neutral';
+    if (b === 'bullish') return 'badge badge-success';
+    if (b === 'bearish') return 'badge badge-error';
+    return 'badge badge-muted';
 }
 
 export default function IndicatorViewsCard({ views = null, title = '指标观点' }) {
@@ -62,7 +62,7 @@ export default function IndicatorViewsCard({ views = null, title = '指标观点
                 key: 'trend',
                 name: '趋势强度',
                 right: `${strengthLabel(adxLevel)} · ${biasLabel(adxBias)}`,
-                badgeClass: 'iv-badge iv-badge--purple',
+                badgeClass: 'badge badge-accent',
                 note: v?.trend_strength?.note || '',
             },
             {
@@ -78,34 +78,30 @@ export default function IndicatorViewsCard({ views = null, title = '指标观点
     if (!views) return null;
 
     return (
-        <div
-            className="indicator-views-card glass-card iv-card overflow-hidden"
-            style={{
-                '--glass-bg': 'rgba(5, 6, 12, 0.72)',
-                '--glass-border': 'rgba(255, 255, 255, 0.08)',
-            }}
-        >
-            <div className="px-6 pt-5 pb-4 border-b border-white/5">
+        <div className="card card-hover overflow-hidden">
+            <div className="px-6 pt-5 pb-4 border-b border-border-light/10">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <i className="fas fa-chart-line text-white/55 text-sm"></i>
-                        <span className="text-label text-white/80">{title}</span>
+                        <i className="fas fa-chart-line text-white/60 text-xs"></i>
+                        <span className="text-xs tracking-wide text-text-muted">
+                            {title}
+                        </span>
                     </div>
-                    <span className="text-xs text-white/25">AI 观点</span>
+                    <span className="text-xs text-text-muted">AI 观点</span>
                 </div>
             </div>
 
-            <div className="divide-y divide-white/5">
+            <div className="divide-y divide-border-light/10">
                 {items.map((item) => (
-                    <div key={item.key} className="px-6 py-4 iv-row">
+                    <div key={item.key} className="px-6 py-4">
                         <div className="flex items-center justify-between gap-4">
-                            <span className="text-sm text-white/70 tracking-wide">
+                            <span className="text-sm text-white/80">
                                 {item.name}
                             </span>
                             <span className={item.badgeClass}>{item.right}</span>
                         </div>
                         {item.note ? (
-                            <div className="mt-2 text-xs text-white/35 leading-relaxed line-clamp-2">
+                            <div className="mt-2 text-xs text-text-muted leading-relaxed line-clamp-2">
                                 {item.note}
                             </div>
                         ) : null}
