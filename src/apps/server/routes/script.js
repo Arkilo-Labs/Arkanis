@@ -1,6 +1,8 @@
 import { spawn } from 'child_process';
 import { join } from 'path';
 
+import { getChartWriteToken } from '../services/chartWriteToken.js';
+
 function resolveScriptPath({ projectRoot, script }) {
     return join(projectRoot, 'src', 'cli', 'vlm', `${script}.js`);
 }
@@ -27,7 +29,7 @@ export function registerScriptRoutes({ app, io, projectRoot, activeProcesses }) 
         try {
             const child = spawn(process.execPath, cmdArgs, {
                 cwd: projectRoot,
-                env: { ...process.env, FORCE_COLOR: '1' },
+                env: { ...process.env, FORCE_COLOR: '1', CHART_WRITE_TOKEN: getChartWriteToken() },
                 stdio: ['ignore', 'pipe', 'pipe'],
             });
 
@@ -57,4 +59,3 @@ export function registerScriptRoutes({ app, io, projectRoot, activeProcesses }) 
         }
     });
 }
-

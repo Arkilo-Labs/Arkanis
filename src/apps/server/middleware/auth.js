@@ -1,3 +1,5 @@
+import { isValidChartWriteToken } from '../services/chartWriteToken.js';
+
 function isAllowedSetupPath({ path, setupToken }) {
     if (!setupToken) return false;
     const prefix = `/_setup/${setupToken}`;
@@ -8,6 +10,11 @@ function isPublicAuthRoute({ method, path }) {
     if (method === 'GET' && path === '/api/auth/status') return true;
     if (method === 'POST' && path === '/api/auth/login') return true;
     return false;
+}
+
+function isChartWriteRoute({ method, path }) {
+    const normalizedPath = typeof path === 'string' && path !== '/' ? path.replace(/\/+$/, '') : path;
+    return method === 'POST' && normalizedPath === '/api/chart-data';
 }
 
 export function registerAuthMiddleware({ app, io, authService }) {
@@ -25,6 +32,11 @@ export function registerAuthMiddleware({ app, io, authService }) {
         }
 
         if (isPublicAuthRoute({ method: req.method, path: req.path })) return next();
+
+        if (isChartWriteRoute({ method: req.method, path: req.path })) {
+            const token = req.headers?.['x-chart-write-token'];
+            if (isValidChartWriteToken(token)) return next();
+        }
 
         const token = authService.extractRequestToken(req);
         const session = authService.requireSession(token);
@@ -47,4 +59,3 @@ export function registerAuthMiddleware({ app, io, authService }) {
         return next();
     });
 }
-

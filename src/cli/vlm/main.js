@@ -30,7 +30,17 @@ import logger from '../../core/utils/logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000';
+function normalizeServerUrl(value) {
+    const fallback = 'http://localhost:3000';
+    let base = typeof value === 'string' ? value.trim() : '';
+    if (!base) base = fallback;
+
+    base = base.replace(/\/+$/, '');
+    if (base.toLowerCase().endsWith('/api')) base = base.slice(0, -4);
+    return base.replace(/\/+$/, '');
+}
+
+const SERVER_URL = normalizeServerUrl(process.env.SERVER_URL);
 
 function normalizeArgv(argv) {
     if (argv.length >= 3 && argv[2] === '--') return [...argv.slice(0, 2), ...argv.slice(3)];
