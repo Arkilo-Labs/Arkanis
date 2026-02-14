@@ -1,8 +1,9 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue';
-import LogTerminal from './LogTerminal.vue';
-import CustomSelect from './CustomSelect.vue';
-import { useSocket } from '../composables/useSocket';
+	import LogTerminal from './LogTerminal.vue';
+	import CustomSelect from './CustomSelect.vue';
+	import { useSocket } from '../composables/useSocket';
+	import { authedFetch } from '../composables/useAuth';
 
 const { socket } = useSocket();
 
@@ -80,12 +81,12 @@ function runBacktest() {
 
   addLog('stdout', `Starting backtest.js with args: ${args.join(' ')}`);
 
-  fetch('/api/run-script', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ script: 'backtest', args })
-  })
-  .then(res => res.json())
+	  authedFetch('/api/run-script', {
+	    method: 'POST',
+	    headers: { 'Content-Type': 'application/json' },
+	    body: JSON.stringify({ script: 'backtest', args })
+	  })
+	  .then(res => res.json())
   .then(data => {
     if (data.pid) {
       pid.value = data.pid;

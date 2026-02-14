@@ -1,9 +1,10 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue';
-import LogTerminal from './LogTerminal.vue';
-import CustomSelect from './CustomSelect.vue';
-import IndicatorViewsCard from './IndicatorViewsCard.vue';
-import { useSocket } from '../composables/useSocket';
+	import LogTerminal from './LogTerminal.vue';
+	import CustomSelect from './CustomSelect.vue';
+	import IndicatorViewsCard from './IndicatorViewsCard.vue';
+	import { useSocket } from '../composables/useSocket';
+	import { authedFetch } from '../composables/useAuth';
 
 const { socket } = useSocket();
 
@@ -63,11 +64,11 @@ async function sendToTelegram(decision, retryCount = 3) {
 
   for (let attempt = 1; attempt <= retryCount; attempt++) {
     try {
-      const response = await fetch('/api/send-telegram', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ decision: fullDecision })
-      });
+	      const response = await authedFetch('/api/send-telegram', {
+	        method: 'POST',
+	        headers: { 'Content-Type': 'application/json' },
+	        body: JSON.stringify({ decision: fullDecision })
+	      });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
@@ -113,12 +114,12 @@ function runSingleAnalysis() {
 
   addLog('stdout', `运行策略分析: ${config.value.symbol} ${config.value.timeframe}`);
 
-  fetch('/api/run-script', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ script: 'main', args })
-  })
-  .then(res => res.json())
+	  authedFetch('/api/run-script', {
+	    method: 'POST',
+	    headers: { 'Content-Type': 'application/json' },
+	    body: JSON.stringify({ script: 'main', args })
+	  })
+	  .then(res => res.json())
   .then(data => {
     if (data.pid) {
       pid.value = data.pid;
@@ -209,10 +210,10 @@ const onProcessExit = async (msg) => {
 
   if (msg.code === 0 && sessionId.value) {
     try {
-      const response = await fetch(`/api/chart-data/${sessionId.value}`);
-      if (!response.ok) throw new Error('获取图表数据失败');
+	      const response = await authedFetch(`/api/chart-data/${sessionId.value}`);
+	      if (!response.ok) throw new Error('获取图表数据失败');
 
-      const data = await response.json();
+	      const data = await response.json();
       const decision = data.decision;
 
       addToHistory({

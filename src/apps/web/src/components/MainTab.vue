@@ -1,10 +1,11 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue';
-import LogTerminal from './LogTerminal.vue';
-import CustomSelect from './CustomSelect.vue';
-import ChartView from './ChartView.vue';
-import IndicatorViewsCard from './IndicatorViewsCard.vue';
-import { useSocket } from '../composables/useSocket';
+	import LogTerminal from './LogTerminal.vue';
+	import CustomSelect from './CustomSelect.vue';
+	import ChartView from './ChartView.vue';
+	import IndicatorViewsCard from './IndicatorViewsCard.vue';
+	import { useSocket } from '../composables/useSocket';
+	import { authedFetch } from '../composables/useAuth';
 
 const { socket } = useSocket();
 
@@ -69,12 +70,12 @@ function runScript() {
 
   addLog('stdout', `Starting main.js with args: ${args.join(' ')}`);
 
-  fetch('/api/run-script', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ script: 'main', args })
-  })
-  .then(res => res.json())
+	  authedFetch('/api/run-script', {
+	    method: 'POST',
+	    headers: { 'Content-Type': 'application/json' },
+	    body: JSON.stringify({ script: 'main', args })
+	  })
+	  .then(res => res.json())
   .then(data => {
     if (data.pid) {
       pid.value = data.pid;
@@ -104,11 +105,11 @@ const onProcessExit = (msg) => {
 
   if (msg.code === 0 && sessionId.value) {
     // 从API获取图表数据
-    fetch(`/api/chart-data/${sessionId.value}`)
-      .then(r => {
-        if (!r.ok) throw new Error('Failed to fetch chart data');
-        return r.json();
-      })
+	    authedFetch(`/api/chart-data/${sessionId.value}`)
+	      .then(r => {
+	        if (!r.ok) throw new Error('Failed to fetch chart data');
+	        return r.json();
+	      })
       .then(data => {
         baseChartData.value = data.base;
         auxChartData.value = data.aux;

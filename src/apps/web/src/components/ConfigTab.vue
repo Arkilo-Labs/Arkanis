@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import CustomSelect from './CustomSelect.vue';
+import { authedFetch } from '../composables/useAuth';
 
 const config = ref({});
 const schema = ref({});
@@ -33,8 +34,8 @@ async function loadConfig() {
   isLoading.value = true;
   try {
     const [resConfig, resPrompts] = await Promise.all([
-      fetch('/api/config'),
-      fetch('/api/prompts')
+      authedFetch('/api/config'),
+      authedFetch('/api/prompts')
     ]);
     
     const data = await resConfig.json();
@@ -54,7 +55,7 @@ async function saveConfig() {
   isSaving.value = true;
   saveStatus.value = null;
   try {
-    const res = await fetch('/api/config', {
+    const res = await authedFetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ config: config.value })

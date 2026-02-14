@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue';
 import { useSocket } from '../composables/useSocket';
 import ProviderCard from './ProviderCard.vue';
 import CustomSelect from './CustomSelect.vue';
+import { authedFetch } from '../composables/useAuth';
 
 const { socket } = useSocket();
 const providers = ref([]);
@@ -30,7 +31,7 @@ const thinkingModeOptions = [
 async function loadProviders() {
   isLoading.value = true;
   try {
-    const res = await fetch('/api/ai-providers');
+    const res = await authedFetch('/api/ai-providers');
     if (res.ok) {
       providers.value = await res.json();
     } else {
@@ -51,7 +52,7 @@ async function createProvider() {
   }
 
   try {
-    const res = await fetch('/api/ai-providers', {
+    const res = await authedFetch('/api/ai-providers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newProvider.value)
@@ -74,7 +75,7 @@ async function createProvider() {
 
 async function updateProvider(providerData) {
   try {
-    const res = await fetch(`/api/ai-providers/${providerData.id}`, {
+    const res = await authedFetch(`/api/ai-providers/${providerData.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(providerData)
@@ -95,7 +96,7 @@ async function updateProvider(providerData) {
 
 async function deleteProvider(id) {
   try {
-    const res = await fetch(`/api/ai-providers/${id}`, {
+    const res = await authedFetch(`/api/ai-providers/${id}`, {
       method: 'DELETE'
     });
 
@@ -114,7 +115,7 @@ async function deleteProvider(id) {
 
 async function activateProvider(id) {
   try {
-    const res = await fetch(`/api/ai-providers/${id}/activate`, {
+    const res = await authedFetch(`/api/ai-providers/${id}/activate`, {
       method: 'POST'
     });
 
