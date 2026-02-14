@@ -11,8 +11,7 @@
 
 import { Command } from 'commander';
 import { writeFileSync, mkdirSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 
 import { config, defaultConfig } from '../../core/config/index.js';
 import {
@@ -27,9 +26,6 @@ import { VLMClient, ENHANCED_USER_PROMPT_TEMPLATE, drawInstructionToOverlay } fr
 import { getMarketDataClient, detectAssetClass } from '../../core/data/marketDataClient.js';
 import logger from '../../core/utils/logger.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
 function normalizeServerUrl(value) {
     const fallback = 'http://localhost:3000';
     let base = typeof value === 'string' ? value.trim() : '';
@@ -41,6 +37,7 @@ function normalizeServerUrl(value) {
 }
 
 const SERVER_URL = normalizeServerUrl(process.env.SERVER_URL);
+const INDICATOR_WARMUP_BARS = 50;
 
 function normalizeArgv(argv) {
     if (argv.length >= 3 && argv[2] === '--') return [...argv.slice(0, 2), ...argv.slice(3)];
@@ -173,7 +170,7 @@ async function main() {
 
     mkdirSync(outputDir, { recursive: true });
 
-    const futureBars = opts.futureBars ?? Math.max(Math.floor(opts.bars / 10), 1);
+    const futureBars = Number.isFinite(opts.futureBars) ? Math.max(0, Math.floor(opts.futureBars)) : null;
     const startTime = opts.startTime ? parseTime(opts.startTime) : null;
     const endTime = opts.endTime ? parseTime(opts.endTime) : null;
 
@@ -201,7 +198,8 @@ async function main() {
         // 获取 K 线数据
         logger.info('\n[步骤1] 获取 K 线数据...');
 
-        let bars;
+        let bars = [];
+        let repo = null;
         if (isYahoo) {
             // Yahoo Finance 数据源
             const yahooClient = getMarketDataClient({
@@ -224,18 +222,18 @@ async function main() {
                 interval: opts.timeframe,
                 startMs,
                 endMs,
-                limit: opts.bars + 50,  // 额外获取 50 根用于指标预热
+                limit: opts.bars + INDICATOR_WARMUP_BARS,
             });
             bars = rawBars.map((r) => r.toBar());
         } else {
             // Crypto: 使用 KlinesRepository
-            const repo = new KlinesRepository({
+            repo = new KlinesRepository({
                 exchangeId: opts.exchange,
                 marketType: opts.marketType,
                 exchangeFallbacks: opts.exchangeFallbacks,
             });
 
-            const fetchLimit = opts.bars + 50;  // 额外获取 50 根用于指标预热
+            const fetchLimit = opts.bars + INDICATOR_WARMUP_BARS;
 
             if (startTime && endTime) {
                 bars = await repo.getBarsByRange({
@@ -272,13 +270,12 @@ async function main() {
 
         // 技术指标预热：保留完整数据用于指标计算，裁剪后的数据用于绘图
         // BOLL(20)、MACD(26+9=35)、ADX(14) 最大预热需求约 50 根
-        const WARMUP_BARS = 50;
-        const fullBars = bars;  // 完整数据用于指标计算
-        const displayBars = bars.length > opts.bars ? bars.slice(-opts.bars) : bars;  // 裁剪后用于显示
-
-        if (fullBars.length > displayBars.length) {
-            logger.info(`       预热数据: ${fullBars.length - displayBars.length} 根（用于指标计算）`);
+        const fullBars = bars;
+        const primaryBars = bars.length > opts.bars ? bars.slice(-opts.bars) : bars;
+        if (fullBars.length > primaryBars.length) {
+            logger.info(`       预热数据: ${fullBars.length - primaryBars.length} 根（用于指标计算）`);
         }
+        bars = primaryBars;
 
         // 准备图表数据收集（用于前端渲染）
         const chartData = {
@@ -291,18 +288,19 @@ async function main() {
         // 构建基础图表（使用裁剪后的数据，但指标使用完整数据）
         logger.info('\n[步骤2] 渲染基础图表...');
         const chartInput = new ChartInput({
-            bars: displayBars,
+            bars,
             symbol: opts.symbol,
             timeframe: opts.timeframe,
             // 传入完整数据用于指标计算
             indicatorBars: fullBars,
+            futureBars,
         });
 
         // 收集基础图表数据
         chartData.base = {
             symbol: opts.symbol,
             timeframe: opts.timeframe,
-            bars: displayBars.map(b => b.toDict()),
+            bars: bars.map(b => b.toDict()),
             overlays: [],
         };
 
@@ -320,7 +318,9 @@ async function main() {
         let auxTimeframe = null;
         let auxPng = null;
 
-        if (opts.enable4xChart) {
+        if (opts.enable4xChart && !repo) {
+            logger.warn('[警告] 辅助图跳过：当前数据源不支持 4x 图（仅 crypto 支持）');
+        } else if (opts.enable4xChart) {
             try {
                 let auxBars;
                 if (opts.auxTimeframe) {
@@ -364,6 +364,7 @@ async function main() {
                         bars: auxBarsForChart,
                         symbol: opts.symbol,
                         timeframe: auxTimeframe,
+                        futureBars,
                     });
 
                     // 收集辅助图表数据
@@ -506,9 +507,11 @@ async function main() {
             if (!opts.skipPng && !opts.sessionId) {
                 const annotatedInput = new ChartInput({
                     bars,
+                    indicatorBars: fullBars,
                     symbol: opts.symbol,
                     timeframe: opts.timeframe,
                     overlays,
+                    futureBars,
                 });
 
                 const decisionPng = join(outputDir, `${opts.symbol}_${opts.timeframe}_with_vlm_decision.png`);

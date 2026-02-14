@@ -94,10 +94,9 @@ registerTelegramRoutes({
 
 function setupConfigWatcher({ io, projectRoot }) {
     const envPath = join(projectRoot, '.env');
-    const bridgeConfigPath = join(projectRoot, 'bridge.config.json');
     const providersPath = join(projectRoot, 'ai-providers.json');
 
-    const watcher = chokidar.watch([envPath, bridgeConfigPath, providersPath], {
+    const watcher = chokidar.watch([envPath, providersPath], {
         persistent: true,
         ignoreInitial: true,
         awaitWriteFinish: {

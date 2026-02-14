@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import axios from 'axios';
 import { vlmConfig } from '../config/index.js';
-import { VLMDecision, VLMDecisionSchema } from './schema.js';
+import { VLMDecision } from './schema.js';
 import logger from '../utils/logger.js';
 import PromptManager from './promptManager.js';
 import providerService from '../services/providerService.js';

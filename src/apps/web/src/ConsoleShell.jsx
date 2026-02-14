@@ -33,7 +33,13 @@ export default function ConsoleShell() {
 
     useEffect(() => {
         function onConfigReload(data) {
-            const fileName = data?.file === '.env' ? '环境配置' : '桥接配置';
+            const file = String(data?.file || '').trim();
+            const fileName =
+                file === '.env'
+                    ? '环境配置'
+                    : file === 'ai-providers.json'
+                      ? 'AI Provider 配置'
+                      : '配置';
             showToast(`${fileName}已更新，脚本将自动使用新配置`, 'success');
         }
 

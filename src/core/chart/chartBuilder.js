@@ -230,6 +230,11 @@ export class ChartBuilder {
 
         // 准备图表数据
         const chartData = input.bars.map((bar) => bar.toDict());
+        const indicatorBars =
+            Array.isArray(input.indicatorBars) && input.indicatorBars.length ? input.indicatorBars : input.bars;
+        const indicatorData = indicatorBars.map((bar) => bar.toDict());
+        const futureBarsRaw = Number(input.futureBars);
+        const futureBars = Number.isFinite(futureBarsRaw) ? Math.max(0, Math.floor(futureBarsRaw)) : null;
 
         // 准备标注数据
         this._textAnnotations = [];
@@ -243,7 +248,9 @@ export class ChartBuilder {
         html = this._replaceToken(html, 'VOLUME_HEIGHT', String(this.volumePaneHeight));
         html = this._replaceToken(html, 'MACD_HEIGHT', String(this.macdPaneHeight));
         html = this._replaceToken(html, 'TREND_STRENGTH_HEIGHT', String(this.trendStrengthPaneHeight));
+        html = this._replaceToken(html, 'FUTURE_BARS', futureBars === null ? 'null' : String(futureBars));
         html = this._replaceToken(html, 'CHART_DATA', this._safeJson(chartData));
+        html = this._replaceToken(html, 'INDICATOR_DATA', this._safeJson(indicatorData));
         html = this._replaceToken(html, 'OVERLAYS', this._safeJson(overlays));
         html = this._replaceToken(html, 'WATERMARK_JSON', this._safeJson(watermark));
 
@@ -362,7 +369,6 @@ export class ChartBuilder {
 
             // 获取价格范围
             const mapper = this._coordMapper;
-            const priceRange = mapper.maxPrice - mapper.minPrice;
             const displayPriceMin = mapper.minPrice;
             const displayPriceMax = mapper.maxPrice;
             const displayPriceRange = displayPriceMax - displayPriceMin;

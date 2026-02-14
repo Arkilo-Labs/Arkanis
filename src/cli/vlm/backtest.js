@@ -10,8 +10,7 @@
 
 import { Command } from 'commander';
 import { writeFileSync, mkdirSync, existsSync, unlinkSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 import { tmpdir } from 'os';
 
 import { config, defaultConfig } from '../../core/config/index.js';
@@ -25,9 +24,6 @@ import {
 import { ChartBuilder, ChartInput } from '../../core/chart/index.js';
 import { VLMClient, ENHANCED_USER_PROMPT_TEMPLATE } from '../../core/vlm/index.js';
 import logger from '../../core/utils/logger.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 function normalizeArgv(argv) {
     if (argv.length >= 3 && argv[2] === '--') return [...argv.slice(0, 2), ...argv.slice(3)];
@@ -81,17 +77,6 @@ function resolveAuxTimeframe(baseTimeframe, auxTimeframe) {
     }
 
     throw new Error(`无法找到 ${targetMinutes} 分钟对应的 timeframe`);
-}
-
-function buildAuto4xAux({ baseTimeframe, baseBars, desiredBarsCount }) {
-    const baseMinutes = TIMEFRAME_MINUTES[baseTimeframe];
-    if (!baseMinutes) throw new Error(`不支持的主 timeframe: ${baseTimeframe}`);
-
-    const targetMinutes = baseMinutes * 4;
-    const auxTimeframe = formatMinutesAsTimeframe(targetMinutes, TIMEFRAME_MINUTES);
-    const aggregated = aggregateBarsToHigherTimeframe(baseBars, baseMinutes, 4, { requireFullBucket: true });
-    const auxBars = Number.isFinite(Number(desiredBarsCount)) ? aggregated.slice(-Number(desiredBarsCount)) : aggregated;
-    return { auxTimeframe, auxBars };
 }
 
 /**

@@ -64,9 +64,10 @@
   </div>
 
   <script id="chart-config" type="application/json">
-    { "width": {{ WIDTH }}, "height": {{ HEIGHT }}, "volumeHeight": {{ VOLUME_HEIGHT }}, "macdHeight": {{ MACD_HEIGHT }}, "trendStrengthHeight": {{ TREND_STRENGTH_HEIGHT }} }
+    { "width": {{ WIDTH }}, "height": {{ HEIGHT }}, "volumeHeight": {{ VOLUME_HEIGHT }}, "macdHeight": {{ MACD_HEIGHT }}, "trendStrengthHeight": {{ TREND_STRENGTH_HEIGHT }}, "futureBars": {{ FUTURE_BARS }} }
   </script>
   <script id="chart-data" type="application/json">{{ CHART_DATA }}</script>
+  <script id="chart-indicator-data" type="application/json">{{ INDICATOR_DATA }}</script>
   <script id="chart-overlays" type="application/json">{{ OVERLAYS }}</script>
   <script id="chart-watermark" type="application/json">{{ WATERMARK_JSON }}</script>
 
@@ -93,6 +94,7 @@
       const volumeHeight = Number(rawConfig?.volumeHeight);
       const macdHeight = Number(rawConfig?.macdHeight);
       const trendStrengthHeight = Number(rawConfig?.trendStrengthHeight);
+      const futureBars = Number(rawConfig?.futureBars);
 
       const normalizedWidth = Number.isFinite(width) && width > 0 ? width : 1280;
       const normalizedHeight = Number.isFinite(height) && height > 0 ? height : 720;
@@ -102,6 +104,7 @@
       let normalizedVolumeHeight = clampRatio(volumeHeight, 0.2);
       let normalizedMacdHeight = clampRatio(macdHeight, 0.15);
       let normalizedTrendStrengthHeight = clampRatio(trendStrengthHeight, 0.15);
+      const normalizedFutureBars = Number.isFinite(futureBars) && futureBars >= 0 ? Math.floor(futureBars) : 5;
 
       // 保证主图区至少占 35%，不足则整体缩小子图比例
       const maxSubSum = 0.65;
@@ -119,12 +122,14 @@
         volumeHeight: normalizedVolumeHeight,
         macdHeight: normalizedMacdHeight,
         trendStrengthHeight: normalizedTrendStrengthHeight,
+        futureBars: normalizedFutureBars,
       };
     }
 
     // 图表数据将通过 Puppeteer 注入
     window.chartConfig = normalizeChartConfig(readJsonFromScriptTag('chart-config', {}));
     window.chartData = readJsonFromScriptTag('chart-data', []);
+    window.indicatorData = readJsonFromScriptTag('chart-indicator-data', null);
     window.overlays = readJsonFromScriptTag('chart-overlays', []);
     window.watermark = readJsonFromScriptTag('chart-watermark', '');
 
@@ -202,9 +207,11 @@
       candleSeries.setData(data);
 
       // 指标计算（渲染在截图 PNG 内）
-      const closes = window.chartData.map(b => b.close);
-      const highs = window.chartData.map(b => b.high);
-      const lows = window.chartData.map(b => b.low);
+      const indicatorBars = Array.isArray(window.indicatorData) && window.indicatorData.length ? window.indicatorData : window.chartData;
+      const indicatorOffset = Math.max(0, indicatorBars.length - window.chartData.length);
+      const closes = indicatorBars.map(b => b.close);
+      const highs = indicatorBars.map(b => b.high);
+      const lows = indicatorBars.map(b => b.low);
 
       function sma(values, period) {
         const result = new Array(values.length).fill(null);
@@ -367,9 +374,13 @@
       const bollMiddleSeries = chart.addLineSeries({ color: 'rgba(255, 193, 7, 0.55)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
       const bollLowerSeries = chart.addLineSeries({ color: 'rgba(255, 193, 7, 0.9)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
 
-      const upperData = data.map((d, i) => (boll.upper[i] == null ? null : ({ time: d.time, value: boll.upper[i] }))).filter(Boolean);
-      const middleData = data.map((d, i) => (boll.middle[i] == null ? null : ({ time: d.time, value: boll.middle[i] }))).filter(Boolean);
-      const lowerData = data.map((d, i) => (boll.lower[i] == null ? null : ({ time: d.time, value: boll.lower[i] }))).filter(Boolean);
+      const bollUpper = boll.upper.slice(indicatorOffset);
+      const bollMiddle = boll.middle.slice(indicatorOffset);
+      const bollLower = boll.lower.slice(indicatorOffset);
+
+      const upperData = data.map((d, i) => (bollUpper[i] == null ? null : ({ time: d.time, value: bollUpper[i] }))).filter(Boolean);
+      const middleData = data.map((d, i) => (bollMiddle[i] == null ? null : ({ time: d.time, value: bollMiddle[i] }))).filter(Boolean);
+      const lowerData = data.map((d, i) => (bollLower[i] == null ? null : ({ time: d.time, value: bollLower[i] }))).filter(Boolean);
       bollUpperSeries.setData(upperData);
       bollMiddleSeries.setData(middleData);
       bollLowerSeries.setData(lowerData);
@@ -428,10 +439,14 @@
       const histSeries = macdChart.addHistogramSeries({ priceLineVisible: false, lastValueVisible: false });
 
       const macd = computeMACD(closes, 12, 26, 9);
-      macdSeries.setData(data.map((d, i) => (macd.macd[i] == null ? null : ({ time: d.time, value: macd.macd[i] }))).filter(Boolean));
-      signalSeries.setData(data.map((d, i) => (macd.signal[i] == null ? null : ({ time: d.time, value: macd.signal[i] }))).filter(Boolean));
+      const macdLine = macd.macd.slice(indicatorOffset);
+      const signalLine = macd.signal.slice(indicatorOffset);
+      const histLine = macd.hist.slice(indicatorOffset);
+
+      macdSeries.setData(data.map((d, i) => (macdLine[i] == null ? null : ({ time: d.time, value: macdLine[i] }))).filter(Boolean));
+      signalSeries.setData(data.map((d, i) => (signalLine[i] == null ? null : ({ time: d.time, value: signalLine[i] }))).filter(Boolean));
       histSeries.setData(data.map((d, i) => {
-        const v = macd.hist[i];
+        const v = histLine[i];
         if (v == null) return null;
         return { time: d.time, value: v, color: v >= 0 ? 'rgba(38, 166, 154, 0.55)' : 'rgba(239, 83, 80, 0.55)' };
       }).filter(Boolean));
@@ -455,7 +470,8 @@
 
       const adxSeries = strengthChart.addLineSeries({ color: 'rgba(168, 85, 247, 0.95)', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
       const adx = computeADX(highs, lows, closes, 14);
-      adxSeries.setData(data.map((d, i) => (adx.adx[i] == null ? null : ({ time: d.time, value: adx.adx[i] }))).filter(Boolean));
+      const adxLine = adx.adx.slice(indicatorOffset);
+      adxSeries.setData(data.map((d, i) => (adxLine[i] == null ? null : ({ time: d.time, value: adxLine[i] }))).filter(Boolean));
 
       // 同步时间轴
       chart.timeScale().subscribeVisibleTimeRangeChange(() => {
@@ -470,10 +486,10 @@
       // 应用标注
       applyOverlays(chart, candleSeries);
 
-      // 设置可见范围，右侧预留5根K线的空间
+      // 设置可见范围，右侧预留 futureBars 根K线的空间
       const totalBars = data.length;
       if (totalBars > 0) {
-        const rightPadding = 5; // 右侧预留的K线数量
+        const rightPadding = config.futureBars; // 右侧预留的K线数量
         const visibleTo = totalBars - 1;
         const visibleFrom = 0;
         

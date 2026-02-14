@@ -1,5 +1,4 @@
 import { readFile } from 'fs/promises';
-import { join } from 'path';
 import chokidar from 'chokidar';
 
 // 解析 .env 文件内容

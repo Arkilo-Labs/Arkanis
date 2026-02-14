@@ -158,17 +158,21 @@ export class ChartInput {
     /**
      * @param {Object} params
      * @param {import('../data/models.js').Bar[]} params.bars K 线数据
+     * @param {import('../data/models.js').Bar[]} [params.indicatorBars] 指标预热用数据（可包含 bars 之前的历史）
      * @param {string} params.symbol 交易对
      * @param {string} params.timeframe 时间周期
      * @param {string} [params.title] 图表标题
      * @param {OverlayObject[]} [params.overlays] 标注对象列表
+     * @param {number} [params.futureBars] 右侧预留空白的 K 线数量
      */
-    constructor({ bars, symbol, timeframe, title = null, overlays = [] }) {
+    constructor({ bars, indicatorBars = null, symbol, timeframe, title = null, overlays = [], futureBars = null }) {
         this.bars = bars;
+        this.indicatorBars = indicatorBars;
         this.symbol = symbol;
         this.timeframe = timeframe;
         this.title = title;
         this.overlays = overlays;
+        this.futureBars = futureBars;
     }
 
     get minPrice() {
