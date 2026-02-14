@@ -1,0 +1,74 @@
+# TradeRoundtable
+
+一个“圆桌会议式”的交易分析后端脚手架：  
+从本仓库现有 JS 数据/图表能力获取 15m/1h K 线截图 + 外部网页截图（如 Coinglass 清算地图），再按配置驱动的多 Agent 顺序调用不同 Provider，最终输出决策与会议纪要。
+
+## 约束
+
+- 本目录为独立实现，不修改仓库现有 `src/` 等库代码（仅复用其能力）。
+- 不需要前端；输出为 `logs/` 与 `outputs/` 文件。
+- 不在仓库内硬编码任何密钥；统一通过环境变量注入。
+
+## 快速开始
+
+1) 配置 Provider 与 Agent：
+- `src/agents/runtime/TradeRoundtable/config/providers.json`
+- `src/agents/runtime/TradeRoundtable/config/agents.json`
+
+2) 准备环境变量（示例，按你的 Provider 配置调整）：
+
+```powershell
+$env:DIDL_API_KEY="..."
+```
+
+新闻收集默认走「SearXNG + Firecrawl」（本地 HTTP 服务），地址在 `src/agents/runtime/TradeRoundtable/config/agents.json` 的 `news_pipeline_settings` 中可改：
+- SearXNG：默认 `http://localhost:8080`
+- Firecrawl：默认 `http://localhost:3002`
+
+3) 运行：
+
+```powershell
+node src/agents/runtime/TradeRoundtable/main.js --symbol BTCUSDT --bars 250
+```
+
+如果只想跳过新闻收集：
+
+```powershell
+node src/agents/runtime/TradeRoundtable/main.js --symbol BTCUSDT --bars 250 --skip-news
+```
+
+指定交易所/市场类型（ccxt，多交易所）：
+
+```powershell
+node src/agents/runtime/TradeRoundtable/main.js --symbol BTCUSDT --exchange okx --market-type swap --exchange-fallbacks binance,bybit
+```
+
+如果你本机没有 PostgreSQL（或连接慢），建议直接走交易所数据源：
+
+```powershell
+node src/agents/runtime/TradeRoundtable/main.js --symbol BTCUSDT --bars 250 --data-source exchange
+```
+
+输出：
+- `src/agents/runtime/TradeRoundtable/outputs/<sessionId>/charts/*.png`
+- `src/agents/runtime/TradeRoundtable/outputs/<sessionId>/decision.json`
+- `src/agents/runtime/TradeRoundtable/logs/<sessionId>.log`
+- `src/agents/runtime/TradeRoundtable/outputs/<sessionId>/news_briefing.md`（如未跳过新闻收集）
+
+说明：
+- `charts/liquidation.png` 会默认提高截图分辨率，并尽量裁剪到主要图表区域，方便模型读取价格轴与结构。
+
+## Prompt 约定（改 prompt 前先看）
+
+- 工具调用是两段式：先输出工具请求 JSON（`action=call_tools`），系统执行后会把结果注入为 `# 外部工具数据`，下一次再输出最终内容。
+- 非工具请求时避免输出 JSON 片段（尤其包含 `action/calls` 的对象），否则可能被误判为工具请求而进入工具循环。
+- 需要“严格 JSON 输出”的环节必须只输出一个 JSON 对象，不要代码块/Markdown：
+  - 圆桌主席：`src/agents/runtime/TradeRoundtable/prompts/deepseek_leader.md`
+  - 质量审计：`src/agents/runtime/TradeRoundtable/prompts/auditor.md`
+  - 新闻管线前两步（queries / selected_urls）：`src/agents/runtime/TradeRoundtable/prompts/news_collector.md`
+
+## 常见问题
+
+- 数据库/补全：沿用仓库现有 `KlinesRepository` 行为（数据不足会自动从交易所补全并入库）。
+- 外部网页截图：默认抓 `https://www.coinglass.com/zh/liquidation-levels`，如遇风控可改 `--liquidation-url` 或调大等待时间 `--page-wait-ms`。
+- 卡住/一直等：现在对 DB/交易所/截图/LLM 都加了超时与重试；同时可打开 `src/agents/runtime/TradeRoundtable/logs/<sessionId>.log` 看实时进度。
