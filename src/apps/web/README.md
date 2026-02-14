@@ -1,5 +1,7 @@
-# Vue 3 + Vite
+# React + Vite
 
-This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+本前端已从 Vue3 迁移到 React（P1D.5 薄片），仍使用 Vite 作为构建与开发服务器。
 
-Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://vuejs.org/guide/scaling-up/tooling.html#ide-support).
+主要命令：
+- `pnpm dev`：开发启动
+- `pnpm build`：构建产物到 `dist/`
