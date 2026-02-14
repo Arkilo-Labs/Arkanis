@@ -32,6 +32,16 @@ docker compose up -d postgres
 
 如果你的机器上已安装并运行了本地 PostgreSQL，注意端口冲突：要么先停掉本地服务，要么把 `.env` 的 `DB_PORT` 改成其他端口。
 
+可选：项目中后期会用到的 **SearXNG + Firecrawl**（用于联网检索 + 抓取原文）已做成独立“一键栈”，默认不启动、不影响本仓库的简单验证：
+
+```bash
+# macOS / Linux
+bash ./deploy/searxng-firecrawl/stack.sh up
+
+# Windows PowerShell
+powershell -ExecutionPolicy Bypass -File .\\deploy\\searxng-firecrawl\\stack.ps1 up
+```
+
 安装依赖：
 
 ```bash

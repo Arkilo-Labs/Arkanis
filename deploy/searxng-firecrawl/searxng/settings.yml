@@ -1,0 +1,20 @@
+use_default_settings: true
+
+general:
+  instance_name: "local-searxng"
+
+search:
+  # Firecrawl /search 需要 JSON 输出
+  formats:
+    - html
+    - json
+
+server:
+  secret_key: "ultrasecretkey"
+  base_url: "http://localhost:8080/"
+  limiter: false
+  image_proxy: true
+
+redis:
+  # 与 Firecrawl 共用同一个 Redis，用不同 DB 隔离
+  url: redis://redis:6379/1

@@ -14,13 +14,17 @@ import {
     TelegramClient,
 } from '../../core/services/telegram/index.js';
 
-import { registerHttpMiddleware } from './middleware/http.js';
+import { registerAuthMiddleware } from './middleware/auth.js';
+import { registerHttpMiddleware, registerStaticMiddleware } from './middleware/http.js';
 import { registerChartDataRoutes } from './routes/chartData.js';
 import { registerConfigRoutes } from './routes/config.js';
 import { registerPromptRoutes } from './routes/prompts.js';
 import { registerProviderRoutes } from './routes/providers.js';
 import { registerScriptRoutes } from './routes/script.js';
+import { registerAuthRoutes } from './routes/auth.js';
+import { registerSetupRoutes } from './routes/setup.js';
 import { registerTelegramRoutes } from './routes/telegram.js';
+import { initAuthService } from './services/authService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -37,7 +41,18 @@ const io = new Server(httpServer, {
     },
 });
 
-registerHttpMiddleware({ app, projectRoot: PROJECT_ROOT });
+registerHttpMiddleware({ app });
+
+let authService = null;
+try {
+    authService = await initAuthService({ projectRoot: PROJECT_ROOT });
+} catch (error) {
+    console.error(error?.message || String(error));
+    process.exit(1);
+}
+
+registerAuthMiddleware({ app, io, authService });
+registerStaticMiddleware({ app, projectRoot: PROJECT_ROOT });
 
 const activeProcesses = new Map();
 const sessionChartData = new Map();
@@ -67,6 +82,8 @@ registerPromptRoutes({ app, PromptManager });
 registerChartDataRoutes({ app, sessionChartData });
 registerConfigRoutes({ app, projectRoot: PROJECT_ROOT });
 registerProviderRoutes({ app, io, projectRoot: PROJECT_ROOT });
+registerAuthRoutes({ app, authService });
+registerSetupRoutes({ app, authService });
 registerTelegramRoutes({
     app,
     TelegramClient,
