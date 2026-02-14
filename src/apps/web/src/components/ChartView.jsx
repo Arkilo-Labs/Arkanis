@@ -1,41 +1,31 @@
 import { useEffect, useRef, useState } from 'react';
 import { createChart, CrosshairMode, PriceScaleMode } from 'lightweight-charts';
 
-function normalizeNumber(value) {
-    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-    if (typeof value === 'string') {
-        const num = Number(value);
-        return Number.isFinite(num) ? num : null;
-    }
-    return null;
+function toFiniteNumber(value) {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-function normalizeBarTime(value) {
-    if (value instanceof Date && Number.isFinite(value.getTime())) {
-        return Math.floor(value.getTime() / 1000);
-    }
+function toEpochSeconds(value) {
+    const num = toFiniteNumber(value);
+    if (num == null) return null;
+    // 允许错误地传入毫秒时间戳（常见误用），统一收敛到秒
+    return num > 1e12 ? Math.floor(num / 1000) : Math.floor(num);
+}
 
-    if (typeof value === 'number') {
-        if (!Number.isFinite(value)) return null;
-        if (value > 1e12) return Math.floor(value / 1000);
-        return Math.floor(value);
-    }
+function toMarkerPosition(value) {
+    if (value === 'belowBar' || value === 'aboveBar' || value === 'inBar') return value;
+    if (value === 'below_bar') return 'belowBar';
+    if (value === 'inside_bar') return 'inBar';
+    if (value === 'above_bar') return 'aboveBar';
+    return 'aboveBar';
+}
 
-    if (typeof value === 'string') {
-        const trimmed = value.trim();
-        if (!trimmed) return null;
-
-        if (/^\d+$/.test(trimmed)) {
-            const num = Number(trimmed);
-            return normalizeBarTime(num);
-        }
-
-        const parsed = Date.parse(trimmed);
-        if (!Number.isFinite(parsed)) return null;
-        return Math.floor(parsed / 1000);
-    }
-
-    return null;
+function toMarkerShape(value) {
+    if (value === 'circle' || value === 'square' || value === 'arrowUp' || value === 'arrowDown') return value;
+    if (value === 'arrow_up') return 'arrowUp';
+    if (value === 'arrow_down') return 'arrowDown';
+    if (value === 'square') return 'square';
+    return 'circle';
 }
 
 function drawOverlays({ data, candlestickSeries }) {
@@ -46,7 +36,7 @@ function drawOverlays({ data, candlestickSeries }) {
     data.overlays.forEach((overlay) => {
         try {
             if (overlay.type === 'horizontal_line') {
-                const price = normalizeNumber(overlay.price);
+                const price = toFiniteNumber(overlay.price);
                 if (price == null) return;
                 candlestickSeries.createPriceLine({
                     price,
@@ -62,13 +52,13 @@ function drawOverlays({ data, candlestickSeries }) {
                 const barIndex = overlay.start?.barIndex;
                 const bar = typeof barIndex === 'number' ? data.bars?.[barIndex] : null;
                 if (bar) {
-                    const time = normalizeBarTime(bar.time);
+                    const time = toEpochSeconds(bar.time);
                     if (time == null) return;
                     newMarkers.push({
                         time,
-                        position: overlay.position === 'below' ? 'belowBar' : 'aboveBar',
+                        position: toMarkerPosition(overlay.position),
                         color: overlay.color || 'rgba(0, 122, 255, 0.9)',
-                        shape: overlay.shape || 'circle',
+                        shape: toMarkerShape(overlay.shape),
                         text: overlay.text || '',
                     });
                 }
@@ -79,7 +69,7 @@ function drawOverlays({ data, candlestickSeries }) {
                 const endIndex = overlay.end?.barIndex;
                 const startBar = typeof startIndex === 'number' ? data.bars?.[startIndex] : null;
                 const endBar = typeof endIndex === 'number' ? data.bars?.[endIndex] : null;
-                const price = normalizeNumber(overlay.start?.price);
+                const price = toFiniteNumber(overlay.start?.price);
                 if (!startBar || !endBar || price == null) return;
                 candlestickSeries.createPriceLine({
                     price,
@@ -119,8 +109,8 @@ export default function ChartView({ data, title, height = 500 }) {
         let resizeObserver = null;
 
         const safeHeight = (() => {
-            const num = normalizeNumber(height);
-            return num && num > 0 ? num : 500;
+            const num = toFiniteNumber(height);
+            return num != null && num > 0 ? num : 500;
         })();
 
         function getContainerWidth() {
@@ -129,20 +119,20 @@ export default function ChartView({ data, title, height = 500 }) {
         }
 
         function prepareSeriesData() {
-            const candles = [];
-            const volumes = [];
+                const candles = [];
+                const volumes = [];
 
-            for (const bar of bars) {
-                const time = normalizeBarTime(bar?.time);
-                const open = normalizeNumber(bar?.open);
-                const high = normalizeNumber(bar?.high);
-                const low = normalizeNumber(bar?.low);
-                const close = normalizeNumber(bar?.close);
-                const volume = normalizeNumber(bar?.volume) ?? 0;
+                for (const bar of bars) {
+                    const time = toEpochSeconds(bar?.time);
+                    const open = toFiniteNumber(bar?.open);
+                    const high = toFiniteNumber(bar?.high);
+                    const low = toFiniteNumber(bar?.low);
+                    const close = toFiniteNumber(bar?.close);
+                    const volume = toFiniteNumber(bar?.volume) ?? 0;
 
-                if (time == null || open == null || high == null || low == null || close == null) {
-                    return { candles: null, volumes: null };
-                }
+                    if (time == null || open == null || high == null || low == null || close == null) {
+                        return { candles: null, volumes: null };
+                    }
 
                 candles.push({ time, open, high, low, close });
                 volumes.push({

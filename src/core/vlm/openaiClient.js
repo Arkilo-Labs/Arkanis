@@ -240,66 +240,94 @@ function encodeImage(imagePath) {
  * 从文本中提取 JSON
  */
 function extractJson(text) {
-    let content = text.trim();
+    let content = String(text ?? '').trim();
+    if (!content) return content;
 
-    // 处理 markdown 代码块
-    if (content.includes('```json')) {
-        const start = content.indexOf('```json') + 7;
-        const end = content.indexOf('```', start);
-        if (end > start) {
-            content = content.slice(start, end).trim();
-        }
-    } else if (content.includes('```')) {
-        const start = content.indexOf('```') + 3;
-        const end = content.indexOf('```', start);
-        if (end > start) {
-            content = content.slice(start, end).trim();
-        }
+    const fenceMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (fenceMatch) {
+        content = fenceMatch[1].trim();
     }
 
-    // 尝试找到 JSON 对象
-    if (!content.startsWith('{')) {
-        const start = content.indexOf('{');
-        if (start !== -1) {
-            let depth = 0;
-            for (let i = start; i < content.length; i++) {
-                if (content[i] === '{') depth++;
-                if (content[i] === '}') depth--;
-                if (depth === 0) {
-                    content = content.slice(start, i + 1);
-                    break;
-                }
+    const extracted = findLastValidJsonSegment(content);
+    return extracted ?? content;
+}
+
+/**
+ * 提取最后一个可解析的 JSON 段（不做“修 JSON”）
+ */
+function findLastValidJsonSegment(text) {
+    const input = String(text ?? '').trim();
+    if (!input) return null;
+
+    try {
+        JSON.parse(input);
+        return input;
+    } catch {
+        // 继续尝试提取
+    }
+
+    let inString = false;
+    let escape = false;
+    let startIndex = -1;
+    let stack = [];
+    let lastValid = null;
+
+    for (let i = 0; i < input.length; i++) {
+        const ch = input[i];
+
+        if (inString) {
+            if (escape) {
+                escape = false;
+                continue;
+            }
+            if (ch === '\\') {
+                escape = true;
+                continue;
+            }
+            if (ch === '"') {
+                inString = false;
+            }
+            continue;
+        }
+
+        if (ch === '"') {
+            inString = true;
+            continue;
+        }
+
+        if (ch === '{' || ch === '[') {
+            if (stack.length === 0) startIndex = i;
+            stack.push(ch);
+            continue;
+        }
+
+        if (ch === '}' || ch === ']') {
+            if (stack.length === 0) continue;
+
+            const open = stack[stack.length - 1];
+            const matched = (open === '{' && ch === '}') || (open === '[' && ch === ']');
+            if (!matched) {
+                stack = [];
+                startIndex = -1;
+                continue;
+            }
+
+            stack.pop();
+            if (stack.length !== 0 || startIndex === -1) continue;
+
+            const candidate = input.slice(startIndex, i + 1);
+            startIndex = -1;
+
+            try {
+                JSON.parse(candidate);
+                lastValid = candidate;
+            } catch {
+                // 忽略：继续寻找下一个段
             }
         }
     }
 
-    return sanitizeJson(content);
-}
-
-/**
- * 清理不规范的 JSON 格式
- */
-function sanitizeJson(jsonStr) {
-    let cleaned = jsonStr;
-
-    // 1. 移除单行注释 // ...
-    cleaned = cleaned.replace(/\/\/.*$/gm, '');
-
-    // 2. 移除多行注释 /* ... */
-    cleaned = cleaned.replace(/\/\*[\s\S]*?\*\//g, '');
-
-    // 3. 处理尾随逗号（对象和数组）
-    cleaned = cleaned.replace(/,(\s*[}\]])/g, '$1');
-
-    // 4. 将单引号替换为双引号（需要小心处理字符串内容）
-    // 简单处理：替换作为字符串分隔符的单引号
-    cleaned = cleaned.replace(/'([^']*?)'/g, '"$1"');
-
-    // 5. 为没有引号的属性名添加引号
-    // 匹配模式: 单词字符后跟冒号，且前面没有引号
-    cleaned = cleaned.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3');
-
-    return cleaned;
+    return lastValid;
 }
 
 /**
@@ -511,25 +539,7 @@ ${primaryUserPrompt || DEFAULT_USER_PROMPT}
      * @private
      */
     _extractJsonFromThinking(text) {
-        const lastBrace = text.lastIndexOf('}');
-        if (lastBrace === -1) return text;
-
-        let depth = 0;
-        for (let i = lastBrace; i >= 0; i--) {
-            if (text[i] === '}') depth++;
-            if (text[i] === '{') depth--;
-            if (depth === 0) {
-                const extracted = text.slice(i, lastBrace + 1);
-                try {
-                    JSON.parse(extracted);
-                    return extracted;
-                } catch {
-                    continue;
-                }
-            }
-        }
-
-        return text;
+        return extractJson(text);
     }
 
     /**

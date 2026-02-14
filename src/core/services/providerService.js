@@ -6,24 +6,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = join(__dirname, '..', '..', '..');
 const PROVIDERS_FILE = join(PROJECT_ROOT, 'ai-providers.json');
 
-function tryParseProviderOverride() {
-    const raw = String(process.env.ARKANIS_PROVIDER_OVERRIDE_JSON || '').trim();
-    if (!raw) return null;
-    try {
-        const obj = JSON.parse(raw);
-        if (!obj || typeof obj !== 'object') return null;
-        if (Array.isArray(obj.providers)) {
-            return obj;
-        }
-        if (obj.apiKey && (obj.modelName || obj.model)) {
-            return { providers: [{ ...obj, isActive: true }], version: 1 };
-        }
-        return null;
-    } catch {
-        return null;
-    }
-}
-
 /**
  * AI Provider 服务
  * 统一管理 ai-providers.json 的读取和配置
@@ -36,9 +18,6 @@ class ProviderService {
     }
 
     async _readProvidersFile() {
-        const override = tryParseProviderOverride();
-        if (override) return override;
-
         const now = Date.now();
         if (this._cache && now - this._cacheTime < this.CACHE_TTL) {
             return this._cache;
@@ -47,6 +26,9 @@ class ProviderService {
         try {
             const content = await fs.readFile(PROVIDERS_FILE, 'utf-8');
             const data = JSON.parse(content);
+            if (!data || typeof data !== 'object' || !Array.isArray(data.providers)) {
+                throw new Error('ai-providers.json 格式不正确：必须包含 providers 数组');
+            }
             this._cache = data;
             this._cacheTime = now;
             return data;

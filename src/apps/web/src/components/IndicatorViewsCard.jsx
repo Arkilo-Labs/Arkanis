@@ -1,39 +1,27 @@
 import { useMemo } from 'react';
 
-function normalizeBias(value) {
-    const v = String(value || '').trim().toLowerCase();
-    if (['bullish', 'long', 'buy', '看多', '偏多', '多', '多头'].includes(v)) return 'bullish';
-    if (['bearish', 'short', 'sell', '看空', '偏空', '空', '空头'].includes(v)) return 'bearish';
-    if (['neutral', 'none', 'wait', 'hold', '中性', '观望'].includes(v)) return 'neutral';
-    return v || 'neutral';
-}
-
-function normalizeStrengthLevel(value) {
-    const v = String(value || '').trim().toLowerCase();
-    if (['above_average', 'above', 'strong', 'high', '高于平均', '偏强', '强'].includes(v)) return 'above_average';
-    if (['below_average', 'below', 'weak', 'low', '低于平均', '偏弱', '弱'].includes(v)) return 'below_average';
-    if (['average', 'mid', 'normal', '中等', '平均', '一般'].includes(v)) return 'average';
-    return v || 'average';
+function normalizeText(value) {
+    return String(value ?? '').trim().toLowerCase();
 }
 
 function biasLabel(bias) {
-    const b = normalizeBias(bias);
+    const b = normalizeText(bias);
+    if (!b || b === 'neutral') return '中性';
     if (b === 'bullish') return '偏多';
     if (b === 'bearish') return '偏空';
-    if (b === 'neutral') return '中性';
     return b;
 }
 
 function strengthLabel(level) {
-    const l = normalizeStrengthLevel(level);
+    const l = normalizeText(level);
+    if (!l || l === 'average') return '平均';
     if (l === 'above_average') return '高于平均';
     if (l === 'below_average') return '低于平均';
-    if (l === 'average') return '平均';
     return l;
 }
 
 function badgeClassByBias(bias) {
-    const b = normalizeBias(bias);
+    const b = normalizeText(bias);
     if (b === 'bullish') return 'iv-badge iv-badge--bullish';
     if (b === 'bearish') return 'iv-badge iv-badge--bearish';
     return 'iv-badge iv-badge--neutral';
@@ -43,10 +31,10 @@ export default function IndicatorViewsCard({ views = null, title = '指标观点
     const items = useMemo(() => {
         const v = views || {};
 
-        const bollBias = normalizeBias(v?.bollinger?.bias);
-        const macdBias = normalizeBias(v?.macd?.bias);
-        const adxLevel = normalizeStrengthLevel(v?.trend_strength?.level);
-        const adxBias = normalizeBias(v?.trend_strength?.bias);
+        const bollBias = normalizeText(v?.bollinger?.bias) || 'neutral';
+        const macdBias = normalizeText(v?.macd?.bias) || 'neutral';
+        const adxLevel = normalizeText(v?.trend_strength?.level) || 'average';
+        const adxBias = normalizeText(v?.trend_strength?.bias) || 'neutral';
 
         const score =
             (bollBias === 'bullish' ? 1 : bollBias === 'bearish' ? -1 : 0) +

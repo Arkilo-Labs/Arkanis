@@ -30,18 +30,29 @@ async function writeProviders({ providersFile, data }) {
 }
 
 async function readProviders({ providersFile }) {
-    try {
-        if (!existsSync(providersFile)) {
-            const data = { providers: [], version: 1 };
-            await writeProviders({ providersFile, data });
-            return data;
+    if (!existsSync(providersFile)) {
+        const data = { providers: [], version: 1 };
+        const ok = await writeProviders({ providersFile, data });
+        if (!ok) {
+            throw new Error('初始化 ai-providers.json 失败，请检查文件权限');
         }
-        const content = await readFile(providersFile, 'utf-8');
-        return JSON.parse(content);
-    } catch (error) {
-        console.error('读取 Provider 文件失败:', error);
-        return { providers: [], version: 1 };
+        return data;
     }
+
+    const content = await readFile(providersFile, 'utf-8');
+    let parsed;
+    try {
+        parsed = JSON.parse(content);
+    } catch (error) {
+        console.error('ai-providers.json 解析失败:', error);
+        throw new Error('ai-providers.json 解析失败，请修复 JSON 格式后重试');
+    }
+
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.providers)) {
+        throw new Error('ai-providers.json 格式不正确：必须包含 providers 数组');
+    }
+
+    return { providers: parsed.providers, version: parsed.version ?? 1 };
 }
 
 export function registerProviderRoutes({ app, io, projectRoot }) {
@@ -156,4 +167,3 @@ export function registerProviderRoutes({ app, io, projectRoot }) {
         }
     });
 }
-
