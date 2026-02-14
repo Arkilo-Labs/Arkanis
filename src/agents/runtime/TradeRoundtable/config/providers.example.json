@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "providers": {
+    "didl_gpt41_mini": {
+      "type": "openai_compatible",
+      "base_url": "https://a.didl.top",
+      "api_key_env": "DIDL_API_KEY",
+      "model": "gpt-4.1-mini",
+      "supports_vision": true,
+      "temperature": 0.5,
+      "max_tokens": 32767
+    },
+    "deepseek_api": {
+      "type": "openai_compatible",
+      "base_url": "https://api.yunwu.ai",
+      "api_key_env": "YUNWU_API_KEY",
+      "model": "deepseek-v3.2",
+      "supports_vision": false,
+      "temperature": 1.0,
+      "max_tokens": 65536
+    },
+    "yunwu_grok_4_fast": {
+      "type": "openai_compatible",
+      "base_url": "https://api.yunwu.ai",
+      "api_key_env": "YUNWU_API_KEY",
+      "model": "grok-4-fast",
+      "supports_vision": true,
+      "temperature": 1.0,
+      "max_tokens": 327680
+    },
+    "duojie_opus4.5": {
+      "type": "openai_compatible",
+      "base_url": "https://api.duojie.games",
+      "api_key_env": "duojie_api_key",
+      "model": "claude-opus-4-5-20251101",
+      "supports_vision": true,
+      "temperature": 1.0,
+      "max_tokens": 327680
+    }
+  }
+}

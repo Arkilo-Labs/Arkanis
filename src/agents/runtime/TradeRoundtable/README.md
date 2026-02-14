@@ -12,7 +12,7 @@
 ## 快速开始
 
 1) 配置 Provider 与 Agent：
-- `src/agents/runtime/TradeRoundtable/config/providers.json`
+- `src/agents/runtime/TradeRoundtable/config/providers.json`（建议从 `src/agents/runtime/TradeRoundtable/config/providers.example.json` 复制一份后再改）
 - `src/agents/runtime/TradeRoundtable/config/agents.json`
 
 2) 准备环境变量（示例，按你的 Provider 配置调整）：

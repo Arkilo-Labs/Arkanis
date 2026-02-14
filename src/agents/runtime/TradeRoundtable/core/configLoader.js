@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { z } from 'zod';
 
@@ -116,8 +116,21 @@ function readJson(path) {
     return JSON.parse(raw);
 }
 
+function resolveExistingConfigPath(configDir, candidates) {
+    for (const name of candidates) {
+        const candidatePath = join(configDir, name);
+        if (existsSync(candidatePath)) return candidatePath;
+    }
+    return null;
+}
+
 export function loadProvidersConfig(configDir) {
-    const path = join(configDir, 'providers.json');
+    const path = resolveExistingConfigPath(configDir, ['providers.json', 'providers.example.json']);
+    if (!path) {
+        throw new Error(
+            `未找到 Provider 配置文件：请在 ${configDir} 下提供 providers.json（本地）或 providers.example.json（示例）`,
+        );
+    }
     return ProvidersConfigSchema.parse(readJson(path));
 }
 
