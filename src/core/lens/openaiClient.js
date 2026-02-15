@@ -5,8 +5,8 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname, join } from 'path';
 import axios from 'axios';
-import { vlmConfig } from '../config/index.js';
-import { VLMDecision } from './schema.js';
+import { lensConfig } from '../config/index.js';
+import { LensDecision } from './schema.js';
 import logger from '../utils/logger.js';
 import PromptManager from './promptManager.js';
 import { resolveProviderForRole } from '../services/providerResolver.js';
@@ -18,7 +18,7 @@ const __dirname = dirname(__filename);
 const PROJECT_ROOT = join(__dirname, '..', '..', '..');
 const DATA_DIR = resolveDataDir({ projectRoot: PROJECT_ROOT });
 
-// VLM 系统提示词
+// Lens 系统提示词
 export const DEFAULT_SYSTEM_PROMPT = PromptManager.getPrompt('default');
 
 export const DEFAULT_USER_PROMPT = `请仔细分析这张 K 线图，根据 System Prompt 的规则给出你的交易决策。
@@ -340,7 +340,7 @@ function findLastValidJsonSegment(text) {
 /**
  * OpenAI Vision API 客户端
  */
-export class VLMClient {
+export class LensClient {
     constructor({
         apiKey,
         baseUrl,
@@ -351,7 +351,7 @@ export class VLMClient {
         temperature = 0.2,
         } = {}) {
         if (!apiKey) {
-            throw new Error('未提供 API Key，请使用 VLMClient.fromRole("vlm") 创建实例');
+            throw new Error('未提供 API Key，请使用 LensClient.fromRole("lens") 创建实例');
         }
         if (!baseUrl) {
             throw new Error('未提供 Base URL');
@@ -367,14 +367,14 @@ export class VLMClient {
         this.enableThinking = enableThinking;
         this.maxTokens = maxTokens;
         this.temperature = temperature;
-        this.promptName = vlmConfig.promptName;
+        this.promptName = lensConfig.promptName;
     }
 
     /**
      * 从 role 绑定的 Provider 创建客户端
-     * @returns {Promise<VLMClient>}
+     * @returns {Promise<LensClient>}
      */
-    static async fromRole(role = 'vlm') {
+    static async fromRole(role = 'lens') {
         const { provider, apiKey } = await resolveProviderForRole({
             projectRoot: PROJECT_ROOT,
             dataDir: DATA_DIR,
@@ -382,7 +382,7 @@ export class VLMClient {
             role,
         });
 
-        return new VLMClient({
+        return new LensClient({
             apiKey,
             baseUrl: provider.baseUrl,
             model: provider.modelName,
@@ -398,7 +398,7 @@ export class VLMClient {
      * @param {Object} [options]
      * @param {string} [options.systemPrompt]
      * @param {string} [options.userPrompt]
-     * @returns {Promise<VLMDecision>}
+     * @returns {Promise<LensDecision>}
      */
     async analyzeChart(imagePath, { systemPrompt = null, userPrompt = null } = {}) {
         const { mimeType, base64 } = encodeImage(imagePath);
@@ -433,7 +433,7 @@ export class VLMClient {
      * @param {string} [params.systemPrompt]
      * @param {string} [params.primaryUserPrompt]
      * @param {string} [params.auxUserPrompt]
-     * @returns {Promise<VLMDecision>}
+     * @returns {Promise<LensDecision>}
      */
     async analyzeChartPair({
         primaryImagePath,
@@ -558,7 +558,7 @@ ${primaryUserPrompt || DEFAULT_USER_PROMPT}
     _parseResponse(responseText) {
         const jsonStr = extractJson(responseText);
         try {
-            return VLMDecision.fromJson(jsonStr);
+            return LensDecision.fromJson(jsonStr);
         } catch (error) {
             logger.error('[JSON解析失败] 原始响应长度:', responseText.length);
             logger.error('[JSON解析失败] 提取的JSON长度:', jsonStr.length);
@@ -569,18 +569,18 @@ ${primaryUserPrompt || DEFAULT_USER_PROMPT}
             }
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             writeFileSync(
-                join(debugDir, `vlm_response_${timestamp}.txt`),
+                join(debugDir, `lens_response_${timestamp}.txt`),
                 responseText
             );
             writeFileSync(
-                join(debugDir, `vlm_json_${timestamp}.txt`),
+                join(debugDir, `lens_json_${timestamp}.txt`),
                 jsonStr
             );
-            logger.error(`[调试信息] 已保存原始响应到: outputs/debug/vlm_response_${timestamp}.txt`);
-            logger.error(`[调试信息] 已保存提取JSON到: outputs/debug/vlm_json_${timestamp}.txt`);
+            logger.error(`[调试信息] 已保存原始响应到: outputs/debug/lens_response_${timestamp}.txt`);
+            logger.error(`[调试信息] 已保存提取JSON到: outputs/debug/lens_json_${timestamp}.txt`);
             throw error;
         }
     }
 }
 
-export default VLMClient;
+export default LensClient;

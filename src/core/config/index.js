@@ -1,5 +1,5 @@
 /**
- * VLM Trade 配置模块
+ * Arkanis 配置模块
  * 从环境变量加载配置，提供默认值
  */
 
@@ -118,9 +118,9 @@ export const chartConfig = {
 };
 
 /**
- * VLM 配置（仅保留 Prompt 名称，其他配置使用 AI Provider）
+ * Lens 配置（仅保留 Prompt 名称，其他配置使用 AI Provider）
  */
-export const vlmConfig = {
+export const lensConfig = {
     promptName: getEnv('PROMPT_NAME', 'default'),
 };
 
@@ -160,7 +160,7 @@ export const defaultConfig = {
 export const config = {
     db: databaseConfig,
     chart: chartConfig,
-    vlm: vlmConfig,
+    lens: lensConfig,
     marketData: marketDataConfig,
     default: defaultConfig,
 };

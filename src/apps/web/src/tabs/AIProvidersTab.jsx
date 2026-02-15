@@ -45,7 +45,7 @@ export default function AIProvidersTab() {
     const [newProvider, setNewProvider] = useState(defaultProvider());
 
     const [providerConfig, setProviderConfig] = useState(null);
-    const [rolesDraft, setRolesDraft] = useState({ vlm: null, newser: null, researcher: null, auditor: null });
+    const [rolesDraft, setRolesDraft] = useState({ lens: null, newser: null, researcher: null, auditor: null });
     const [savingRoles, setSavingRoles] = useState(false);
 
     const [keyForm, setKeyForm] = useState({ providerId: '', apiKey: '' });
@@ -85,7 +85,7 @@ export default function AIProvidersTab() {
             }
             const cfg = await res.json();
             setProviderConfig(cfg);
-            setRolesDraft(cfg?.roles || { vlm: null, newser: null, researcher: null, auditor: null });
+            setRolesDraft(cfg?.roles || { lens: null, newser: null, researcher: null, auditor: null });
         } catch (error) {
             console.error('加载 Provider Config 失败:', error);
             showToast('加载 Provider Config 失败', 'error');
@@ -232,7 +232,7 @@ export default function AIProvidersTab() {
     const rolesByProviderId = useMemo(() => {
         const roles = providerConfig?.roles || rolesDraft || {};
         const map = {};
-        const label = { vlm: 'VLM', newser: 'Newser', researcher: 'Researcher', auditor: 'Auditor' };
+        const label = { lens: 'Lens', newser: 'Newser', researcher: 'Researcher', auditor: 'Auditor' };
         for (const [role, providerId] of Object.entries(roles)) {
             if (!providerId) continue;
             if (!map[providerId]) map[providerId] = [];
@@ -341,7 +341,7 @@ export default function AIProvidersTab() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {[
-                            { key: 'vlm', label: 'VLM' },
+                            { key: 'lens', label: 'Lens' },
                             { key: 'newser', label: 'Newser' },
                             { key: 'researcher', label: 'Researcher' },
                             { key: 'auditor', label: 'Auditor' },

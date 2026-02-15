@@ -1,17 +1,17 @@
 /**
- * VLM 层模块入口
+ * Lens 层模块入口
  */
 
 export {
     Direction,
     DrawInstructionType,
-    VLMDecision,
+    LensDecision,
     DrawInstruction,
-    VLMDecisionSchema,
+    LensDecisionSchema,
 } from './schema.js';
 export { drawInstructionToOverlay } from './overlay.js';
 export {
-    VLMClient,
+    LensClient,
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_USER_PROMPT,
     ENHANCED_USER_PROMPT_TEMPLATE,

@@ -1,12 +1,12 @@
 {
-    "name": "vlm-trade-js",
+    "name": "arkanis",
     "version": "1.0.0",
-    "description": "VLM 交易决策实验环境 - JavaScript 重构版",
+    "description": "Arkanis Lens 交易决策实验环境 - JavaScript 重构版",
     "type": "module",
     "main": "src/index.js",
     "scripts": {
-        "main": "node src/cli/vlm/main.js",
-        "backtest": "node src/cli/vlm/backtest.js",
+        "main": "node src/cli/lens/main.js",
+        "backtest": "node src/cli/lens/backtest.js",
         "roundtable": "node src/cli/roundtable/main.js",
         "trade-roundtable": "node src/cli/roundtable/main.js",
         "trade-round-table": "node src/cli/roundtable/main.js",
@@ -23,7 +23,8 @@
         "web:console": "pnpm -C src/apps/web dev"
     },
     "keywords": [
-        "vlm",
+        "arkanis",
+        "lens",
         "trading",
         "kline",
         "chart",

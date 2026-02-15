@@ -1,5 +1,5 @@
 /**
- * VLM 决策 JSON Schema
+ * Lens 决策 JSON Schema
  * 使用 Zod 进行验证
  */
 
@@ -34,7 +34,7 @@ export const AnchorPointSchema = z.object({
     bar_index: z.number().int().optional().nullable(),
     timestamp: z.string().datetime().optional().nullable(),
     price: z.number().optional().nullable(),
-    // VLM 坐标策略：0~1000 归一化（左上角(0,0) → 右下角(1000,1000)）
+    // Lens 坐标策略：0~1000 归一化（左上角(0,0) → 右下角(1000,1000)）
     // 使用 coerce 自动修正超出范围的值
     x_norm: z.coerce.number().transform(val => Math.max(0, Math.min(1000, val))).optional().nullable(),
     y_norm: z.coerce.number().transform(val => Math.max(0, Math.min(1000, val))).optional().nullable(),
@@ -141,9 +141,9 @@ export const IndicatorViewsSchema = z
     });
 
 /**
- * VLM 决策 Schema
+ * Lens 决策 Schema
  */
-export const VLMDecisionSchema = z.object({
+export const LensDecisionSchema = z.object({
     enter: z.boolean().default(false),
     direction: z
         .preprocess((val) => {
@@ -191,9 +191,9 @@ export const VLMDecisionSchema = z.object({
 });
 
 /**
- * VLM 决策类
+ * Lens 决策类
  */
-export class VLMDecision {
+export class LensDecision {
     constructor(data) {
         this.enter = data.enter ?? false;
         this.direction = data.direction ?? null;
@@ -231,12 +231,12 @@ export class VLMDecision {
     /**
      * 从 JSON 字符串解析
      * @param {string} jsonStr JSON 字符串
-     * @returns {VLMDecision}
+     * @returns {LensDecision}
      */
     static fromJson(jsonStr) {
         const data = JSON.parse(jsonStr);
-        const validated = VLMDecisionSchema.parse(data);
-        return new VLMDecision(validated);
+        const validated = LensDecisionSchema.parse(data);
+        return new LensDecision(validated);
     }
 }
 
@@ -292,9 +292,9 @@ export class DrawInstruction {
 export default {
     Direction,
     DrawInstructionType,
-    VLMDecision,
+    LensDecision,
     DrawInstruction,
-    VLMDecisionSchema,
+    LensDecisionSchema,
     DrawInstructionSchema,
     AnchorPointSchema,
     IndicatorViewsSchema,

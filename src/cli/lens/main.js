@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * VLM 交易决策主脚本
+ * Lens 交易决策主脚本
  *
- * 从 PostgreSQL 获取 K 线数据，渲染图表，调用 VLM API 分析，生成带标注的决策图表。
+ * 从 PostgreSQL 获取 K 线数据，渲染图表，调用 Lens API 分析，生成带标注的决策图表。
  *
  * 用法:
- *   node src/cli/vlm/main.js --symbol BTCUSDT --timeframe 5m --bars 200
- *   node src/cli/vlm/main.js --symbol BTCUSDT --timeframe 1h --bars 200 --enable-4x-chart
+ *   node src/cli/lens/main.js --symbol BTCUSDT --timeframe 5m --bars 200
+ *   node src/cli/lens/main.js --symbol BTCUSDT --timeframe 1h --bars 200 --enable-4x-chart
  */
 
 import { Command } from 'commander';
@@ -22,7 +22,7 @@ import {
     formatMinutesAsTimeframe,
 } from '../../core/data/index.js';
 import { ChartBuilder, ChartInput } from '../../core/chart/index.js';
-import { VLMClient, ENHANCED_USER_PROMPT_TEMPLATE, drawInstructionToOverlay } from '../../core/vlm/index.js';
+import { LensClient, ENHANCED_USER_PROMPT_TEMPLATE, drawInstructionToOverlay } from '../../core/lens/index.js';
 import { getMarketDataClient, detectAssetClass } from '../../core/data/marketDataClient.js';
 import logger from '../../core/utils/logger.js';
 
@@ -140,8 +140,8 @@ async function main() {
     const program = new Command();
 
     program
-        .name('vlm-trade')
-        .description('VLM 交易决策主脚本')
+        .name('arkanis-lens')
+        .description('Lens 交易决策主脚本')
         .option('--symbol <symbol>', '交易对', defaultConfig.symbol)
         .option('--exchange <id>', '交易所（ccxt exchangeId）', config.marketData.exchange)
         .option('--market-type <type>', '市场类型：spot|future|swap（兼容 futures）', config.marketData.marketType)
@@ -157,7 +157,7 @@ async function main() {
         .option('--future-bars <n>', '未来K线数量', (v) => parseInt(v, 10))
         .option('--output-dir <dir>', '输出目录', './outputs')
         .option('--wait <ms>', '等待渲染时间(ms)', (v) => parseInt(v, 10), 500)
-        .option('--skip-vlm', '跳过 VLM 调用')
+        .option('--skip-lens', '跳过 Lens 调用')
         .option('--enable-4x-chart', '启用 4 倍辅助周期图')
         .option('--aux-timeframe <tf>', '辅助周期')
         .option('--asset-class <type>', '资产类型：crypto|stock|forex|commodity（默认自动检测）', '')
@@ -281,7 +281,7 @@ async function main() {
         const chartData = {
             base: null,
             aux: null,
-            vlm: null,
+            lens: null,
             decision: null,
         };
 
@@ -309,9 +309,9 @@ async function main() {
             await builder.buildAndExport(chartInput, basePng, { waitMs: opts.wait });
             logger.info(`[成功] 基础图表已保存: ${basePng}`);
         } else {
-            // 为VLM分析临时生成PNG
+            // 为 Lens 分析临时生成 PNG
             await builder.buildAndExport(chartInput, basePng, { waitMs: opts.wait });
-            logger.info(`[信息] 基础图表已生成（临时用于VLM分析）`);
+            logger.info(`[信息] 基础图表已生成（临时用于 Lens 分析）`);
         }
 
         // 辅助图表
@@ -381,7 +381,7 @@ async function main() {
                         logger.info(`[成功] 辅助图表已保存: ${auxPng}`);
                     } else {
                         await builder.buildAndExport(auxInput, auxPng, { waitMs: opts.wait });
-                        logger.info(`[信息] 辅助图表已生成（临时用于VLM分析）`);
+                        logger.info(`[信息] 辅助图表已生成（临时用于 Lens 分析）`);
                     }
                 } else {
                     logger.warn(`[警告] 辅助图跳过：历史数据不足 (${auxTimeframe})`);
@@ -393,15 +393,15 @@ async function main() {
             }
         }
 
-        // 跳过 VLM
-        if (opts.skipVlm) {
-            logger.info('\n[跳过] VLM 调用已跳过 (--skip-vlm)');
+        // 跳过 Lens
+        if (opts.skipLens) {
+            logger.info('\n[跳过] Lens 调用已跳过 (--skip-lens)');
             return 0;
         }
 
-        // 调用 VLM API
-        logger.info('\n[步骤3] 调用 VLM API...');
-        const client = await VLMClient.fromRole('vlm');
+        // 调用 Lens API
+        logger.info('\n[步骤3] 调用 Lens API...');
+        const client = await LensClient.fromRole('lens');
         logger.info(`       Base URL: ${client.baseUrl}`);
         logger.info(`       Model: ${client.model}`);
 
@@ -429,7 +429,7 @@ async function main() {
             .replace('{priceMax}', priceMax.toFixed(2))
             .replace('{currentPrice}', currentPrice.toFixed(2));
 
-        logger.info(`[信息] 正在使用 '${config.vlm.promptName}.md' Prompt`);
+        logger.info(`[信息] 正在使用 '${config.lens.promptName}.md' Prompt`);
         logger.info('[信息] 等待响应...\n');
 
         let decision;
@@ -446,7 +446,7 @@ async function main() {
         }
 
         logger.info('='.repeat(60));
-        logger.info('VLM 决策结果:');
+        logger.info('Lens 决策结果:');
         logger.info('='.repeat(60));
         logger.info(`入场: ${decision.enter}`);
         if (decision.enter) {
@@ -464,7 +464,7 @@ async function main() {
         // 保存决策数据
         chartData.decision = decision.toDict();
 
-        const outputJson = join(outputDir, 'vlm_decision.json');
+        const outputJson = join(outputDir, 'lens_decision.json');
         if (!opts.skipPng && !opts.sessionId) {
             writeFileSync(outputJson, JSON.stringify(chartData.decision, null, 2), 'utf-8');
             logger.info(`\n[成功] 决策已保存: ${outputJson}`);
@@ -473,7 +473,7 @@ async function main() {
         // 生成带标注的图表数据
         const overlays = [];
         if (decision.drawInstructions.length) {
-            logger.info('\n[步骤4] 处理 VLM 标注...');
+            logger.info('\n[步骤4] 处理 Lens 标注...');
 
             for (const instr of decision.drawInstructions) {
                 try {
@@ -484,8 +484,8 @@ async function main() {
                 }
             }
 
-            // 收集VLM标注图表数据
-            chartData.vlm = {
+            // 收集 Lens 标注图表数据
+            chartData.lens = {
                 symbol: opts.symbol,
                 timeframe: opts.timeframe,
                 bars: bars.map(b => b.toDict()),
@@ -514,14 +514,14 @@ async function main() {
                     futureBars,
                 });
 
-                const decisionPng = join(outputDir, `${opts.symbol}_${opts.timeframe}_with_vlm_decision.png`);
+                const decisionPng = join(outputDir, `${opts.symbol}_${opts.timeframe}_with_lens_decision.png`);
                 let imgBuffer = await builder.buildAndExport(annotatedInput, decisionPng, { waitMs: opts.wait });
 
                 // 添加文本标注
                 imgBuffer = await builder.addTextAnnotations(imgBuffer);
                 writeFileSync(decisionPng, imgBuffer);
 
-                logger.info(`[成功] 带 VLM 标注图片已保存: ${decisionPng}`);
+                logger.info(`[成功] 带 Lens 标注图片已保存: ${decisionPng}`);
             }
         }
 

@@ -8,7 +8,7 @@ import { readSecrets } from '../../../core/services/secretsStore.js';
 import { createRedactor } from '../../../core/utils/redactSecrets.js';
 
 function resolveScriptPath({ projectRoot, script }) {
-    return join(projectRoot, 'src', 'cli', 'vlm', `${script}.js`);
+    return join(projectRoot, 'src', 'cli', 'lens', `${script}.js`);
 }
 
 function parseArgs(value) {

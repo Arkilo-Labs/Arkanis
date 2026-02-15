@@ -4,13 +4,13 @@ import { join } from 'path';
 
 const CONFIG_VERSION = 1;
 const DEFAULT_FILE_MODE = 0o600;
-const ROLE_KEYS = ['vlm', 'newser', 'researcher', 'auditor'];
+const ROLE_KEYS = ['lens', 'newser', 'researcher', 'auditor'];
 
 function defaultConfig() {
     return {
         version: CONFIG_VERSION,
         roles: {
-            vlm: null,
+            lens: null,
             newser: null,
             researcher: null,
             auditor: null,
@@ -124,4 +124,3 @@ export async function removeProviderFromRoles({ dataDir, providerId }) {
     await writeProviderConfigAtomic({ dataDir, config: { version: CONFIG_VERSION, roles } });
     return { changed: true };
 }
-

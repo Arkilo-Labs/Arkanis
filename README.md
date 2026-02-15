@@ -1,6 +1,6 @@
 # Arkanis（arkanis.dev）内部开发手册
 
-面向内部开发者的工作说明文档，用于快速上手本仓库的“VLM 交易决策实验环境”，以及后续把它演进为 Arkanis SaaS 后端底座时的落点与扩展方式。
+面向内部开发者的工作说明文档，用于快速上手本仓库的“Lens 交易决策实验环境”，以及后续把它演进为 Arkanis SaaS 后端底座时的落点与扩展方式。
 
 如果你要做 SaaS 化（多租户/登录/订阅/审计/任务系统等），先读 `docs/arkanis-saas-backend-plan.md`，本 README 只抽取关键信息并补齐“怎么跑、怎么改、怎么扩”。
 
@@ -8,7 +8,7 @@
 
 ### 现状：可跑的实验环境
 
-- **脚本驱动**：`src/cli/vlm/main.js` / `src/cli/vlm/backtest.js` 负责拉 K 线、渲图、调用 VLM、产出结果。
+- **脚本驱动**：`src/cli/lens/main.js` / `src/cli/lens/backtest.js` 负责拉 K 线、渲图、调用 Lens、产出结果。
 - **数据底座**：PostgreSQL 双库（`arkanis_core` + `arkanis_market_data`）已落地，迁移体系已落地。
 - **开发控制台**：`src/apps/server/` + `src/apps/web/` 提供“运行脚本 / 日志推送 / 配置编辑 / Provider 管理 / Telegram 推送”等能力。
 
@@ -93,10 +93,10 @@ pnpm db:setup
 ### 2.4 一句话验证：跑一次主脚本
 
 ```bash
-# 只渲图（跳过 VLM 调用）
-pnpm main -- --symbol BTCUSDT --timeframe 5m --bars 200 --skip-vlm
+# 只渲图（跳过 Lens 调用）
+pnpm main -- --symbol BTCUSDT --timeframe 5m --bars 200 --skip-lens
 
-# 完整 VLM 分析
+# 完整 Lens 分析
 pnpm main -- --symbol BTCUSDT --timeframe 5m --bars 200
 ```
 
@@ -152,10 +152,10 @@ pnpm main -- --symbol BTCUSDT --timeframe 1h --start-time "2024-12-01" --end-tim
 pnpm main -- --symbol BTCUSDT --timeframe 1h --bars 200 --enable-4x-chart
 
 # 跳过 PNG 导出（只跑逻辑/调试用）
-pnpm main -- --skip-png --skip-vlm
+pnpm main -- --skip-png --skip-lens
 ```
 
-`src/cli/vlm/main.js` 参数一览：
+`src/cli/lens/main.js` 参数一览：
 
 | 参数 | 说明 | 默认值 |
 |---|---|---|
@@ -167,7 +167,7 @@ pnpm main -- --skip-png --skip-vlm
 | `--future-bars <n>` | 未来 K 线数量（用于图表右侧留白/参考） | `bars/10`（最少 1） |
 | `--output-dir <dir>` | 输出目录 | `./outputs` |
 | `--wait <ms>` | Puppeteer 渲染等待 | `500` |
-| `--skip-vlm` | 跳过 VLM 调用 | `false` |
+| `--skip-lens` | 跳过 Lens 调用 | `false` |
 | `--skip-png` | 跳过 PNG 导出 | `false` |
 | `--enable-4x-chart` | 启用 4 倍辅助图 | `false` |
 | `--aux-timeframe <tf>` | 指定辅助周期 | 自动 / 手动 |
@@ -182,7 +182,7 @@ pnpm backtest -- --symbol BTCUSDT --timeframe 1h --start-time "2024-12-01" --end
 pnpm backtest -- --start-time "2024-12-01" --end-time "2024-12-03" --save-charts
 ```
 
-`src/cli/vlm/backtest.js` 参数一览：
+`src/cli/lens/backtest.js` 参数一览：
 
 | 参数 | 说明 | 默认值 |
 |---|---|---|
@@ -191,7 +191,7 @@ pnpm backtest -- --start-time "2024-12-01" --end-time "2024-12-03" --save-charts
 | `--symbol <symbol>` | 交易对 | `.env DEFAULT_SYMBOL` / `BTCUSDT` |
 | `--timeframe <tf>` | 周期 | `.env DEFAULT_TIMEFRAME` / `5m` |
 | `--bars <n>` | 每次分析使用的历史 K 线数量 | `.env DEFAULT_BARS` / `200` |
-| `--workers <n>` | VLM 并发 | `4` |
+| `--workers <n>` | Lens 并发 | `4` |
 | `--output-dir <dir>` | 输出根目录 | `./outputs/backtest` |
 | `--wait <ms>` | Puppeteer 渲染等待 | `500` |
 | `--save-charts` | 保存图表截图 | `false` |
@@ -206,7 +206,7 @@ server 暴露了这些能力（见 `src/apps/server/index.mjs`）：
 
 - 运行脚本：`POST /api/run-script`（支持 `main` / `backtest`）
 - 日志推送：Socket.IO 广播事件 `log` / `process-exit`
-- Prompt 列表：`GET /api/prompts`（来自 `src/resources/prompts/vlm/`）
+- Prompt 列表：`GET /api/prompts`（来自 `src/resources/prompts/lens/`）
 - 配置读取/写入：`GET /api/config` / `POST /api/config`（白名单写 `.env`）
 - Provider/密钥：`/api/ai-providers`（定义） + `/api/ai-providers/:id/key`（密钥，永不回显） + `/api/provider-config`（角色映射）
 - Telegram 推送：`POST /api/send-telegram`
@@ -217,7 +217,7 @@ server 暴露了这些能力（见 `src/apps/server/index.mjs`）：
 以 `http://localhost:3000` 为例（按需改 `PORT`）：
 
 ```bash
-# 运行 main 脚本（args 会原样透传给 src/cli/vlm/main.js）
+# 运行 main 脚本（args 会原样透传给 src/cli/lens/main.js）
 curl -X POST http://localhost:3000/api/run-script \
   -H "Content-Type: application/json" \
   -d "{\"script\":\"main\",\"args\":[\"--symbol\",\"BTCUSDT\",\"--timeframe\",\"5m\",\"--bars\",\"200\"]}"
@@ -276,7 +276,7 @@ Run Tab 的交互说明见 `docs/RUN_TAB_GUIDE.md`。最小配置：
 
 - 数据库：`DB_HOST` / `DB_PORT` / `DB_USER` / `DB_PASSWORD` / `DB_*_DATABASE`
 - 市场数据：`MARKET_EXCHANGE`、`MARKET_MARKET_TYPE`、`MARKET_EXCHANGE_FALLBACKS`（兼容旧的 `BINANCE_MARKET`）
-- Prompt：`PROMPT_NAME`（对应 `src/resources/prompts/vlm/<name>.md`）
+- Prompt：`PROMPT_NAME`（对应 `src/resources/prompts/lens/<name>.md`）
 - 图表：`CHART_*`
 - 日志：`LOG_LEVEL`
 - Telegram：`TG_BOT_TOKEN`、`TG_CHAT_ID`
@@ -284,17 +284,17 @@ Run Tab 的交互说明见 `docs/RUN_TAB_GUIDE.md`。最小配置：
 
 ### 4.2 Provider 与密钥（定义/密钥分离）
 
-VLM 的“模型/网关/Key”等不放在 `.env`，而是拆分为：
+Lens 的“模型/网关/Key”等不放在 `.env`，而是拆分为：
 
 - Provider 定义（可提交）：`ai-providers.default.json`
 - Provider 覆盖层（可写，data volume）：`<dataDir>/ai-providers.json`
 - 密钥存储（仅 data volume）：`<dataDir>/secrets.json`（可选 `SECRETS_ENC_KEY` 加密落盘）
-- 角色映射（仅 data volume）：`<dataDir>/provider-config.json`（固定 `vlm/newser/researcher/auditor`）
+- 角色映射（仅 data volume）：`<dataDir>/provider-config.json`（固定 `lens/newser/researcher/auditor`）
 
 其中 `<dataDir>` 由 `ARKANIS_DATA_DIR` 决定：默认 `/data`；本地开发常用 `./data`。
 
 - 读取位置：`src/core/services/aiProvidersStore.js`、`src/core/services/secretsStore.js`、`src/core/services/providerConfigStore.js`
-- VLM 选用 Provider：`VLMClient.fromRole('vlm')`（由 `data/provider-config.json` 绑定）
+- Lens 选用 Provider：`LensClient.fromRole('lens')`（由 `data/provider-config.json` 绑定）
 - 优先级：`ENV(apiKeyEnv) > data/secrets.json > 未配置`
 - 维护方式：建议通过 Web UI 的「模型」页面；也可手动编辑 data volume 文件（谨慎）
 
@@ -305,9 +305,9 @@ VLM 的“模型/网关/Key”等不放在 `.env`，而是拆分为：
 
 ### 4.3 Prompt（策略输出的“契约”）
 
-- 目录：`src/resources/prompts/vlm/`
-- 选择：`.env PROMPT_NAME=<name>` → 使用 `src/resources/prompts/vlm/<name>.md`
-- 约束：VLM 输出会走 schema 校验（`src/core/vlm/schema.js`），Prompt 变更要保持可解析与可校验。
+- 目录：`src/resources/prompts/lens/`
+- 选择：`.env PROMPT_NAME=<name>` → 使用 `src/resources/prompts/lens/<name>.md`
+- 约束：Lens 输出会走 schema 校验（`src/core/lens/schema.js`），Prompt 变更要保持可解析与可校验。
 
 ## 5. 数据库：双库拆分与迁移
 
@@ -341,8 +341,8 @@ pnpm db:migrate:market
                     │ Socket.IO(log/config-reload/providers-updated)
                     ▼
             ┌───────────────┐        ┌──────────────────────┐
-            │ server (Express)│ spawn │ src/cli/vlm/main/backtest │
-            │ /api/run-script │──────▶│ 渲图 + VLM + 产出结果 │
+            │ server (Express)│ spawn │ src/cli/lens/main/backtest │
+            │ /api/run-script │──────▶│ 渲图 + Lens + 产出结果 │
             └───────┬────────┘        └───────────┬──────────┘
                     │                              │
                     │                              │ query/insert
@@ -357,7 +357,7 @@ pnpm db:migrate:market
 
 - 数据：`src/core/data/klinesRepository.js`（不足时从交易所补全并落库）
 - 渲图：`src/core/chart/chartBuilder.js`（Puppeteer + `src/core/chart/template.html`）
-- VLM：`src/core/vlm/`（Provider、Prompt、schema、overlay 转换）
+- Lens：`src/core/lens/`（Provider、Prompt、schema、overlay 转换）
 - 控制台后端：`src/apps/server/index.mjs`
 
 ## 7. 如何拓展（面向后续团队的“落点清单”）
@@ -367,7 +367,7 @@ pnpm db:migrate:market
 现状脚本是“可复用的最小原型”。SaaS 化后建议拆分：
 
 - API Server：认证/账单/数据查询/任务创建
-- Worker：队列消费（回测、批量分析、数据采集、VLM 调用）
+- Worker：队列消费（回测、批量分析、数据采集、Lens 调用）
 
 对应路线与注意事项见 `docs/arkanis-saas-backend-plan.md`（任务系统、幂等、进度、可取消、重试、配额）。
 

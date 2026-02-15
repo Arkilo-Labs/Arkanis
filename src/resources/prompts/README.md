@@ -2,11 +2,11 @@
 
 本项目的提示词（prompt）统一放在 `src/resources/prompts/` 下，按领域分子目录，避免散落在仓库根目录。
 
-## VLM
+## Lens
 
-- 目录：`src/resources/prompts/vlm/`
-- 选择：`.env` 里的 `PROMPT_NAME=<name>` → 加载 `src/resources/prompts/vlm/<name>.md`
-- 入口：`src/core/vlm/promptManager.js`
+- 目录：`src/resources/prompts/lens/`
+- 选择：`.env` 里的 `PROMPT_NAME=<name>` → 加载 `src/resources/prompts/lens/<name>.md`
+- 入口：`src/core/lens/promptManager.js`
 
 ## Agents Round（Roundtable）
 

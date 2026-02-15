@@ -117,7 +117,7 @@ export function buildDecisionMessageHtml(decision, { source = 'unknown' } = {}) 
     const slText = decision?.stop_loss_price ? fmtNum(decision.stop_loss_price, 6) : '-';
     const tpText = decision?.take_profit_price ? fmtNum(decision.take_profit_price, 6) : '-';
 
-    const header = `<b>${escapeHtml(`【VLM 入场计划】${symbol} (${tf})`)}</b>`;
+    const header = `<b>${escapeHtml(`【Lens 入场计划】${symbol} (${tf})`)}</b>`;
 
     const infoLines = [];
     infoLines.push(`入场   ${enter ? '是' : '否'}`);
@@ -141,4 +141,3 @@ export function buildDecisionMessageHtml(decision, { source = 'unknown' } = {}) 
 
     return `${header}\n${mainInfo}${reason}${footer}`;
 }
-

@@ -6,7 +6,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { config as dotenvConfig } from 'dotenv';
 
-import PromptManager from '../../core/vlm/promptManager.js';
+import PromptManager from '../../core/lens/promptManager.js';
 import {
     buildBinanceUrl,
     buildDecisionMessageHtml,

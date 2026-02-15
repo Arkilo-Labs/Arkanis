@@ -192,30 +192,30 @@ test('providerConfigStore: role 校验；resolveProviderForRole 能拿到密钥'
         ],
     });
 
-    await assert.rejects(
-        () =>
-            setProviderRoles({
-                dataDir,
-                roles: { vlm: 'p_missing', newser: null, researcher: null, auditor: null },
-                knownProviderIds: ['p1'],
-            }),
-        /不存在的 provider/,
-    );
+                await assert.rejects(
+                    () =>
+                        setProviderRoles({
+                            dataDir,
+                            roles: { lens: 'p_missing', newser: null, researcher: null, auditor: null },
+                            knownProviderIds: ['p1'],
+                        }),
+                    /不存在的 provider/,
+                );
 
-    await setProviderApiKey({ dataDir, providerId: 'p1', apiKey: 'sk-role-key' });
-    await setProviderRoles({
-        dataDir,
-        roles: { vlm: 'p1', newser: null, researcher: null, auditor: null },
-        knownProviderIds: ['p1'],
-    });
+        await setProviderApiKey({ dataDir, providerId: 'p1', apiKey: 'sk-role-key' });
+        await setProviderRoles({
+            dataDir,
+            roles: { lens: 'p1', newser: null, researcher: null, auditor: null },
+            knownProviderIds: ['p1'],
+        });
 
-    const cfg = await readProviderConfig({ dataDir });
-    assert.equal(cfg.roles.vlm, 'p1');
+        const cfg = await readProviderConfig({ dataDir });
+        assert.equal(cfg.roles.lens, 'p1');
 
-    const resolved = await resolveProviderForRole({ projectRoot, dataDir, role: 'vlm' });
-    assert.equal(resolved.provider.id, 'p1');
-    assert.equal(resolved.apiKey, 'sk-role-key');
-    assert.equal(resolved.keySource, 'secrets');
+        const resolved = await resolveProviderForRole({ projectRoot, dataDir, role: 'lens' });
+        assert.equal(resolved.provider.id, 'p1');
+        assert.equal(resolved.apiKey, 'sk-role-key');
+        assert.equal(resolved.keySource, 'secrets');
 });
 
 test('redactSecrets: 精确替换 + 常见前缀兜底', () => {
@@ -224,4 +224,3 @@ test('redactSecrets: 精确替换 + 常见前缀兜底', () => {
     assert.equal(redactor('Authorization: Bearer abcdefghijklmnop'), 'Authorization: Bearer [REDACTED]');
     assert.equal(redactor('{"apiKey":"sk-ANY-1234567890"}'), '{"apiKey":"[REDACTED]"}');
 });
-

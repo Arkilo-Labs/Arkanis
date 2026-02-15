@@ -2,7 +2,7 @@
  * 交易后续模拟 (止盈/止损触发)
  */
 
-import { Direction } from '../vlm/schema.js';
+import { Direction } from '../lens/schema.js';
 
 /**
  * 退出原因

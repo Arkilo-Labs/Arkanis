@@ -152,9 +152,9 @@
                             <p class="text-muted" style="margin-bottom:0.5rem;">Aux</p>
                             <ChartView :data="chart.aux" :title="`${chart.aux.symbol} ${chart.aux.timeframe}`" :height="420" />
                         </div>
-                        <div v-if="chart.vlm" style="grid-column: 1 / -1;">
-                            <p class="text-muted" style="margin-bottom:0.5rem;">VLM Overlays</p>
-                            <ChartView :data="chart.vlm" :title="`VLM ${chart.vlm.symbol} ${chart.vlm.timeframe}`" :height="460" />
+                        <div v-if="chart.lens" style="grid-column: 1 / -1;">
+                            <p class="text-muted" style="margin-bottom:0.5rem;">Lens Overlays</p>
+                            <ChartView :data="chart.lens" :title="`Lens ${chart.lens.symbol} ${chart.lens.timeframe}`" :height="460" />
                         </div>
                     </div>
                     <p v-else class="text-muted">暂无图表数据</p>
@@ -202,7 +202,7 @@ const sessionId = ref('');
 const logs = ref([]);
 const runError = ref('');
 const decision = ref(null);
-const chart = reactive({ base: null, aux: null, vlm: null });
+const chart = reactive({ base: null, aux: null, lens: null });
 
 const selectedProvider = computed(() => state.providers.items.find((p) => p.id === state.providers.selectedId) || null);
 const canRun = computed(() => !!selectedProvider.value && !!selectedProvider.value.hasKey);
@@ -281,7 +281,7 @@ async function run() {
     decision.value = null;
     chart.base = null;
     chart.aux = null;
-    chart.vlm = null;
+    chart.lens = null;
 
     sessionId.value = newSessionId();
     isRunning.value = true;
@@ -331,7 +331,7 @@ async function loadChartData() {
     const res = await api.request(`/api/saas/chart-data/${encodeURIComponent(sessionId.value)}`);
     chart.base = res.base || null;
     chart.aux = res.aux || null;
-    chart.vlm = res.vlm || null;
+    chart.lens = res.lens || null;
     decision.value = res.decision || null;
 }
 

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * VLM 回测脚本
+ * Lens 回测脚本
  *
- * 对指定时间范围内的每根 K 线进行 VLM 分析，记录进场点、出场点、止盈止损等信息。
+ * 对指定时间范围内的每根 K 线进行 Lens 分析，记录进场点、出场点、止盈止损等信息。
  *
  * 用法:
- *   node src/cli/vlm/backtest.js --symbol BTCUSDT --timeframe 5m --start-time "2024-12-01" --end-time "2024-12-13" --workers 4
+ *   node src/cli/lens/backtest.js --symbol BTCUSDT --timeframe 5m --start-time "2024-12-01" --end-time "2024-12-13" --workers 4
  */
 
 import { Command } from 'commander';
@@ -22,7 +22,7 @@ import {
     formatMinutesAsTimeframe,
 } from '../../core/data/index.js';
 import { ChartBuilder, ChartInput } from '../../core/chart/index.js';
-import { VLMClient, ENHANCED_USER_PROMPT_TEMPLATE } from '../../core/vlm/index.js';
+import { LensClient, ENHANCED_USER_PROMPT_TEMPLATE } from '../../core/lens/index.js';
 import logger from '../../core/utils/logger.js';
 
 function normalizeArgv(argv) {
@@ -80,9 +80,9 @@ function resolveAuxTimeframe(baseTimeframe, auxTimeframe) {
 }
 
 /**
- * 带并发限制的 VLM 分析
+ * 带并发限制的 Lens 分析
  */
-async function analyzeWithVlm(sem, task, client, chartsDir, maxRetries = 3) {
+async function analyzeWithLens(sem, task, client, chartsDir, maxRetries = 3) {
     await sem.acquire();
 
     const startTime = Date.now();
@@ -93,11 +93,11 @@ async function analyzeWithVlm(sem, task, client, chartsDir, maxRetries = 3) {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
             // 写入临时文件
-            tmpPrimaryPath = join(chartsDir || tmpdir(), `vlm_bt_${task.barIndex}_primary_${Date.now()}.png`);
+            tmpPrimaryPath = join(chartsDir || tmpdir(), `lens_bt_${task.barIndex}_primary_${Date.now()}.png`);
             writeFileSync(tmpPrimaryPath, task.primaryImageBuffer);
 
             if (task.auxImageBuffer) {
-                tmpAuxPath = join(chartsDir || tmpdir(), `vlm_bt_${task.barIndex}_aux_${Date.now()}.png`);
+                tmpAuxPath = join(chartsDir || tmpdir(), `lens_bt_${task.barIndex}_aux_${Date.now()}.png`);
                 writeFileSync(tmpAuxPath, task.auxImageBuffer);
             }
 
@@ -172,7 +172,7 @@ async function analyzeWithVlm(sem, task, client, chartsDir, maxRetries = 3) {
     }
 
     const analysisTimeMs = Date.now() - startTime;
-    logger.error(`[${task.barIndex}] VLM 分析失败 (重试 ${maxRetries} 次): ${lastError?.message}`);
+    logger.error(`[${task.barIndex}] Lens 分析失败 (重试 ${maxRetries} 次): ${lastError?.message}`);
 
     return {
         barIndex: task.barIndex,
@@ -215,8 +215,8 @@ async function main() {
     const program = new Command();
 
     program
-        .name('vlm-backtest')
-        .description('VLM 回测脚本')
+        .name('arkanis-lens-backtest')
+        .description('Lens 回测脚本')
         .requiredOption('--start-time <time>', '回测开始时间')
         .option('--symbol <symbol>', '交易对', defaultConfig.symbol)
         .option('--exchange <id>', '交易所（ccxt exchangeId）', config.marketData.exchange)
@@ -229,7 +229,7 @@ async function main() {
         .option('--timeframe <tf>', '时间周期', defaultConfig.timeframe)
         .option('--bars <n>', '每次分析的历史K线数量', (v) => parseInt(v, 10), defaultConfig.bars)
         .option('--end-time <time>', '回测结束时间')
-        .option('--workers <n>', 'VLM 并发请求数', (v) => parseInt(v, 10), 4)
+        .option('--workers <n>', 'Lens 并发请求数', (v) => parseInt(v, 10), 4)
         .option('--output-dir <dir>', '输出根目录', './outputs/backtest')
         .option('--wait <ms>', '图表渲染等待时间(ms)', (v) => parseInt(v, 10), 500)
         .option('--save-charts', '保存每根K线的图表截图')
@@ -250,7 +250,7 @@ async function main() {
     const runStartedAt = new Date();
 
     logger.info('='.repeat(60));
-    logger.info('VLM 回测启动');
+    logger.info('Lens 回测启动');
     logger.info('='.repeat(60));
     logger.info(`交易对: ${opts.symbol}`);
     logger.info(
@@ -260,7 +260,7 @@ async function main() {
     logger.info(`历史 K 线数量: ${opts.bars}`);
     logger.info(`开始时间: ${opts.startTime}`);
     logger.info(`结束时间: ${opts.endTime || '最新'}`);
-    logger.info(`VLM 并发数: ${opts.workers}`);
+    logger.info(`Lens 并发数: ${opts.workers}`);
     logger.info(`4 倍辅助图: ${opts.enable4xChart ? '启用' : '关闭'}`);
     logger.info(`输出目录: ${outputDir}`);
     logger.info('='.repeat(60));
@@ -272,12 +272,12 @@ async function main() {
             exchangeFallbacks: opts.exchangeFallbacks,
         });
         const builder = new ChartBuilder();
-        const client = await VLMClient.fromRole('vlm');
+        const client = await LensClient.fromRole('lens');
         
-        logger.info(`VLM 配置:`);
+        logger.info(`Lens 配置:`);
         logger.info(`       Base URL: ${client.baseUrl}`);
         logger.info(`       Model: ${client.model}`);
-        logger.info(`       Prompt: ${config.vlm.promptName}.md`);
+        logger.info(`       Prompt: ${config.lens.promptName}.md`);
 
         const startTime = parseTime(opts.startTime);
         const endTime = opts.endTime ? parseTime(opts.endTime) : new Date();
@@ -361,7 +361,7 @@ async function main() {
             return 1;
         }
 
-        logger.info(`[步骤2] 渲染图表并准备 VLM 任务 (${backtestIndices.length} 根 K 线)...`);
+        logger.info(`[步骤2] 渲染图表并准备 Lens 任务 (${backtestIndices.length} 根 K 线)...`);
 
         // 准备任务
         const tasks = [];
@@ -491,13 +491,13 @@ async function main() {
             return 1;
         }
 
-        logger.info(`\n[步骤3] 并发发送 VLM 请求 (${tasks.length} 个任务)...`);
-        logger.info(`[信息] 正在使用 '${config.vlm.promptName}.md' Prompt`);
+        logger.info(`\n[步骤3] 并发发送 Lens 请求 (${tasks.length} 个任务)...`);
+        logger.info(`[信息] 正在使用 '${config.lens.promptName}.md' Prompt`);
         logger.info('[信息] 等待响应...\n');
 
-        // 并发调用 VLM
+        // 并发调用 Lens
         const sem = new Semaphore(opts.workers);
-        const results = await Promise.all(tasks.map((task) => analyzeWithVlm(sem, task, client, chartsDir)));
+        const results = await Promise.all(tasks.map((task) => analyzeWithLens(sem, task, client, chartsDir)));
 
         const runCompletedAt = new Date();
         const totalDuration = (runCompletedAt.getTime() - runStartedAt.getTime()) / 1000;
@@ -545,7 +545,7 @@ async function main() {
                 close: r.barData.close,
                 volume: r.barData.volume,
                 analysis_time_ms: r.analysisTimeMs,
-                vlm_decision: r.decision || null,
+                lens_decision: r.decision || null,
                 error: r.error || null,
             })),
         };

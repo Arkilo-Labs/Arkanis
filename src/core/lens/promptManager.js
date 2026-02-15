@@ -1,6 +1,6 @@
 /**
  * Prompt Manager
- * 负责加载和管理 VLM 系统提示词
+ * 负责加载和管理 Lens 系统提示词
  */
 
 import { readFileSync, existsSync, readdirSync } from 'fs';
@@ -11,8 +11,8 @@ import logger from '../utils/logger.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// prompts 目录路径（src/resources/prompts/vlm）
-const PROMPTS_DIR = join(__dirname, '..', '..', 'resources', 'prompts', 'vlm');
+// prompts 目录路径（src/resources/prompts/lens）
+const PROMPTS_DIR = join(__dirname, '..', '..', 'resources', 'prompts', 'lens');
 
 export class PromptManager {
     /**

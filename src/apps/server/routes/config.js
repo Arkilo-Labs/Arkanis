@@ -59,8 +59,8 @@ const CONFIG_SCHEMA = {
             'DB_POOL_MAX',
         ],
     },
-    vlm: {
-        label: 'VLM 配置',
+    lens: {
+        label: 'Lens 配置',
         items: ['PROMPT_NAME'],
     },
     chart: {
@@ -164,4 +164,3 @@ export function registerConfigRoutes({ app, projectRoot }) {
         }
     });
 }
-

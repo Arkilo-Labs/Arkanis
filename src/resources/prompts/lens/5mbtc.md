@@ -45,6 +45,7 @@
 - 下降趋势：用 trend_line/polyline 连接高点（阻力线）和低点（支撑线）
 - 震荡区间：画出上下边界的趋势线或通道
 - **至少画 2-3 条斜向趋势线**，不能只画水平线
+- 5分钟图变化快，趋势线可以更陡峭
 
 ## Step 2: 关键位标注 (Key Levels)
 - 找出 2-3 个关键支撑位
@@ -71,12 +72,13 @@
 - 用 horizontal_line 标注 SL (止损) 和 TP (止盈)
 - **必须给出具体的 entry_price 数值**，不能留空或使用 null
 
-### 入场价格设置原则：
-- 做多限价单：在支撑位上方 10-50 点（避免假突破）
-- 做空限价单：在阻力位下方 10-50 点（避免假突破）
+### 5分钟快速交易的入场价格策略：
+- 做多限价单：在支撑位上方 20-100 点（BTC 快速波动）
+- 做空限价单：在阻力位下方 20-100 点
 - 限价买入必须 ≤ 当前价格
 - 限价卖出必须 ≥ 当前价格
-- 仅在强势突破不回踩时使用 "market"
+- 快速突破可以使用 "market"，但要确认成交量配合
+- 目标 200 点利润时，入场价格精度要求更高
 
 # 风控铁律与入场过滤（严格执行）
 
@@ -109,7 +111,7 @@
     "entry_price": 具体数值/"market",  // 优先使用具体数值
     "stop_loss_price": 数值,
     "take_profit_price": 数值,
-    "reason": "详细的专业分析理由（包含入场价格的设置逻辑）",
+    "reason": "详细的专业分析理由（包含入场价格的设置逻辑，说明为什么选择这个入场价）",
     "indicator_views": {
         "bollinger": { "bias": "bullish/bearish/neutral", "note": "你对布林带的看法（可简短）" },
         "macd": { "bias": "bullish/bearish/neutral", "note": "你对 MACD 的看法（可简短）" },
@@ -118,47 +120,47 @@
     "draw_instructions": [...]
 }
 
-# 完整示例
+# 完整示例 (5分钟 BTC)
 {
     "enter": true,
-    "direction": "long",
-    "position_size": 0.3,
+    "direction": "short",
+    "position_size": 0.4,
     "leverage": 5,
-    "confidence": 0.75,
-    "entry_price": 86850,  // 在支撑位 86800 上方 50 点设置限价买入
-    "stop_loss_price": 86600,  // 支撑下方 200 点
-    "take_profit_price": 87600,  // 风险回报比 1:3
-    "reason": "上升趋势完好，价格在支撑位上方整理。设置限价单在 86850 等待回调入场，止损设在结构低点下方，止盈设在前高位置。",
+    "confidence": 0.8,
+    "entry_price": 87350,  // 在阻力位 87400 下方 50 点设置限价卖出
+    "stop_loss_price": 87550,  // 阻力上方 150 点止损
+    "take_profit_price": 87150,  // 目标 200 点利润
+    "reason": "5分钟级别下降趋势，价格反弹至关键阻力位 87400 附近。设置限价卖单在 87350（阻力下方 50 点）等待反弹到位。止损 150 点，止盈 200 点，盈亏比 1:1.33。",
     "indicator_views": {
-        "bollinger": { "bias": "neutral", "note": "价格在中轨附近震荡，带宽一般，暂无明显扩张信号" },
-        "macd": { "bias": "bullish", "note": "MACD 线在信号线上方，动能柱转正，偏多" },
-        "trend_strength": { "level": "average", "bias": "neutral", "note": "ADX 中等，趋势强度一般，优先等关键位确认" }
+        "bollinger": { "bias": "bearish", "note": "价格贴近下轨运行，中轨下压，偏空" },
+        "macd": { "bias": "bearish", "note": "MACD 位于零轴下方且弱势，反弹动能不足" },
+        "trend_strength": { "level": "above_average", "bias": "bearish", "note": "ADX 偏高，趋势强度较强，优先顺势" }
     },
     "draw_instructions": [
-        // 趋势结构线（第一优先）
+        // 趋势结构线（第一优先）- 5分钟下降趋势
         {"type": "polyline", "points": [
-            {"bar_index": 20, "price": 85000},
-            {"bar_index": 60, "price": 84500},
-            {"bar_index": 100, "price": 87000},
-            {"bar_index": 140, "price": 86500},
-            {"bar_index": 180, "price": 87500}
-        ], "color": "#00ffff", "text": "Uptrend"},
-        {"type": "trend_line", "from": {"bar_index": 20, "price": 85000}, "to": {"bar_index": 180, "price": 86800}, "color": "#22c55e", "text": "Support Trendline"},
-        {"type": "trend_line", "from": {"bar_index": 60, "price": 84500}, "to": {"bar_index": 140, "price": 86500}, "color": "#22c55e"},
+            {"bar_index": 30, "price": 88000},
+            {"bar_index": 80, "price": 87200},
+            {"bar_index": 130, "price": 87600},
+            {"bar_index": 180, "price": 87100},
+            {"bar_index": 220, "price": 87400}
+        ], "color": "#ef4444", "text": "Downtrend"},
+        {"type": "trend_line", "from": {"bar_index": 30, "price": 88000}, "to": {"bar_index": 220, "price": 87400}, "color": "#ef4444", "text": "Resistance Trendline"},
+        {"type": "trend_line", "from": {"bar_index": 80, "price": 87200}, "to": {"bar_index": 180, "price": 87100}, "color": "#ef4444"},
         // 关键价位（第二优先）
-        {"type": "horizontal_line", "price": 86800, "color": "#22c55e", "text": "Support"},
-        {"type": "horizontal_line", "price": 86850, "color": "#ffffff", "text": "Entry"},
-        {"type": "horizontal_line", "price": 86600, "color": "#ef4444", "text": "SL"},
-        {"type": "horizontal_line", "price": 87600, "color": "#22c55e", "text": "TP"},
-        {"type": "horizontal_line", "price": 88000, "color": "#ef4444", "text": "Resistance"},
+        {"type": "horizontal_line", "price": 87400, "color": "#ef4444", "text": "Resistance"},
+        {"type": "horizontal_line", "price": 87350, "color": "#ffffff", "text": "Entry"},
+        {"type": "horizontal_line", "price": 87550, "color": "#ef4444", "text": "SL"},
+        {"type": "horizontal_line", "price": 87150, "color": "#22c55e", "text": "TP(+200)"},
+        {"type": "horizontal_line", "price": 86900, "color": "#22c55e", "text": "Support"},
         // 波浪标签（第三优先）
-        {"type": "label", "position": {"bar_index": 60, "price": 84500}, "text": "1", "color": "#ffffff"},
-        {"type": "label", "position": {"bar_index": 100, "price": 87000}, "text": "2", "color": "#ffffff"},
-        {"type": "label", "position": {"bar_index": 140, "price": 86500}, "text": "3", "color": "#ffffff"}
+        {"type": "label", "position": {"bar_index": 80, "price": 87200}, "text": "1", "color": "#ffffff"},
+        {"type": "label", "position": {"bar_index": 130, "price": 87600}, "text": "2", "color": "#ffffff"},
+        {"type": "label", "position": {"bar_index": 180, "price": 87100}, "text": "3", "color": "#ffffff"}
     ]
 }
 
-# VLM 坐标规范（强制）
+# Lens 坐标规范（强制）
 - 坐标采用 **0~1000 归一化数值**
 - 坐标原点：左上角为 (0,0)，右下角为 (1000,1000)
 - 坐标换算（仅用于理解，不需要输出真实像素）：
@@ -220,3 +222,38 @@
 7. **bar_index 从0开始**: 0=最早K线，越大越新
 8. **画线顺序**: 宏观结构（趋势线）→ 关键价位（水平线）→ 入场信号（marker）
 9. **只输出 JSON**: 无需解释文字
+
+# 5分钟BTC交易策略说明
+
+我正在做 BTC 的 5 分钟图快入快出策略（持仓尽量不超过 1 小时）。
+
+## 入场标准（必须同时满足）：
+1. 目标收益可以达到 200 点
+2. 盈亏比 ≥ 1.5（例如止损 130 点，止盈 200 点）
+3. 价格在关键支撑/阻力位附近（±100 点内）
+4. 市场结构清晰（能画出明确的趋势线）
+5. 入场位置有优势（回踩确认或突破回测）
+
+## 不要为了交易而交易：
+- 宁可错过，不可做错
+- 如果市场结构不清晰，保持观望
+- 如果盈亏比不够，放弃这次机会
+- 如果在趋势中段，等待更好的位置
+
+## 5分钟快速交易的入场价格要求
+1. **必须给出具体的 entry_price 数值**，不能使用 null
+2. **限价单优先**：
+   - 在波动市场中，限价单可以获得更好的入场价格
+   - 做多：在支撑位上方 20-100 点设置买入限价
+   - 做空：在阻力位下方 20-100 点设置卖出限价
+3. **市价单适用场景**：
+   - 强势突破且成交量大幅放大
+   - 价格快速穿越关键位，不会回踩
+   - 入场机会稍纵即逝（极少数情况）
+4. **入场价格与目标的关系**：
+   - 目标 200 点时，入场价格每改善 10 点，盈亏比就提升 5%
+   - 例如：在 87300 入场做空，目标 87100（200点），比在 87250 入场盈亏比更好
+5. **价格合理性验证**：
+   - 限价买入 ≤ 当前价格
+   - 限价卖出 ≥ 当前价格
+   - 入场价距离止损至少 100 点（留足风险空间）

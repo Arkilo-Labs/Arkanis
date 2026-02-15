@@ -70,7 +70,7 @@ export class CoordMapper {
 
     /**
      * 归一化坐标 -> 业务坐标
-     * VLM 使用图像坐标系: yNorm=0 对应顶部(高价), yNorm=1 对应底部(低价)
+     * Lens 使用图像坐标系: yNorm=0 对应顶部(高价), yNorm=1 对应底部(低价)
      * @param {number} xNorm 归一化 X 坐标 (0~1)
      * @param {number} yNorm 归一化 Y 坐标 (0~1)
      * @returns {[Date, number]} [timestamp, price]
@@ -80,7 +80,7 @@ export class CoordMapper {
         const seconds = xNorm * this._timeRangeSeconds;
         const ts = new Date(this.startTime.getTime() + seconds * 1000);
 
-        // Y 轴：反向映射到价格 (反转 yNorm, 因为 VLM 用图像坐标系)
+        // Y 轴：反向映射到价格 (反转 yNorm, 因为 Lens 用图像坐标系)
         // yNorm=0 -> maxPrice, yNorm=1 -> minPrice
         const price = this.maxPrice - yNorm * this._priceRange;
 

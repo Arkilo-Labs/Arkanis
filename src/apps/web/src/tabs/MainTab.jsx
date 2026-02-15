@@ -24,7 +24,7 @@ export default function MainTab() {
 
     const [baseChartData, setBaseChartData] = useState(null);
     const [auxChartData, setAuxChartData] = useState(null);
-    const [vlmChartData, setVlmChartData] = useState(null);
+    const [lensChartData, setLensChartData] = useState(null);
     const [resultJson, setResultJson] = useState(null);
     const [showChartGallery, setShowChartGallery] = useState(false);
 
@@ -42,7 +42,7 @@ export default function MainTab() {
         setLogs([]);
         setBaseChartData(null);
         setAuxChartData(null);
-        setVlmChartData(null);
+        setLensChartData(null);
         setResultJson(null);
         setShowChartGallery(false);
         setPid(null);
@@ -120,7 +120,7 @@ export default function MainTab() {
                 .then((data) => {
                     setBaseChartData(data.base);
                     setAuxChartData(data.aux);
-                    setVlmChartData(data.vlm);
+                    setLensChartData(data.lens);
                     setResultJson(data.decision);
                     setShowChartGallery(true);
                     addLog('stdout', 'Chart data loaded successfully');
@@ -358,18 +358,18 @@ export default function MainTab() {
                                 </div>
                             ) : null}
 
-                            {vlmChartData ? (
+                            {lensChartData ? (
                                 <div className="space-y-2 lg:col-span-2">
                                     <div className="flex items-center gap-2 px-2">
                                         <i className="fas fa-brain text-success text-xs"></i>
                                         <span className="text-xs text-text-muted">
-                                            VLM Analysis Result
+                                            Lens Analysis Result
                                         </span>
                                     </div>
                                     <div className="rounded-xl border border-border-light/10 overflow-hidden">
                                         <ChartView
-                                            data={vlmChartData}
-                                            title={`${config.symbol} ${config.timeframe} - VLM Analysis`}
+                                            data={lensChartData}
+                                            title={`${config.symbol} ${config.timeframe} - Lens Analysis`}
                                             height={500}
                                         />
                                     </div>

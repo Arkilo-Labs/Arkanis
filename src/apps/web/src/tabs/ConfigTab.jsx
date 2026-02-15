@@ -3,7 +3,7 @@ import { authedFetch } from '../composables/useAuth.js';
 
 const groupIcons = {
     database: 'fas fa-database',
-    vlm: 'fas fa-magic',
+    lens: 'fas fa-magic',
     chart: 'fas fa-chart-bar',
     log: 'fas fa-file-alt',
     defaults: 'fas fa-sliders-h',

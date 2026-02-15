@@ -1,5 +1,5 @@
 /**
- * VLM 画图指令 -> 图表标注转换
+ * Lens 画图指令 -> 图表标注转换
  */
 
 import {
@@ -13,12 +13,12 @@ import {
 } from '../chart/models.js';
 import { DrawInstructionType } from './schema.js';
 
-function normalizeVlmCoordToUnit(value) {
+function normalizeLensCoordToUnit(value) {
     if (value == null) return null;
     const num = typeof value === 'number' ? value : Number(value);
     if (!Number.isFinite(num)) return null;
 
-    // VLM 坐标策略：0~1000 归一化
+    // Lens 坐标策略：0~1000 归一化
     const unit = num / 1000;
     return Math.max(0, Math.min(1, unit));
 }
@@ -51,8 +51,8 @@ function convertAnchorPoint(point, bars, mode) {
 
     if (mode === AnchorMode.NORMALIZED) {
         if (point.x_norm != null && point.y_norm != null) {
-            const x = normalizeVlmCoordToUnit(point.x_norm);
-            const y = normalizeVlmCoordToUnit(point.y_norm);
+            const x = normalizeLensCoordToUnit(point.x_norm);
+            const y = normalizeLensCoordToUnit(point.y_norm);
             if (x != null && y != null) {
                 return new NormalizedAnchor({ x, y });
             }
@@ -60,8 +60,8 @@ function convertAnchorPoint(point, bars, mode) {
     }
 
     if (point.x_norm != null && point.y_norm != null) {
-        const x = normalizeVlmCoordToUnit(point.x_norm);
-        const y = normalizeVlmCoordToUnit(point.y_norm);
+        const x = normalizeLensCoordToUnit(point.x_norm);
+        const y = normalizeLensCoordToUnit(point.y_norm);
         if (x != null && y != null) {
             return new NormalizedAnchor({ x, y });
         }
@@ -71,7 +71,7 @@ function convertAnchorPoint(point, bars, mode) {
 }
 
 /**
- * 将 VLM 的 DrawInstruction 转换为 OverlayObject
+ * 将 Lens 的 DrawInstruction 转换为 OverlayObject
  * @param {import('./schema.js').DrawInstruction} instr 画图指令
  * @param {import('../data/models.js').Bar[]} bars K线数据
  * @returns {OverlayObject}
@@ -84,7 +84,7 @@ export function drawInstructionToOverlay(instr, bars) {
             type: OverlayType.HORIZONTAL_LINE,
             mode,
             price: instr.price,
-            yNorm: normalizeVlmCoordToUnit(instr.yNorm),
+            yNorm: normalizeLensCoordToUnit(instr.yNorm),
             color: instr.color,
             text: instr.text,
             width: instr.width,
@@ -166,8 +166,8 @@ export function drawInstructionToOverlay(instr, bars) {
         return new OverlayObject({
             type: OverlayType.VERTICAL_SPAN,
             mode,
-            startXNorm: normalizeVlmCoordToUnit(instr.startXNorm),
-            endXNorm: normalizeVlmCoordToUnit(instr.endXNorm),
+            startXNorm: normalizeLensCoordToUnit(instr.startXNorm),
+            endXNorm: normalizeLensCoordToUnit(instr.endXNorm),
             startBarIndex: instr.startBarIndex,
             endBarIndex: instr.endBarIndex,
             color: instr.color,
