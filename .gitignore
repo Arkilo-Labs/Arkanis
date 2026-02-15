@@ -45,9 +45,8 @@ web_verify_test
 
 readme_yingxiao.md
 
-src/agents/runtime/TradeRoundtable/history
 .claude
-src/agents/runtime/TradeRoundtable/config/providers.json
+src/agents/agents-team/config/providers.json
 
 # VitePress 构建产物
 docs/.vitepress/cache/

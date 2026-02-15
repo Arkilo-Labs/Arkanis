@@ -7,6 +7,9 @@
     "scripts": {
         "main": "node src/cli/vlm/main.js",
         "backtest": "node src/cli/vlm/backtest.js",
+        "roundtable": "node src/cli/roundtable/main.js",
+        "trade-roundtable": "node src/cli/roundtable/main.js",
+        "trade-round-table": "node src/cli/roundtable/main.js",
         "db:setup": "node src/cli/db/setup.js",
         "db:migrate:core": "node src/cli/db/migrate.js core",
         "db:migrate:market": "node src/cli/db/migrate.js market",

@@ -1,6 +1,6 @@
 import { join } from 'path';
 import { withRetries, withTimeout } from './runtime.js';
-import { launchPuppeteerBrowser } from '../../../../core/utils/puppeteerLaunch.js';
+import { launchPuppeteerBrowser } from '../../../core/utils/puppeteerLaunch.js';
 
 function clamp(n, min, max) {
     return Math.max(min, Math.min(max, n));

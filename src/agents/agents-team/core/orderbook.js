@@ -1,5 +1,5 @@
-import { getExchangeClient } from '../../../../core/data/exchangeClient.js';
-import { detectAssetClass } from '../../../../core/data/marketDataClient.js';
+import { getExchangeClient } from '../../../core/data/exchangeClient.js';
+import { detectAssetClass } from '../../../core/data/marketDataClient.js';
 
 const BINANCE_DEPTH_LIMITS = {
     spot: [5, 10, 20, 50, 100, 500, 1000, 5000],
