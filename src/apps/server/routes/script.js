@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { join } from 'path';
 
 import { getChartWriteToken } from '../services/chartWriteToken.js';
+import { SOCKET_EVENTS } from '../socket/events.js';
 import { resolveDataDir } from '../../../core/utils/dataDir.js';
 import { readProviderDefinitions } from '../../../core/services/aiProvidersStore.js';
 import { readSecrets } from '../../../core/services/secretsStore.js';
@@ -72,27 +73,27 @@ export function registerScriptRoutes({ app, io, projectRoot, activeProcesses }) 
             child.stdout.on('data', (data) => {
                 const text = data.toString();
                 void getRedactor()
-                    .then((redact) => io.emit('log', { type: 'stdout', data: redact(text) }))
-                    .catch(() => io.emit('log', { type: 'stdout', data: text }));
+                    .then((redact) => io.emit(SOCKET_EVENTS.LOG, { type: 'stdout', data: redact(text) }))
+                    .catch(() => io.emit(SOCKET_EVENTS.LOG, { type: 'stdout', data: text }));
             });
 
             child.stderr.on('data', (data) => {
                 const text = data.toString();
                 void getRedactor()
-                    .then((redact) => io.emit('log', { type: 'stderr', data: redact(text) }))
-                    .catch(() => io.emit('log', { type: 'stderr', data: text }));
+                    .then((redact) => io.emit(SOCKET_EVENTS.LOG, { type: 'stderr', data: redact(text) }))
+                    .catch(() => io.emit(SOCKET_EVENTS.LOG, { type: 'stderr', data: text }));
             });
 
             child.on('close', (code) => {
-                io.emit('process-exit', { code, pid });
+                io.emit(SOCKET_EVENTS.PROCESS_EXIT, { code, pid });
                 if (pid) activeProcesses.delete(pid);
             });
 
             child.on('error', (err) => {
                 const msg = `Failed to start process: ${err.message}`;
                 void getRedactor()
-                    .then((redact) => io.emit('log', { type: 'error', data: redact(msg) }))
-                    .catch(() => io.emit('log', { type: 'error', data: msg }));
+                    .then((redact) => io.emit(SOCKET_EVENTS.LOG, { type: 'error', data: redact(msg) }))
+                    .catch(() => io.emit(SOCKET_EVENTS.LOG, { type: 'error', data: msg }));
             });
 
             return res.json({ pid });

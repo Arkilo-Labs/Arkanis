@@ -2,6 +2,7 @@ import { resolveDataDir } from '../../../core/utils/dataDir.js';
 import { readProviderDefinitions } from '../../../core/services/aiProvidersStore.js';
 import { listProvidersWithStatus } from '../../../core/services/providerResolver.js';
 import { deleteProviderApiKey, setProviderApiKey } from '../../../core/services/secretsStore.js';
+import { SOCKET_EVENTS } from '../socket/events.js';
 
 function getEnvApiKey(envName) {
     const key = String(process.env[envName] || '').trim();
@@ -51,7 +52,7 @@ export function registerProviderSecretRoutes({ app, io, projectRoot }) {
                 apiKey,
             });
 
-            io.emit('providers-updated');
+            io.emit(SOCKET_EVENTS.PROVIDERS_UPDATED);
             return res.json({ success: true });
         } catch (error) {
             return res.status(400).json({ error: error?.message || String(error) });
@@ -66,11 +67,10 @@ export function registerProviderSecretRoutes({ app, io, projectRoot }) {
                 encKey: process.env.SECRETS_ENC_KEY || '',
                 providerId: id,
             });
-            io.emit('providers-updated');
+            io.emit(SOCKET_EVENTS.PROVIDERS_UPDATED);
             return res.json({ success: true, removed: result.removed });
         } catch (error) {
             return res.status(400).json({ error: error?.message || String(error) });
         }
     });
 }
-

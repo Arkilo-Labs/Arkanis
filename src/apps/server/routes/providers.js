@@ -7,6 +7,7 @@ import {
 import { listProvidersWithStatus } from '../../../core/services/providerResolver.js';
 import { deleteProviderApiKey } from '../../../core/services/secretsStore.js';
 import { removeProviderFromRoles } from '../../../core/services/providerConfigStore.js';
+import { SOCKET_EVENTS } from '../socket/events.js';
 
 export function registerProviderRoutes({ app, io, projectRoot }) {
     const dataDir = resolveDataDir({ projectRoot });
@@ -31,7 +32,7 @@ export function registerProviderRoutes({ app, io, projectRoot }) {
                 dataDir,
                 provider: req.body || {},
             });
-            io.emit('providers-updated');
+            io.emit(SOCKET_EVENTS.PROVIDERS_UPDATED);
             return res.json(provider);
         } catch (error) {
             return res.status(400).json({ error: error?.message || String(error) });
@@ -47,7 +48,7 @@ export function registerProviderRoutes({ app, io, projectRoot }) {
                 id,
                 updates: req.body || {},
             });
-            io.emit('providers-updated');
+            io.emit(SOCKET_EVENTS.PROVIDERS_UPDATED);
             return res.json(provider);
         } catch (error) {
             const msg = error?.message || String(error);
@@ -66,7 +67,7 @@ export function registerProviderRoutes({ app, io, projectRoot }) {
             );
             await removeProviderFromRoles({ dataDir, providerId: id }).catch(() => null);
 
-            io.emit('providers-updated');
+            io.emit(SOCKET_EVENTS.PROVIDERS_UPDATED);
             return res.json({ success: true });
         } catch (error) {
             const msg = error?.message || String(error);

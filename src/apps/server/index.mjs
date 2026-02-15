@@ -29,6 +29,8 @@ import { registerTelegramRoutes } from './routes/telegram.js';
 import { registerRoundtableRoutes } from './routes/roundtable.js';
 import { initAuthService } from './services/authService.js';
 import { resolveDataDir } from '../../core/utils/dataDir.js';
+import { SOCKET_EVENTS } from './socket/events.js';
+import { registerSocketHandlers } from './socket/registerSocketHandlers.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -61,25 +63,7 @@ registerStaticMiddleware({ app, projectRoot: PROJECT_ROOT });
 const activeProcesses = new Map();
 const sessionChartData = new Map();
 
-io.on('connection', (socket) => {
-    console.log('Client connected:', socket.id);
-
-    socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
-    });
-
-    socket.on('kill-process', (pid) => {
-        if (!activeProcesses.has(pid)) return;
-        const child = activeProcesses.get(pid);
-        try {
-            child.kill();
-        } catch {
-            // 忽略
-        }
-        activeProcesses.delete(pid);
-        socket.emit('process-killed', pid);
-    });
-});
+registerSocketHandlers({ io, activeProcesses });
 
 registerScriptRoutes({ app, io, projectRoot: PROJECT_ROOT, activeProcesses });
 registerRoundtableRoutes({ app, io, projectRoot: PROJECT_ROOT, activeProcesses });
@@ -118,7 +102,7 @@ function setupConfigWatcher({ io, projectRoot }) {
     watcher.on('change', (path) => {
         const filename = String(path).split(/[/\\]/).pop();
         console.log(`[Config Hot Reload] 检测到配置文件变更: ${filename}`);
-        io.emit('config-reload', { file: filename, timestamp: Date.now() });
+        io.emit(SOCKET_EVENTS.CONFIG_RELOAD, { file: filename, timestamp: Date.now() });
     });
 
     watcher.on('error', (error) => {

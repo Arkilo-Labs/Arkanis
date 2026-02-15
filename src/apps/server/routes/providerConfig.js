@@ -1,6 +1,7 @@
 import { resolveDataDir } from '../../../core/utils/dataDir.js';
 import { readProviderDefinitions } from '../../../core/services/aiProvidersStore.js';
 import { readProviderConfig, setProviderRoles } from '../../../core/services/providerConfigStore.js';
+import { SOCKET_EVENTS } from '../socket/events.js';
 
 export function registerProviderConfigRoutes({ app, io, projectRoot }) {
     const dataDir = resolveDataDir({ projectRoot });
@@ -25,11 +26,10 @@ export function registerProviderConfigRoutes({ app, io, projectRoot }) {
             const knownIds = defs.providers.map((p) => p.id);
             const config = await setProviderRoles({ dataDir, roles, knownProviderIds: knownIds });
 
-            io.emit('providers-updated');
+            io.emit(SOCKET_EVENTS.PROVIDERS_UPDATED);
             return res.json(config);
         } catch (error) {
             return res.status(400).json({ error: error?.message || String(error) });
         }
     });
 }
-

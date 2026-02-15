@@ -7,6 +7,7 @@ import { resolveDataDir } from '../../../core/utils/dataDir.js';
 import { readProviderDefinitions } from '../../../core/services/aiProvidersStore.js';
 import { readSecrets } from '../../../core/services/secretsStore.js';
 import { createRedactor } from '../../../core/utils/redactSecrets.js';
+import { ROUND_EVENT_TO_SOCKET_EVENT, SOCKET_EVENTS } from '../socket/events.js';
 
 const ROUND_EVENT_PREFIX = '__AGENTS_ROUND_EVENT__';
 
@@ -295,7 +296,7 @@ export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses
             const pid = child.pid;
             if (pid) activeProcesses.set(pid, child);
 
-            const allowedEventTypes = new Set(['agent-speak', 'tool-call', 'belief-update', 'decision']);
+            const allowedEventTypes = new Set(Object.keys(ROUND_EVENT_TO_SOCKET_EVENT));
 
             const makeOnLine = (streamType) => async (line) => {
                 if (!line) return;
@@ -310,7 +311,10 @@ export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses
                         parsed = null;
                     }
 
-                    if (parsed && allowedEventTypes.has(parsed.type)) {
+                    const eventType = parsed?.type ? String(parsed.type).trim() : '';
+                    if (parsed && eventType && allowedEventTypes.has(eventType)) {
+                        const eventName = ROUND_EVENT_TO_SOCKET_EVENT[eventType];
+                        if (!eventName) return;
                         try {
                             const redact = await getRedactor();
                             const payload = {
@@ -319,11 +323,11 @@ export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses
                                 timestamp: parsed.timestamp || Date.now(),
                                 ...(parsed.payload || {}),
                             };
-                            io.emit(parsed.type, redactDeep(payload, redact));
+                            io.emit(eventName, redactDeep(payload, redact));
                             return;
                         } catch {
                             // redactor 异常时仍然推送
-                            io.emit(parsed.type, {
+                            io.emit(eventName, {
                                 sessionId: parsed.sessionId || sessionId,
                                 pid: parsed.pid || pid || null,
                                 timestamp: parsed.timestamp || Date.now(),
@@ -336,7 +340,7 @@ export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses
 
                 try {
                     const redact = await getRedactor();
-                    io.emit('log', {
+                    io.emit(SOCKET_EVENTS.LOG, {
                         type: streamType,
                         data: redact(`${line}\n`),
                         pid: pid || null,
@@ -344,7 +348,7 @@ export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses
                         source: 'roundtable',
                     });
                 } catch {
-                    io.emit('log', {
+                    io.emit(SOCKET_EVENTS.LOG, {
                         type: streamType,
                         data: `${line}\n`,
                         pid: pid || null,
@@ -363,7 +367,7 @@ export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses
             child.on('close', (code) => {
                 outBuffer.flush();
                 errBuffer.flush();
-                io.emit('process-exit', { code, pid, sessionId, source: 'roundtable' });
+                io.emit(SOCKET_EVENTS.PROCESS_EXIT, { code, pid, sessionId, source: 'roundtable' });
                 if (pid) activeProcesses.delete(pid);
             });
 
@@ -371,7 +375,7 @@ export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses
                 const msg = `Failed to start process: ${err.message}`;
                 try {
                     const redact = await getRedactor();
-                    io.emit('log', {
+                    io.emit(SOCKET_EVENTS.LOG, {
                         type: 'error',
                         data: redact(`${msg}\n`),
                         pid: pid || null,
@@ -379,7 +383,7 @@ export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses
                         source: 'roundtable',
                     });
                 } catch {
-                    io.emit('log', {
+                    io.emit(SOCKET_EVENTS.LOG, {
                         type: 'error',
                         data: `${msg}\n`,
                         pid: pid || null,
