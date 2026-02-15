@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import LogTerminal from '../components/LogTerminal.jsx';
+import AgentCard from '../components/roundtable/AgentCard.jsx';
+import TranscriptPanel from '../components/roundtable/TranscriptPanel.jsx';
 import { authedFetch } from '../composables/useAuth.js';
 import { useRoundtable } from '../composables/useRoundtable.js';
 import { useSocket } from '../composables/useSocket.js';
 
 function newSessionId() {
     return `rt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function normalizeTimestamp(value) {
+    const timestamp = Number(value);
+    if (Number.isFinite(timestamp) && timestamp > 0) return timestamp;
+    return Date.now();
 }
 
 export default function RoundtableTab() {
@@ -56,6 +64,68 @@ export default function RoundtableTab() {
         if (value && typeof value === 'object') return JSON.stringify(value, null, 2);
         return String(value ?? '');
     }, [lastDecision]);
+
+    const transcriptEntries = useMemo(() => {
+        const source = Array.isArray(roundtable.agentSpeaks)
+            ? roundtable.agentSpeaks
+            : [];
+
+        return source
+            .map((item, index) => ({
+                ...item,
+                _index: index,
+                timestamp: normalizeTimestamp(item?.timestamp),
+            }))
+            .sort((left, right) => {
+                if (left.timestamp !== right.timestamp) {
+                    return left.timestamp - right.timestamp;
+                }
+                return left._index - right._index;
+            });
+    }, [roundtable.agentSpeaks]);
+
+    const agentCards = useMemo(() => {
+        const byName = new Map();
+
+        for (const entry of transcriptEntries) {
+            const name = String(entry?.name || '').trim();
+            if (!name) continue;
+
+            const current = byName.get(name);
+            const payload = {
+                name,
+                role: String(entry?.role || '').trim(),
+                provider: String(entry?.provider || '').trim(),
+                speakCount: (current?.speakCount || 0) + 1,
+                lastTurn: entry?.turn ?? null,
+                lastPhase: String(entry?.phase || '').trim(),
+                lastTimestamp: entry.timestamp,
+                firstTimestamp: current?.firstTimestamp ?? entry.timestamp,
+            };
+
+            if (!payload.role && current?.role) payload.role = current.role;
+            if (!payload.provider && current?.provider) payload.provider = current.provider;
+            byName.set(name, payload);
+        }
+
+        const latest = transcriptEntries.length
+            ? transcriptEntries[transcriptEntries.length - 1]
+            : null;
+        const latestName = String(latest?.name || '').trim();
+
+        return Array.from(byName.values())
+            .sort((left, right) => left.firstTimestamp - right.firstTimestamp)
+            .map((item) => {
+                let status = 'waiting';
+                if (!isRunning && item.speakCount > 0) {
+                    status = 'done';
+                } else if (isRunning && latestName && latestName === item.name) {
+                    status = 'speaking';
+                }
+
+                return { ...item, status };
+            });
+    }, [isRunning, transcriptEntries]);
 
     const startRoundtable = useCallback(async () => {
         if (isRunning) {
@@ -417,72 +487,99 @@ export default function RoundtableTab() {
                     </div>
                 </div>
 
-                <div className="space-y-6">
-                    <div className="card card-hover p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-sm font-semibold">终端日志</h2>
-                            <span className="text-xs text-text-muted">Logs</span>
-                        </div>
-                        <LogTerminal
-                            logs={roundtable.logs}
-                            className="h-[360px]"
-                        />
+                <div className="card card-hover p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-sm font-semibold">Agent 状态</h2>
+                        <span className="text-xs text-text-muted">Roster</span>
                     </div>
 
-                    <div className="card card-hover p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-sm font-semibold">事件概览</h2>
-                            <span className="text-xs text-text-muted">Events</span>
+                    {agentCards.length ? (
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                            {agentCards.map((agent) => (
+                                <AgentCard
+                                    key={agent.name}
+                                    name={agent.name}
+                                    role={agent.role}
+                                    provider={agent.provider}
+                                    status={agent.status}
+                                    speakCount={agent.speakCount}
+                                    lastTurn={agent.lastTurn}
+                                    lastPhase={agent.lastPhase}
+                                    lastTimestamp={agent.lastTimestamp}
+                                />
+                            ))}
                         </div>
-
-                        <div className="flex flex-wrap gap-2 mb-4">
-                            <span className="badge badge-muted">
-                                <i className="fas fa-user"></i>
-                                Agent 发言 {roundtable.agentSpeaks.length}
-                            </span>
-                            <span className="badge badge-muted">
-                                <i className="fas fa-wrench"></i>
-                                工具调用 {roundtable.toolCalls.length}
-                            </span>
-                            <span className="badge badge-muted">
-                                <i className="fas fa-chart-line"></i>
-                                信念更新 {roundtable.beliefUpdates.length}
-                            </span>
-                            <span className="badge badge-muted">
-                                <i className="fas fa-gavel"></i>
-                                决策 {roundtable.decisions.length}
-                            </span>
+                    ) : (
+                        <div className="text-sm text-text-muted italic rounded-xl border border-dashed border-border-light/10 px-4 py-6 text-center">
+                            会议开始后会在这里显示 Agent 身份卡片
                         </div>
+                    )}
+                </div>
+            </div>
 
-                        {roundtable.processExit ? (
-                            <div className="text-xs text-text-muted mb-4">
-                                退出时间:{' '}
-                                <span className="font-mono">
-                                    {new Date(
-                                        roundtable.processExit.timestamp,
-                                    ).toLocaleString('zh-CN')}
-                                </span>
-                            </div>
-                        ) : null}
+            <TranscriptPanel entries={transcriptEntries} isRunning={isRunning} />
 
-                        {lastDecision ? (
-                            <div className="space-y-3">
-                                <div className="text-xs tracking-wide text-text-muted">
-                                    最新决策 JSON
-                                </div>
-                                <pre className="terminal p-4 overflow-auto scrollbar max-h-[320px] whitespace-pre-wrap break-all">
-                                    {decisionPreview || '(empty)'}
-                                </pre>
-                            </div>
-                        ) : (
-                            <div className="text-xs text-text-muted italic">
-                                暂无决策事件
-                            </div>
-                        )}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="card card-hover p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-sm font-semibold">终端日志</h2>
+                        <span className="text-xs text-text-muted">Logs</span>
                     </div>
+                    <LogTerminal logs={roundtable.logs} className="h-[360px]" />
+                </div>
+
+                <div className="card card-hover p-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-sm font-semibold">事件概览</h2>
+                        <span className="text-xs text-text-muted">Events</span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mb-4">
+                        <span className="badge badge-muted">
+                            <i className="fas fa-user"></i>
+                            Agent 发言 {roundtable.agentSpeaks.length}
+                        </span>
+                        <span className="badge badge-muted">
+                            <i className="fas fa-wrench"></i>
+                            工具调用 {roundtable.toolCalls.length}
+                        </span>
+                        <span className="badge badge-muted">
+                            <i className="fas fa-chart-line"></i>
+                            信念更新 {roundtable.beliefUpdates.length}
+                        </span>
+                        <span className="badge badge-muted">
+                            <i className="fas fa-gavel"></i>
+                            决策 {roundtable.decisions.length}
+                        </span>
+                    </div>
+
+                    {roundtable.processExit ? (
+                        <div className="text-xs text-text-muted mb-4">
+                            退出时间:{' '}
+                            <span className="font-mono">
+                                {new Date(
+                                    roundtable.processExit.timestamp,
+                                ).toLocaleString('zh-CN')}
+                            </span>
+                        </div>
+                    ) : null}
+
+                    {lastDecision ? (
+                        <div className="space-y-3">
+                            <div className="text-xs tracking-wide text-text-muted">
+                                最新决策 JSON
+                            </div>
+                            <pre className="terminal p-4 overflow-auto scrollbar max-h-[320px] whitespace-pre-wrap break-all">
+                                {decisionPreview || '(empty)'}
+                            </pre>
+                        </div>
+                    ) : (
+                        <div className="text-xs text-text-muted italic">
+                            暂无决策事件
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
     );
 }
-

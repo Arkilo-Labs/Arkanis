@@ -177,6 +177,102 @@
     @apply font-semibold text-error;
   }
 
+  .rt-transcript-scroll {
+    @apply min-h-[280px] max-h-[640px] overflow-y-auto pr-1;
+  }
+
+  .rt-transcript-item {
+    @apply rounded-xl border border-border-light/10 bg-black/20 p-4;
+  }
+
+  .rt-transcript-item + .rt-transcript-item {
+    margin-top: 0.9rem;
+  }
+
+  .rt-markdown {
+    @apply text-sm leading-7 text-text;
+  }
+
+  .rt-markdown p + p {
+    margin-top: 0.85rem;
+  }
+
+  .rt-markdown h1,
+  .rt-markdown h2,
+  .rt-markdown h3,
+  .rt-markdown h4 {
+    @apply font-semibold text-text;
+    margin-top: 1rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .rt-markdown h1 {
+    font-size: 1.08rem;
+  }
+
+  .rt-markdown h2 {
+    font-size: 1rem;
+  }
+
+  .rt-markdown h3,
+  .rt-markdown h4 {
+    font-size: 0.92rem;
+  }
+
+  .rt-markdown ul,
+  .rt-markdown ol {
+    margin: 0.7rem 0 0.7rem 1.25rem;
+  }
+
+  .rt-markdown ul {
+    list-style: disc;
+  }
+
+  .rt-markdown ol {
+    list-style: decimal;
+  }
+
+  .rt-markdown li + li {
+    margin-top: 0.25rem;
+  }
+
+  .rt-markdown code {
+    @apply rounded-md bg-white/10 px-1.5 py-0.5 font-mono text-xs;
+  }
+
+  .rt-markdown pre {
+    @apply mt-3 rounded-xl border border-border-light/10 bg-black/45 p-4 text-xs;
+    overflow-x: auto;
+  }
+
+  .rt-markdown pre code {
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+    font-size: 0.74rem;
+    line-height: 1.45;
+    color: rgb(var(--color-text-muted));
+  }
+
+  .rt-markdown a {
+    color: rgb(var(--color-accent-light));
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .rt-markdown a:hover {
+    color: rgb(var(--color-accent));
+  }
+
+  .rt-markdown em {
+    font-style: italic;
+    color: rgb(var(--color-text-muted));
+  }
+
+  .rt-markdown strong {
+    font-weight: 600;
+  }
+
   .scrollbar::-webkit-scrollbar {
     width: 8px;
     height: 8px;

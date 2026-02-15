@@ -35,6 +35,25 @@ export class Roundtable {
         }
     }
 
+    _getAgentProviderId(agent) {
+        const providerId = agent?.provider?.providerId;
+        if (typeof providerId !== 'string') return '';
+        return providerId.trim();
+    }
+
+    _buildAgentSpeakEvent({ phase, turn, agent, text, audited, filtered }) {
+        return {
+            phase,
+            turn,
+            name: agent.name,
+            role: agent.role,
+            provider: this._getAgentProviderId(agent),
+            text,
+            audited: Boolean(audited),
+            filtered: Boolean(filtered),
+        };
+    }
+
     _validateRR(leaderJson) {
         const minRR = this.settings?.min_rr ?? 1.5;
         return validateRR(leaderJson, { minRR });
@@ -594,15 +613,17 @@ export class Roundtable {
                 audited: !!auditResult,
                 filtered: isFiltered,
             });
-            this._emitEvent('agent-speak', {
-                phase: 'opening',
-                turn,
-                name: agent.name,
-                role: agent.role,
-                text: filteredText,
-                audited: !!auditResult,
-                filtered: isFiltered,
-            });
+            this._emitEvent(
+                'agent-speak',
+                this._buildAgentSpeakEvent({
+                    phase: 'opening',
+                    turn,
+                    agent,
+                    text: filteredText,
+                    audited: auditResult,
+                    filtered: isFiltered,
+                }),
+            );
             if (!isFiltered) {
                 contextAdditions += `\n\n【${agent.name}】\n${filteredText}\n`;
                 this._extractStructuredInfo(filteredText, agent.name, { turn });
@@ -943,15 +964,17 @@ export class Roundtable {
                     audited: !!auditResult,
                     filtered: isFiltered,
                 });
-                this._emitEvent('agent-speak', {
-                    phase: 'opening',
-                    turn,
-                    name: agent.name,
-                    role: agent.role,
-                    text: filteredText,
-                    audited: !!auditResult,
-                    filtered: isFiltered,
-                });
+                this._emitEvent(
+                    'agent-speak',
+                    this._buildAgentSpeakEvent({
+                        phase: 'opening',
+                        turn,
+                        agent,
+                        text: filteredText,
+                        audited: auditResult,
+                        filtered: isFiltered,
+                    }),
+                );
                 if (!isFiltered) {
                     context += `\n\n【${agent.name}】\n${filteredText}\n`;
                     this._extractStructuredInfo(filteredText, agent.name, { turn });
@@ -1000,15 +1023,17 @@ export class Roundtable {
                 audited: !!chairAuditResult,
                 filtered: chairIsFiltered,
             });
-            this._emitEvent('agent-speak', {
-                phase: 'chair',
-                turn,
-                name: chairAgent.name,
-                role: chairAgent.role,
-                text: chairFilteredText,
-                audited: !!chairAuditResult,
-                filtered: chairIsFiltered,
-            });
+            this._emitEvent(
+                'agent-speak',
+                this._buildAgentSpeakEvent({
+                    phase: 'chair',
+                    turn,
+                    agent: chairAgent,
+                    text: chairFilteredText,
+                    audited: chairAuditResult,
+                    filtered: chairIsFiltered,
+                }),
+            );
             if (!chairIsFiltered) {
                 context += `\n\n【${chairAgent.name}】\n${chairFilteredText}\n`;
                 this._extractStructuredInfo(chairFilteredText, chairAgent.name, { turn });
@@ -1100,15 +1125,17 @@ export class Roundtable {
                 audited: !!nextAuditResult,
                 filtered: nextIsFiltered,
             });
-            this._emitEvent('agent-speak', {
-                phase: 'discussion',
-                turn,
-                name: nextAgent.name,
-                role: nextAgent.role,
-                text: nextFilteredText,
-                audited: !!nextAuditResult,
-                filtered: nextIsFiltered,
-            });
+            this._emitEvent(
+                'agent-speak',
+                this._buildAgentSpeakEvent({
+                    phase: 'discussion',
+                    turn,
+                    agent: nextAgent,
+                    text: nextFilteredText,
+                    audited: nextAuditResult,
+                    filtered: nextIsFiltered,
+                }),
+            );
             if (!nextIsFiltered) {
                 context += `\n\n【${nextAgent.name}】\n${nextFilteredText}\n`;
                 this._extractStructuredInfo(nextFilteredText, nextAgent.name, { turn });
@@ -1152,15 +1179,17 @@ export class Roundtable {
                 audited: !!finalAuditResult,
                 filtered: finalIsFiltered,
             });
-            this._emitEvent('agent-speak', {
-                phase: 'finalize',
-                turn: turn + 1,
-                name: chairAgent.name,
-                role: chairAgent.role,
-                text: finalFilteredText,
-                audited: !!finalAuditResult,
-                filtered: finalIsFiltered,
-            });
+            this._emitEvent(
+                'agent-speak',
+                this._buildAgentSpeakEvent({
+                    phase: 'finalize',
+                    turn: turn + 1,
+                    agent: chairAgent,
+                    text: finalFilteredText,
+                    audited: finalAuditResult,
+                    filtered: finalIsFiltered,
+                }),
+            );
             if (!finalIsFiltered) {
                 context += `\n\n【${chairAgent.name}】\n${finalFilteredText}\n`;
             }
@@ -1196,15 +1225,17 @@ export class Roundtable {
                 callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
             });
             transcript.push({ name: summaryAgent.name, role: summaryAgent.role, text });
-            this._emitEvent('agent-speak', {
-                phase: 'summary',
-                turn: Math.min(turn + 1, maxTurns),
-                name: summaryAgent.name,
-                role: summaryAgent.role,
-                text,
-                audited: false,
-                filtered: false,
-            });
+            this._emitEvent(
+                'agent-speak',
+                this._buildAgentSpeakEvent({
+                    phase: 'summary',
+                    turn: Math.min(turn + 1, maxTurns),
+                    agent: summaryAgent,
+                    text,
+                    audited: false,
+                    filtered: false,
+                }),
+            );
             context += `\n\n【${summaryAgent.name}】\n${text}\n`;
         }
 

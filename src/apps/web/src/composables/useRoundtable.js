@@ -15,6 +15,12 @@ function appendWithLimit(prev, item, limit) {
     return next.slice(next.length - limit);
 }
 
+function normalizeTimestamp(value) {
+    const timestamp = Number(value);
+    if (Number.isFinite(timestamp) && timestamp > 0) return timestamp;
+    return Date.now();
+}
+
 export function useRoundtable({ sessionId }) {
     const { socket } = useSocket();
     const normalizedSessionId = useMemo(() => normalizeSessionId(sessionId), [sessionId]);
@@ -58,7 +64,7 @@ export function useRoundtable({ sessionId }) {
             const entry = {
                 type: String(msg?.type || 'stdout'),
                 data: typeof msg?.data === 'string' ? msg.data : String(msg?.data ?? ''),
-                timestamp: Date.now(),
+                timestamp: normalizeTimestamp(msg?.timestamp),
                 pid: msg?.pid ?? null,
                 sessionId: sessionRef.current,
             };
@@ -74,7 +80,7 @@ export function useRoundtable({ sessionId }) {
                 code: Number.isFinite(Number(msg?.code)) ? Number(msg.code) : null,
                 pid: msg?.pid ?? null,
                 sessionId: sessionRef.current,
-                timestamp: Date.now(),
+                timestamp: normalizeTimestamp(msg?.timestamp),
             };
 
             setProcessExit(exitInfo);
@@ -82,25 +88,25 @@ export function useRoundtable({ sessionId }) {
 
         function onAgentSpeak(msg) {
             if (!matchSession(msg)) return;
-            const entry = { ...(msg || {}), timestamp: msg?.timestamp ?? Date.now() };
+            const entry = { ...(msg || {}), timestamp: normalizeTimestamp(msg?.timestamp) };
             setAgentSpeaks((prev) => appendWithLimit(prev, entry, EVENT_LIMIT));
         }
 
         function onToolCall(msg) {
             if (!matchSession(msg)) return;
-            const entry = { ...(msg || {}), timestamp: msg?.timestamp ?? Date.now() };
+            const entry = { ...(msg || {}), timestamp: normalizeTimestamp(msg?.timestamp) };
             setToolCalls((prev) => appendWithLimit(prev, entry, EVENT_LIMIT));
         }
 
         function onBeliefUpdate(msg) {
             if (!matchSession(msg)) return;
-            const entry = { ...(msg || {}), timestamp: msg?.timestamp ?? Date.now() };
+            const entry = { ...(msg || {}), timestamp: normalizeTimestamp(msg?.timestamp) };
             setBeliefUpdates((prev) => appendWithLimit(prev, entry, EVENT_LIMIT));
         }
 
         function onDecision(msg) {
             if (!matchSession(msg)) return;
-            const entry = { ...(msg || {}), timestamp: msg?.timestamp ?? Date.now() };
+            const entry = { ...(msg || {}), timestamp: normalizeTimestamp(msg?.timestamp) };
             setDecisions((prev) => appendWithLimit(prev, entry, EVENT_LIMIT));
         }
 
@@ -131,4 +137,3 @@ export function useRoundtable({ sessionId }) {
         clear,
     };
 }
-
