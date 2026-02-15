@@ -14,7 +14,7 @@
 1) 配置 Provider/密钥 与 Agent：
 - Provider 定义：`ai-providers.default.json`（默认）或 `data/ai-providers.json`（覆盖层）
 - 密钥：`data/secrets.json`（可选 `SECRETS_ENC_KEY` 加密落盘）
-- Agent 编排：`src/agents/agents-team/config/agents.json`
+- Agent 编排：`src/agents/agents-round/config/agents.json`
 
 2) 准备密钥（任选其一）：
 - Web 控制台「模型」页配置密钥（写入 `data/secrets.json`）
@@ -24,7 +24,7 @@
 $env:OPENAI_API_KEY="..."
 ```
 
-新闻收集默认走「SearXNG + Firecrawl」（本地 HTTP 服务），地址在 `src/agents/agents-team/config/agents.json` 的 `news_pipeline_settings` 中可改：
+新闻收集默认走「SearXNG + Firecrawl」（本地 HTTP 服务），地址在 `src/agents/agents-round/config/agents.json` 的 `news_pipeline_settings` 中可改：
 - SearXNG：默认 `http://localhost:8080`
 - Firecrawl：默认 `http://localhost:3002`
 
@@ -66,9 +66,9 @@ pnpm roundtable -- --symbol BTCUSDT --bars 250 --data-source exchange
 - 工具调用是两段式：先输出工具请求 JSON（`action=call_tools`），系统执行后会把结果注入为 `# 外部工具数据`，下一次再输出最终内容。
 - 非工具请求时避免输出 JSON 片段（尤其包含 `action/calls` 的对象），否则可能被误判为工具请求而进入工具循环。
 - 需要“严格 JSON 输出”的环节必须只输出一个 JSON 对象，不要代码块/Markdown：
-  - 圆桌主席：`src/resources/prompts/agents-team/deepseek_leader.md`
-  - 质量审计：`src/resources/prompts/agents-team/auditor.md`
-  - 新闻管线前两步（queries / selected_urls）：`src/resources/prompts/agents-team/news_collector.md`
+  - 圆桌主席：`src/resources/prompts/agents-round/leader.md`
+  - 质量审计：`src/resources/prompts/agents-round/auditor.md`
+  - 新闻管线前两步（queries / selected_urls）：`src/resources/prompts/agents-round/news_collector.md`
 
 ## 常见问题
 

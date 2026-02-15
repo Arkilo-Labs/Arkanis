@@ -314,15 +314,15 @@ PENDING → IN_PROGRESS → COMPLETED
 
 | Agent | 正常模式 | 周末模式 |
 |-------|----------|----------|
-| Grok_News | ETF/机构新闻 | 社交媒体情绪 + 链上异动 |
-| Claude_Risk | 标准风控 | 提高流动性风险权重 |
-| GPT_Technical | 标准技术分析 | 关注挂单薄深度/假突破概率 |
-| DeepSeek_Leader | 标准决策 | 倾向 WAIT，提高 RR 要求至 2.0 |
-| Qwen_Vision | 标准读图 | 重点关注成交量萎缩程度 |
+| news | ETF/机构新闻 | 社交媒体情绪 + 链上异动 |
+| risk | 标准风控 | 提高流动性风险权重 |
+| technology | 标准技术分析 | 关注挂单薄深度/假突破概率 |
+| leader | 标准决策 | 倾向 WAIT，提高 RR 要求至 2.0 |
+| vision | 标准读图 | 重点关注成交量萎缩程度 |
 
 ### 9.2 低流动性检测工具
 
-GPT_Technical 应优先调用：
+technology 应优先调用：
 
 - `orderbook.depth`：获取 ±1% 范围内挂单量
 - 量化判断：如果挂单量 < 平时 50%，标记为"低流动性"

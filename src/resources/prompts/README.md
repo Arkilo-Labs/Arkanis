@@ -8,10 +8,10 @@
 - 选择：`.env` 里的 `PROMPT_NAME=<name>` → 加载 `src/resources/prompts/vlm/<name>.md`
 - 入口：`src/core/vlm/promptManager.js`
 
-## Agents Team（Roundtable）
+## Agents Round（Roundtable）
 
-- 目录：`src/resources/prompts/agents-team/`
-- 选择：`src/agents/agents-team/config/agents.json` 中的 `prompt` 字段（文件名）
+- 目录：`src/resources/prompts/agents-round/`
+- 选择：`src/agents/agents-round/config/agents.json` 中的 `prompt` 字段（文件名）
 - 入口：`src/cli/roundtable/main.js`
 
 ## 命名建议

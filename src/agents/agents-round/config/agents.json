@@ -2,8 +2,8 @@
   "version": 1,
   "roundtable_settings": {
     "max_rounds": 5,
-    "summary_agent": "Gemini_Scribe",
-    "final_agent": "DeepSeek_Leader",
+    "summary_agent": "scribe",
+    "final_agent": "leader",
     "max_context_chars": 24000,
     "llm_timeout_ms": 150000,
     "llm_retries": 1,
@@ -15,10 +15,10 @@
     "adversarial_debate_rounds": 1,
     "min_rr": 1.5,
     "agent_accuracy": {
-      "Qwen_Vision": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 },
-      "Grok_News": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 },
-      "GPT_Technical": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 },
-      "Claude_Risk": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 }
+      "vision": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 },
+      "news": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 },
+      "technology": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 },
+      "risk": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 }
     },
     "audit_settings": {
       "enabled": true,
@@ -76,51 +76,51 @@
   ],
   "agents": [
     {
-      "name": "Qwen_Vision",
+      "name": "vision",
       "provider_ref": "openai_gpt41mini",
       "role": "ChartReader",
-      "prompt": "qwen_vision.md",
+      "prompt": "vision.md",
       "order": 1,
       "can_see_images": true
     },
     {
-      "name": "Grok_News",
+      "name": "news",
       "provider_ref": "openai_gpt41mini",
       "role": "SentimentAnalyst",
-      "prompt": "grok_news.md",
+      "prompt": "news.md",
       "order": 2,
       "can_see_images": true
     },
     {
-      "name": "GPT_Technical",
+      "name": "technology",
       "provider_ref": "openai_gpt41mini",
       "role": "TechnicalTrader",
-      "prompt": "gpt_technical.md",
+      "prompt": "technology.md",
       "order": 3,
       "can_see_images": true
     },
     {
-      "name": "Claude_Risk",
+      "name": "risk",
       "provider_ref": "openai_gpt41mini",
       "role": "RiskManager",
-      "prompt": "claude_risk.md",
+      "prompt": "risk.md",
       "order": 4,
       "can_see_images": true
     },
     {
-      "name": "DeepSeek_Leader",
+      "name": "leader",
       "provider_ref": "openai_gpt41mini",
       "role": "DecisionMaker",
-      "prompt": "deepseek_leader.md",
+      "prompt": "leader.md",
       "order": 5,
       "can_see_images": false,
       "is_final_decision": true
     },
     {
-      "name": "Gemini_Scribe",
+      "name": "scribe",
       "provider_ref": "openai_gpt41mini",
       "role": "Summarizer",
-      "prompt": "gemini_scribe.md",
+      "prompt": "scribe.md",
       "order": 99,
       "can_see_images": true
     }

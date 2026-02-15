@@ -3,24 +3,24 @@ import { Command } from 'commander';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
-import { ensureDir, writeText } from '../../agents/agents-team/core/fsUtils.js';
-import { loadAgentsConfig, loadMcpConfig, loadProvidersConfig } from '../../agents/agents-team/core/configLoader.js';
-import { PromptStore } from '../../agents/agents-team/core/promptStore.js';
-import { SessionLogger } from '../../agents/agents-team/core/logger.js';
-import { McpClient } from '../../agents/agents-team/core/mcpClient.js';
-import { buildAgents, buildSubagents } from '../../agents/agents-team/core/agentFactory.js';
-import { Roundtable } from '../../agents/agents-team/core/roundtable.js';
-import { loadBars } from '../../agents/agents-team/core/marketData.js';
-import { renderChartPng } from '../../agents/agents-team/core/chartShots.js';
-import { screenshotPage } from '../../agents/agents-team/core/liquidationShot.js';
-import { computeMacd, computeRsi } from '../../agents/agents-team/core/indicators.js';
-import { fetchOrderbook, summarizeOrderbook } from '../../agents/agents-team/core/orderbook.js';
-import { withRetries, withTimeout } from '../../agents/agents-team/core/runtime.js';
-import { SearxngClient } from '../../agents/agents-team/core/searxngClient.js';
-import { FirecrawlClient } from '../../agents/agents-team/core/firecrawlClient.js';
-import { runNewsPipeline } from '../../agents/agents-team/core/newsPipeline.js';
-import { Toolbox } from '../../agents/agents-team/core/toolbox.js';
-import { DecisionHistory } from '../../agents/agents-team/core/decisionHistory.js';
+import { ensureDir, writeText } from '../../agents/agents-round/core/fsUtils.js';
+import { loadAgentsConfig, loadMcpConfig, loadProvidersConfig } from '../../agents/agents-round/core/configLoader.js';
+import { PromptStore } from '../../agents/agents-round/core/promptStore.js';
+import { SessionLogger } from '../../agents/agents-round/core/logger.js';
+import { McpClient } from '../../agents/agents-round/core/mcpClient.js';
+import { buildAgents, buildSubagents } from '../../agents/agents-round/core/agentFactory.js';
+import { Roundtable } from '../../agents/agents-round/core/roundtable.js';
+import { loadBars } from '../../agents/agents-round/core/marketData.js';
+import { renderChartPng } from '../../agents/agents-round/core/chartShots.js';
+import { screenshotPage } from '../../agents/agents-round/core/liquidationShot.js';
+import { computeMacd, computeRsi } from '../../agents/agents-round/core/indicators.js';
+import { fetchOrderbook, summarizeOrderbook } from '../../agents/agents-round/core/orderbook.js';
+import { withRetries, withTimeout } from '../../agents/agents-round/core/runtime.js';
+import { SearxngClient } from '../../agents/agents-round/core/searxngClient.js';
+import { FirecrawlClient } from '../../agents/agents-round/core/firecrawlClient.js';
+import { runNewsPipeline } from '../../agents/agents-round/core/newsPipeline.js';
+import { Toolbox } from '../../agents/agents-round/core/toolbox.js';
+import { DecisionHistory } from '../../agents/agents-round/core/decisionHistory.js';
 import { closeExchangeClient } from '../../core/data/exchangeClient.js';
 import { closePools as closePgPools } from '../../core/data/pgClient.js';
 
@@ -132,8 +132,8 @@ async function main() {
         .option('--bars <n>', 'K线数量', (v) => parseInt(v, 10), 250)
         .option('--primary <tf>', '主周期', '15m')
         .option('--aux <tf>', '辅助周期', '1h')
-        .option('--config-dir <dir>', '配置目录', join(__dirname, '../../agents/agents-team/config'))
-        .option('--prompts-dir <dir>', 'Prompt目录', join(__dirname, '../../resources/prompts/agents-team'))
+        .option('--config-dir <dir>', '配置目录', join(__dirname, '../../agents/agents-round/config'))
+        .option('--prompts-dir <dir>', 'Prompt目录', join(__dirname, '../../resources/prompts/agents-round'))
         .option('--output-dir <dir>', '输出目录', './outputs/roundtable')
         .option('--page-wait-ms <n>', '外部网页等待(ms)', (v) => parseInt(v, 10), 5000)
         .option('--chart-wait-ms <n>', '图表渲染等待(ms)', (v) => parseInt(v, 10), 600)

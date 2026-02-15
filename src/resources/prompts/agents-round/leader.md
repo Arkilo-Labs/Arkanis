@@ -139,16 +139,16 @@
 
 ## 动态召回规则
 
-### Grok_News 召回条件
+### news 召回条件
 
-如果以下条件满足，你应该召回 Grok_News：
+如果以下条件满足，你应该召回 news：
 
 1. 讨论中出现"假突破"、"流动性不足"等关键词
 2. 你需要社交媒体情绪作为辅助证据
-3. 距离 Grok_News 上次发言已超过 2 轮
+3. 距离 news 上次发言已超过 2 轮
 4. 周末场景下，你需要链上数据验证
 
-召回时，在 next_speaker_reason 中明确说明："需要 Grok_News 搜索 Twitter 情绪/链上异动来验证假设"
+召回时，在 next_speaker_reason 中明确说明："需要 news 搜索 Twitter 情绪/链上异动来验证假设"
 
 ### ChartReader 召回条件
 
