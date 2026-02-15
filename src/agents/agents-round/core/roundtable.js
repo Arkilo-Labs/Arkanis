@@ -2,19 +2,37 @@ import { validateRR } from './rrValidator.js';
 import { StructuredContext } from './structuredContext.js';
 import { BeliefTracker } from './beliefTracker.js';
 
+function safeTruncate(value, maxChars) {
+    const text = typeof value === 'string' ? value : String(value ?? '');
+    const max = Math.max(0, Number(maxChars) || 0);
+    if (!max || text.length <= max) return text;
+    return `${text.slice(0, max)}…`;
+}
+
 export class Roundtable {
-    constructor({ agents, settings, mcpClient, logger, auditorAgent = null, toolbox = null }) {
+    constructor({ agents, settings, mcpClient, logger, auditorAgent = null, toolbox = null, onEvent = null }) {
         this.agents = agents;
         this.settings = settings;
         this.mcpClient = mcpClient;
         this.logger = logger;
         this.auditorAgent = auditorAgent;
         this.toolbox = toolbox;
+        this.onEvent = typeof onEvent === 'function' ? onEvent : null;
         this.auditHistory = [];
         this.structuredContext = new StructuredContext();
         this.beliefTracker = new BeliefTracker({
             agentAccuracy: settings.agent_accuracy ?? {},
         });
+    }
+
+    _emitEvent(type, payload) {
+        if (!this.onEvent) return;
+        try {
+            this.onEvent(type, payload);
+        } catch (e) {
+            const msg = e?.message || String(e);
+            this.logger?.warn?.(`[事件回调失败] ${type}: ${msg}`);
+        }
     }
 
     _validateRR(leaderJson) {
@@ -157,12 +175,24 @@ export class Roundtable {
             }
 
             if (!this.toolbox) {
+                this._emitEvent('tool-call', {
+                    stage: 'error',
+                    turn,
+                    agent: agent?.name ?? '',
+                    error: 'toolbox 未注入，无法执行工具调用',
+                });
                 toolResults.push({ tool: 'toolbox', ok: false, error: 'toolbox 未注入，无法执行工具调用' });
                 continue;
             }
 
             const calls = this._normalizeToolCalls(parsed, { maxCalls });
             if (!calls.length) {
+                this._emitEvent('tool-call', {
+                    stage: 'error',
+                    turn,
+                    agent: agent?.name ?? '',
+                    error: '工具请求 JSON 缺少 calls，已忽略',
+                });
                 toolResults.push({ tool: 'toolbox', ok: false, error: '工具请求 JSON 缺少 calls，已忽略' });
                 continue;
             }
@@ -170,9 +200,23 @@ export class Roundtable {
             // 去重：过滤已调用过的相同工具
             const deduplicatedCalls = this._deduplicateToolCalls(calls, toolResults);
             if (!deduplicatedCalls.length) {
+                this._emitEvent('tool-call', {
+                    stage: 'skipped',
+                    turn,
+                    agent: agent?.name ?? '',
+                    calls: calls.map((c) => ({ name: c.name })),
+                    note: '所有工具调用均已执行过，已跳过重复调用',
+                });
                 toolResults.push({ tool: 'toolbox', ok: false, error: '所有工具调用均已执行过，已跳过重复调用' });
                 continue;
             }
+
+            this._emitEvent('tool-call', {
+                stage: 'request',
+                turn,
+                agent: agent?.name ?? '',
+                calls: deduplicatedCalls.map((c) => ({ name: c.name, args: c.args ?? {} })),
+            });
 
             const { toolResults: newResults, imagePaths: newImages } = await this.toolbox.runCalls({
                 calls: deduplicatedCalls,
@@ -182,6 +226,14 @@ export class Roundtable {
 
             toolResults.push(...(newResults ?? []));
             mergedImages.push(...(newImages ?? []));
+
+            this._emitEvent('tool-call', {
+                stage: 'result',
+                turn,
+                agent: agent?.name ?? '',
+                results: this._summarizeToolResultsForEvent(newResults ?? []),
+                image_paths: Array.isArray(newImages) ? newImages.slice() : [],
+            });
         }
 
         // 理论不会走到这里（iter>=maxIters 时已强制要求输出最终答案）
@@ -246,7 +298,7 @@ export class Roundtable {
         return { filteredText: text, isFiltered: false };
     }
 
-    _extractStructuredInfo(text, source) {
+    _extractStructuredInfo(text, source, meta = {}) {
         if (!text || !this.structuredContext) return;
 
         // 提取方向性观点
@@ -276,7 +328,15 @@ export class Roundtable {
 
                 // 更新贝叶斯信念
                 if (this.beliefTracker) {
-                    this.beliefTracker.update(source, direction, calibratedConfidence);
+                    const posteriors = this.beliefTracker.update(source, direction, calibratedConfidence);
+                    this._emitEvent('belief-update', {
+                        turn: meta?.turn ?? null,
+                        source,
+                        direction,
+                        raw_confidence: rawConfidence,
+                        confidence: calibratedConfidence,
+                        posteriors,
+                    });
                 }
                 break;
             }
@@ -337,6 +397,57 @@ export class Roundtable {
 
         parts.push(`# 会议上下文\n${baseContext}`);
         return parts.join('\n\n');
+    }
+
+    _summarizeToolResultForEvent(toolResult) {
+        if (!toolResult || typeof toolResult !== 'object') return null;
+        const tool = String(toolResult.tool || '').trim() || '(unknown)';
+        const ok = Boolean(toolResult.ok);
+        const base = { tool, ok };
+
+        if (!ok) {
+            base.error = safeTruncate(toolResult.error, 500);
+            return base;
+        }
+
+        if (toolResult.fromCache) base.from_cache = true;
+
+        if (tool === 'searxng.search') {
+            base.query = safeTruncate(toolResult.query, 200);
+            base.count = Array.isArray(toolResult.result?.results) ? toolResult.result.results.length : null;
+            return base;
+        }
+
+        if (tool === 'firecrawl.scrape') {
+            base.url = safeTruncate(toolResult.url, 500);
+            base.markdown_chars = typeof toolResult.markdown === 'string' ? toolResult.markdown.length : null;
+            return base;
+        }
+
+        if (tool === 'browser.screenshot') {
+            base.url = safeTruncate(toolResult.url, 500);
+            base.image_path = toolResult.image_path ? String(toolResult.image_path) : null;
+            return base;
+        }
+
+        if (tool === 'mcp.call') {
+            base.server = safeTruncate(toolResult.server, 120);
+            base.method = safeTruncate(toolResult.method, 200);
+            return base;
+        }
+
+        if (tool === 'orderbook.depth') {
+            base.symbol = safeTruncate(toolResult.symbol, 80);
+            base.note = safeTruncate(toolResult.note, 200);
+            return base;
+        }
+
+        return base;
+    }
+
+    _summarizeToolResultsForEvent(toolResults) {
+        const list = Array.isArray(toolResults) ? toolResults : [];
+        return list.map((r) => this._summarizeToolResultForEvent(r)).filter(Boolean);
     }
 
     async _runTools(tools) {
@@ -461,7 +572,7 @@ export class Roundtable {
                 callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
             }).then(async (result) => {
                 const auditResult = await this._auditTurn({ turn: idx + 1, agent, text: result.text });
-                return { agent, result, auditResult };
+                return { agent, turn: idx + 1, result, auditResult };
             });
         });
 
@@ -474,7 +585,7 @@ export class Roundtable {
         const transcript = [];
         let contextAdditions = '';
 
-        for (const { agent, result, auditResult } of results) {
+        for (const { agent, turn, result, auditResult } of results) {
             const { filteredText, isFiltered } = this._applyAudit(result.text, auditResult);
             transcript.push({
                 name: agent.name,
@@ -483,9 +594,18 @@ export class Roundtable {
                 audited: !!auditResult,
                 filtered: isFiltered,
             });
+            this._emitEvent('agent-speak', {
+                phase: 'opening',
+                turn,
+                name: agent.name,
+                role: agent.role,
+                text: filteredText,
+                audited: !!auditResult,
+                filtered: isFiltered,
+            });
             if (!isFiltered) {
                 contextAdditions += `\n\n【${agent.name}】\n${filteredText}\n`;
-                this._extractStructuredInfo(filteredText, agent.name);
+                this._extractStructuredInfo(filteredText, agent.name, { turn });
             }
             this.logger.info(`开场完成：${agent.name} (${agent.role})`);
         }
@@ -816,10 +936,25 @@ export class Roundtable {
 
                 const auditResult = await this._auditTurn({ turn, agent, text });
                 const { filteredText, isFiltered } = this._applyAudit(text, auditResult);
-                transcript.push({ name: agent.name, role: agent.role, text: filteredText, audited: !!auditResult, filtered: isFiltered });
+                transcript.push({
+                    name: agent.name,
+                    role: agent.role,
+                    text: filteredText,
+                    audited: !!auditResult,
+                    filtered: isFiltered,
+                });
+                this._emitEvent('agent-speak', {
+                    phase: 'opening',
+                    turn,
+                    name: agent.name,
+                    role: agent.role,
+                    text: filteredText,
+                    audited: !!auditResult,
+                    filtered: isFiltered,
+                });
                 if (!isFiltered) {
                     context += `\n\n【${agent.name}】\n${filteredText}\n`;
-                    this._extractStructuredInfo(filteredText, agent.name);
+                    this._extractStructuredInfo(filteredText, agent.name, { turn });
                 }
             }
         }
@@ -865,9 +1000,18 @@ export class Roundtable {
                 audited: !!chairAuditResult,
                 filtered: chairIsFiltered,
             });
+            this._emitEvent('agent-speak', {
+                phase: 'chair',
+                turn,
+                name: chairAgent.name,
+                role: chairAgent.role,
+                text: chairFilteredText,
+                audited: !!chairAuditResult,
+                filtered: chairIsFiltered,
+            });
             if (!chairIsFiltered) {
                 context += `\n\n【${chairAgent.name}】\n${chairFilteredText}\n`;
-                this._extractStructuredInfo(chairFilteredText, chairAgent.name);
+                this._extractStructuredInfo(chairFilteredText, chairAgent.name, { turn });
             }
 
             const parsed = this._extractJsonObject(chairText);
@@ -889,6 +1033,14 @@ export class Roundtable {
             }
 
             consensus = Boolean(parsed?.consensus);
+            if (parsed && !chairIsFiltered) {
+                this._emitEvent('decision', {
+                    stage: consensus ? 'final' : 'draft',
+                    turn,
+                    speaker: chairAgent.name,
+                    json: parsed,
+                });
+            }
             if (consensus) {
                 this.logger.info('主席判定已达成一致：提前结束讨论');
                 break;
@@ -948,9 +1100,18 @@ export class Roundtable {
                 audited: !!nextAuditResult,
                 filtered: nextIsFiltered,
             });
+            this._emitEvent('agent-speak', {
+                phase: 'discussion',
+                turn,
+                name: nextAgent.name,
+                role: nextAgent.role,
+                text: nextFilteredText,
+                audited: !!nextAuditResult,
+                filtered: nextIsFiltered,
+            });
             if (!nextIsFiltered) {
                 context += `\n\n【${nextAgent.name}】\n${nextFilteredText}\n`;
-                this._extractStructuredInfo(nextFilteredText, nextAgent.name);
+                this._extractStructuredInfo(nextFilteredText, nextAgent.name, { turn });
             }
         }
 
@@ -991,8 +1152,27 @@ export class Roundtable {
                 audited: !!finalAuditResult,
                 filtered: finalIsFiltered,
             });
+            this._emitEvent('agent-speak', {
+                phase: 'finalize',
+                turn: turn + 1,
+                name: chairAgent.name,
+                role: chairAgent.role,
+                text: finalFilteredText,
+                audited: !!finalAuditResult,
+                filtered: finalIsFiltered,
+            });
             if (!finalIsFiltered) {
                 context += `\n\n【${chairAgent.name}】\n${finalFilteredText}\n`;
+            }
+
+            const parsed = this._extractJsonObject(chairText);
+            if (parsed && !finalIsFiltered) {
+                this._emitEvent('decision', {
+                    stage: 'final',
+                    turn: turn + 1,
+                    speaker: chairAgent.name,
+                    json: parsed,
+                });
             }
         }
 
@@ -1016,6 +1196,15 @@ export class Roundtable {
                 callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
             });
             transcript.push({ name: summaryAgent.name, role: summaryAgent.role, text });
+            this._emitEvent('agent-speak', {
+                phase: 'summary',
+                turn: Math.min(turn + 1, maxTurns),
+                name: summaryAgent.name,
+                role: summaryAgent.role,
+                text,
+                audited: false,
+                filtered: false,
+            });
             context += `\n\n【${summaryAgent.name}】\n${text}\n`;
         }
 

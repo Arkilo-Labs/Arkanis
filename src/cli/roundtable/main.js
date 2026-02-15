@@ -27,6 +27,8 @@ import { closePools as closePgPools } from '../../core/data/pgClient.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+const ROUND_EVENT_PREFIX = '__AGENTS_ROUND_EVENT__';
+
 function normalizeArgv(argv) {
     if (argv.length >= 3 && argv[2] === '--') return [...argv.slice(0, 2), ...argv.slice(3)];
     return argv;
@@ -38,6 +40,31 @@ function newSessionId() {
     return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}_${pad(
         d.getUTCHours(),
     )}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
+}
+
+function normalizeSessionId(value) {
+    const id = String(value || '').trim();
+    if (!id) return '';
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$/.test(id)) {
+        throw new Error(`session-id 格式不合法: ${id}`);
+    }
+    return id;
+}
+
+function createEventEmitter({ sessionId }) {
+    const enabled = String(process.env.AGENTS_ROUND_EMIT_EVENTS || '').trim() === '1';
+    if (!enabled) return null;
+
+    return (type, payload) => {
+        const event = {
+            type,
+            sessionId,
+            pid: process.pid,
+            timestamp: Date.now(),
+            payload: payload ?? null,
+        };
+        process.stdout.write(`${ROUND_EVENT_PREFIX}${JSON.stringify(event)}\n`);
+    };
 }
 
 function extractBaseCoin(symbol) {
@@ -135,6 +162,7 @@ async function main() {
         .option('--config-dir <dir>', '配置目录', join(__dirname, '../../agents/agents-round/config'))
         .option('--prompts-dir <dir>', 'Prompt目录', join(__dirname, '../../resources/prompts/agents-round'))
         .option('--output-dir <dir>', '输出目录', './outputs/roundtable')
+        .option('--session-id <id>', '会话 ID（用于服务端回放/对齐）', '')
         .option('--page-wait-ms <n>', '外部网页等待(ms)', (v) => parseInt(v, 10), 5000)
         .option('--chart-wait-ms <n>', '图表渲染等待(ms)', (v) => parseInt(v, 10), 600)
         .option(
@@ -162,7 +190,7 @@ async function main() {
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
-    const sessionId = newSessionId();
+    const sessionId = normalizeSessionId(opts.sessionId) || newSessionId();
     const sessionOut = join(opts.outputDir, sessionId);
     const chartsDir = join(sessionOut, 'charts');
     const logPath = join(sessionOut, 'session.log');
@@ -170,6 +198,7 @@ async function main() {
     ensureDir(chartsDir);
 
     const logger = new SessionLogger({ logPath });
+    const emitEvent = createEventEmitter({ sessionId });
 
     const providers = await loadProvidersConfig(opts.configDir);
     const agentsConfig = loadAgentsConfig(opts.configDir);
@@ -480,6 +509,7 @@ async function main() {
             logger,
             auditorAgent,
             toolbox,
+            onEvent: emitEvent,
         });
 
         const contextSeed = [

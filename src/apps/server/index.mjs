@@ -26,6 +26,7 @@ import { registerScriptRoutes } from './routes/script.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerSetupRoutes } from './routes/setup.js';
 import { registerTelegramRoutes } from './routes/telegram.js';
+import { registerRoundtableRoutes } from './routes/roundtable.js';
 import { initAuthService } from './services/authService.js';
 import { resolveDataDir } from '../../core/utils/dataDir.js';
 
@@ -81,6 +82,7 @@ io.on('connection', (socket) => {
 });
 
 registerScriptRoutes({ app, io, projectRoot: PROJECT_ROOT, activeProcesses });
+registerRoundtableRoutes({ app, io, projectRoot: PROJECT_ROOT, activeProcesses });
 registerPromptRoutes({ app, PromptManager });
 registerChartDataRoutes({ app, sessionChartData });
 registerConfigRoutes({ app, projectRoot: PROJECT_ROOT });
