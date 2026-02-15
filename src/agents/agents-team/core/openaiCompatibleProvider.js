@@ -1,15 +1,22 @@
 import { readFileSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+import { resolveDataDir } from '../../../core/utils/dataDir.js';
+import { readSecrets } from '../../../core/services/secretsStore.js';
 
 function normalizeBaseUrl(baseUrl) {
-    return String(baseUrl || '').replace(/\/+$/, '');
+    let base = String(baseUrl || '').trim();
+    base = base.replace(/\/+$/, '');
+    if (base.toLowerCase().endsWith('/v1')) base = base.slice(0, -3);
+    return base.replace(/\/+$/, '');
 }
 
 function getApiKeyFromEnv(envName) {
-    const value = String(process.env[envName] || '').trim();
-    if (!value) {
-        throw new Error(`缺少环境变量 ${envName}（用于 Provider API Key）`);
-    }
-    return value;
+    const name = String(envName || '').trim();
+    if (!name) return null;
+    const value = String(process.env[name] || '').trim();
+    return value || null;
 }
 
 function toDataUrl(imagePath) {
@@ -18,10 +25,28 @@ function toDataUrl(imagePath) {
     return `data:image/png;base64,${base64}`;
 }
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const PROJECT_ROOT = join(__dirname, '..', '..', '..', '..');
+const DATA_DIR = resolveDataDir({ projectRoot: PROJECT_ROOT });
+
+let secretsCache = null;
+let secretsCacheTime = 0;
+
+async function readSecretsCached() {
+    const now = Date.now();
+    if (secretsCache && now - secretsCacheTime < 3000) return secretsCache;
+    const secrets = await readSecrets({ dataDir: DATA_DIR, encKey: process.env.SECRETS_ENC_KEY || '' });
+    secretsCache = secrets;
+    secretsCacheTime = now;
+    return secrets;
+}
+
 export class OpenAICompatibleProvider {
-    constructor({ baseUrl, apiKeyEnv, model, temperature, maxTokens, supportsVision }) {
+    constructor({ providerId, baseUrl, apiKeyEnv, model, temperature, maxTokens, supportsVision }) {
+        this.providerId = String(providerId || '').trim();
         this.baseUrl = normalizeBaseUrl(baseUrl);
-        this.apiKeyEnv = apiKeyEnv;
+        this.apiKeyEnv = String(apiKeyEnv || '').trim();
         this.model = model;
         this.temperature = temperature;
         this.maxTokens = maxTokens;
@@ -33,7 +58,18 @@ export class OpenAICompatibleProvider {
             throw new Error(`当前 Provider 不支持图片：model=${this.model}`);
         }
 
-        const apiKey = getApiKeyFromEnv(this.apiKeyEnv);
+        const envKey = getApiKeyFromEnv(this.apiKeyEnv);
+        const secrets = envKey ? null : await readSecretsCached();
+        const secretKey = secrets?.providers?.[this.providerId]?.apiKey;
+        const apiKey = envKey || (typeof secretKey === 'string' ? secretKey.trim() : '');
+        if (!apiKey) {
+            if (this.apiKeyEnv) {
+                throw new Error(
+                    `Provider 未配置密钥: ${this.providerId}（请在 Web 控制台「模型」页设置密钥，或设置环境变量 ${this.apiKeyEnv}）`,
+                );
+            }
+            throw new Error(`Provider 未配置密钥: ${this.providerId}（请在 Web 控制台「模型」页设置密钥）`);
+        }
         const url = `${this.baseUrl}/v1/chat/completions`;
 
         const userContent = [];
@@ -78,4 +114,3 @@ export class OpenAICompatibleProvider {
         return content;
     }
 }
-

@@ -7,18 +7,21 @@
 
 - 本目录为独立实现，不修改仓库现有 `src/` 等库代码（仅复用其能力）。
 - 不需要前端；输出为 `logs/` 与 `outputs/` 文件。
-- 不在仓库内硬编码任何密钥；统一通过环境变量注入。
+- 不在仓库内硬编码任何密钥；默认从 data volume 的 `secrets.json` 读取，且支持环境变量覆盖。
 
 ## 快速开始
 
-1) 配置 Provider 与 Agent：
-- `src/agents/agents-team/config/providers.json`（建议从 `src/agents/agents-team/config/providers.example.json` 复制一份后再改）
-- `src/agents/agents-team/config/agents.json`
+1) 配置 Provider/密钥 与 Agent：
+- Provider 定义：`ai-providers.default.json`（默认）或 `data/ai-providers.json`（覆盖层）
+- 密钥：`data/secrets.json`（可选 `SECRETS_ENC_KEY` 加密落盘）
+- Agent 编排：`src/agents/agents-team/config/agents.json`
 
-2) 准备环境变量（示例，按你的 Provider 配置调整）：
+2) 准备密钥（任选其一）：
+- Web 控制台「模型」页配置密钥（写入 `data/secrets.json`）
+- 或设置环境变量（当 Provider 定义里配置了 `apiKeyEnv` 时生效）：
 
 ```powershell
-$env:DIDL_API_KEY="..."
+$env:OPENAI_API_KEY="..."
 ```
 
 新闻收集默认走「SearXNG + Firecrawl」（本地 HTTP 服务），地址在 `src/agents/agents-team/config/agents.json` 的 `news_pipeline_settings` 中可改：

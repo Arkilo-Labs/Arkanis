@@ -20,11 +20,14 @@ import { registerChartDataRoutes } from './routes/chartData.js';
 import { registerConfigRoutes } from './routes/config.js';
 import { registerPromptRoutes } from './routes/prompts.js';
 import { registerProviderRoutes } from './routes/providers.js';
+import { registerProviderSecretRoutes } from './routes/providerSecrets.js';
+import { registerProviderConfigRoutes } from './routes/providerConfig.js';
 import { registerScriptRoutes } from './routes/script.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerSetupRoutes } from './routes/setup.js';
 import { registerTelegramRoutes } from './routes/telegram.js';
 import { initAuthService } from './services/authService.js';
+import { resolveDataDir } from '../../core/utils/dataDir.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -82,6 +85,8 @@ registerPromptRoutes({ app, PromptManager });
 registerChartDataRoutes({ app, sessionChartData });
 registerConfigRoutes({ app, projectRoot: PROJECT_ROOT });
 registerProviderRoutes({ app, io, projectRoot: PROJECT_ROOT });
+registerProviderSecretRoutes({ app, io, projectRoot: PROJECT_ROOT });
+registerProviderConfigRoutes({ app, io, projectRoot: PROJECT_ROOT });
 registerAuthRoutes({ app, authService });
 registerSetupRoutes({ app, authService });
 registerTelegramRoutes({
@@ -94,9 +99,12 @@ registerTelegramRoutes({
 
 function setupConfigWatcher({ io, projectRoot }) {
     const envPath = join(projectRoot, '.env');
-    const providersPath = join(projectRoot, 'ai-providers.json');
+    const dataDir = resolveDataDir({ projectRoot });
+    const providersPath = join(dataDir, 'ai-providers.json');
+    const secretsPath = join(dataDir, 'secrets.json');
+    const providerConfigPath = join(dataDir, 'provider-config.json');
 
-    const watcher = chokidar.watch([envPath, providersPath], {
+    const watcher = chokidar.watch([envPath, providersPath, secretsPath, providerConfigPath], {
         persistent: true,
         ignoreInitial: true,
         awaitWriteFinish: {

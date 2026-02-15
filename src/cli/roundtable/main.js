@@ -171,7 +171,7 @@ async function main() {
 
     const logger = new SessionLogger({ logPath });
 
-    const providers = loadProvidersConfig(opts.configDir);
+    const providers = await loadProvidersConfig(opts.configDir);
     const agentsConfig = loadAgentsConfig(opts.configDir);
     const mcpConfig = loadMcpConfig(opts.configDir);
     const promptStore = new PromptStore({ promptsDir: opts.promptsDir });

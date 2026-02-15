@@ -3,13 +3,20 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import axios from 'axios';
 import { vlmConfig } from '../config/index.js';
 import { VLMDecision } from './schema.js';
 import logger from '../utils/logger.js';
 import PromptManager from './promptManager.js';
-import providerService from '../services/providerService.js';
+import { resolveProviderForRole } from '../services/providerResolver.js';
+import { resolveDataDir } from '../utils/dataDir.js';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const PROJECT_ROOT = join(__dirname, '..', '..', '..');
+const DATA_DIR = resolveDataDir({ projectRoot: PROJECT_ROOT });
 
 // VLM 系统提示词
 export const DEFAULT_SYSTEM_PROMPT = PromptManager.getPrompt('default');
@@ -342,9 +349,9 @@ export class VLMClient {
         enableThinking = false,
         maxTokens = 8192,
         temperature = 0.2,
-    } = {}) {
+        } = {}) {
         if (!apiKey) {
-            throw new Error('未提供 API Key，请使用 VLMClient.fromActiveProvider() 创建实例');
+            throw new Error('未提供 API Key，请使用 VLMClient.fromRole("vlm") 创建实例');
         }
         if (!baseUrl) {
             throw new Error('未提供 Base URL');
@@ -364,17 +371,19 @@ export class VLMClient {
     }
 
     /**
-     * 从激活的 AI Provider 创建客户端
+     * 从 role 绑定的 Provider 创建客户端
      * @returns {Promise<VLMClient>}
      */
-    static async fromActiveProvider() {
-        const provider = await providerService.getActiveProvider();
-        if (!provider) {
-            throw new Error('未找到激活的 AI Provider，请在 ai-providers.json 中配置并激活一个 provider');
-        }
+    static async fromRole(role = 'vlm') {
+        const { provider, apiKey } = await resolveProviderForRole({
+            projectRoot: PROJECT_ROOT,
+            dataDir: DATA_DIR,
+            encKey: process.env.SECRETS_ENC_KEY || '',
+            role,
+        });
 
         return new VLMClient({
-            apiKey: provider.apiKey,
+            apiKey,
             baseUrl: provider.baseUrl,
             model: provider.modelName,
             enableThinking: provider.thinkingMode === 'enabled',

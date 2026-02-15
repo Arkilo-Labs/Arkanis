@@ -2,6 +2,10 @@ import { spawn } from 'child_process';
 import { join } from 'path';
 
 import { getChartWriteToken } from '../services/chartWriteToken.js';
+import { resolveDataDir } from '../../../core/utils/dataDir.js';
+import { readProviderDefinitions } from '../../../core/services/aiProvidersStore.js';
+import { readSecrets } from '../../../core/services/secretsStore.js';
+import { createRedactor } from '../../../core/utils/redactSecrets.js';
 
 function resolveScriptPath({ projectRoot, script }) {
     return join(projectRoot, 'src', 'cli', 'vlm', `${script}.js`);
@@ -13,6 +17,35 @@ function parseArgs(value) {
 }
 
 export function registerScriptRoutes({ app, io, projectRoot, activeProcesses }) {
+    const dataDir = resolveDataDir({ projectRoot });
+    let redactorCache = null;
+    let redactorCacheTime = 0;
+
+    async function getRedactor() {
+        const now = Date.now();
+        if (redactorCache && now - redactorCacheTime < 3000) return redactorCache;
+
+        const { providers } = await readProviderDefinitions({ projectRoot, dataDir }).catch(() => ({ providers: [] }));
+        const secrets = await readSecrets({ dataDir, encKey: process.env.SECRETS_ENC_KEY || '' }).catch(() => ({
+            providers: {},
+        }));
+
+        const secretValues = [];
+        for (const item of Object.values(secrets.providers || {})) {
+            if (item?.apiKey) secretValues.push(item.apiKey);
+        }
+        for (const p of providers) {
+            const envName = String(p?.apiKeyEnv || '').trim();
+            if (!envName) continue;
+            const v = String(process.env[envName] || '').trim();
+            if (v) secretValues.push(v);
+        }
+
+        redactorCache = createRedactor({ secretValues });
+        redactorCacheTime = now;
+        return redactorCache;
+    }
+
     app.post('/api/run-script', (req, res) => {
         const script = String(req.body?.script || '').trim();
         const args = parseArgs(req.body?.args);
@@ -37,11 +70,17 @@ export function registerScriptRoutes({ app, io, projectRoot, activeProcesses }) 
             if (pid) activeProcesses.set(pid, child);
 
             child.stdout.on('data', (data) => {
-                io.emit('log', { type: 'stdout', data: data.toString() });
+                const text = data.toString();
+                void getRedactor()
+                    .then((redact) => io.emit('log', { type: 'stdout', data: redact(text) }))
+                    .catch(() => io.emit('log', { type: 'stdout', data: text }));
             });
 
             child.stderr.on('data', (data) => {
-                io.emit('log', { type: 'stderr', data: data.toString() });
+                const text = data.toString();
+                void getRedactor()
+                    .then((redact) => io.emit('log', { type: 'stderr', data: redact(text) }))
+                    .catch(() => io.emit('log', { type: 'stderr', data: text }));
             });
 
             child.on('close', (code) => {
@@ -50,12 +89,18 @@ export function registerScriptRoutes({ app, io, projectRoot, activeProcesses }) 
             });
 
             child.on('error', (err) => {
-                io.emit('log', { type: 'error', data: `Failed to start process: ${err.message}` });
+                const msg = `Failed to start process: ${err.message}`;
+                void getRedactor()
+                    .then((redact) => io.emit('log', { type: 'error', data: redact(msg) }))
+                    .catch(() => io.emit('log', { type: 'error', data: msg }));
             });
 
             return res.json({ pid });
         } catch (error) {
-            return res.status(500).json({ error: error?.message || String(error) });
+            const msg = error?.message || String(error);
+            void getRedactor()
+                .then((redact) => res.status(500).json({ error: redact(msg) }))
+                .catch(() => res.status(500).json({ error: msg }));
         }
     });
 }

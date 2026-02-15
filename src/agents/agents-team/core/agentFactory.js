@@ -5,7 +5,7 @@ import { Agent } from './agent.js';
 function buildProviderMap(providersConfig) {
     const providers = new Map();
     for (const [id, cfg] of Object.entries(providersConfig.providers)) {
-        providers.set(id, createProvider(cfg));
+        providers.set(id, createProvider(id, cfg));
     }
     return providers;
 }

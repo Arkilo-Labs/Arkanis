@@ -1,8 +1,9 @@
 import { OpenAICompatibleProvider } from './openaiCompatibleProvider.js';
 
-export function createProvider(providerCfg) {
+export function createProvider(providerId, providerCfg) {
     if (providerCfg.type === 'openai_compatible') {
         return new OpenAICompatibleProvider({
+            providerId,
             baseUrl: providerCfg.base_url,
             apiKeyEnv: providerCfg.api_key_env,
             model: providerCfg.model,
@@ -14,4 +15,3 @@ export function createProvider(providerCfg) {
 
     throw new Error(`不支持的 provider type: ${providerCfg.type}`);
 }
-

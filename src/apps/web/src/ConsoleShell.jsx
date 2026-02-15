@@ -45,8 +45,12 @@ export default function ConsoleShell() {
                 file === '.env'
                     ? '环境配置'
                     : file === 'ai-providers.json'
-                      ? 'AI Provider 配置'
-                      : '配置';
+                      ? 'Provider 定义'
+                      : file === 'secrets.json'
+                        ? '密钥配置'
+                        : file === 'provider-config.json'
+                          ? 'Provider 角色配置'
+                          : '配置';
             showToast(`${fileName}已更新，脚本将自动使用新配置`, 'success');
         }
 

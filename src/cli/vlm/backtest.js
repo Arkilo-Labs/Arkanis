@@ -272,7 +272,7 @@ async function main() {
             exchangeFallbacks: opts.exchangeFallbacks,
         });
         const builder = new ChartBuilder();
-        const client = await VLMClient.fromActiveProvider();
+        const client = await VLMClient.fromRole('vlm');
         
         logger.info(`VLM 配置:`);
         logger.info(`       Base URL: ${client.baseUrl}`);

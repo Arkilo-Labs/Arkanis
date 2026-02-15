@@ -59,7 +59,7 @@
   "subagents": [
     {
       "name": "News_Collector",
-      "provider_ref": "duojie_opus4.5",
+      "provider_ref": "openai_gpt41mini",
       "role": "NewsCollector",
       "prompt": "news_collector.md",
       "order": 0,
@@ -67,7 +67,7 @@
     },
     {
       "name": "Quality_Auditor",
-      "provider_ref": "duojie_opus4.5",
+      "provider_ref": "openai_gpt41mini",
       "role": "Auditor",
       "prompt": "auditor.md",
       "order": -1,
@@ -77,7 +77,7 @@
   "agents": [
     {
       "name": "Qwen_Vision",
-      "provider_ref": "duojie_opus4.5",
+      "provider_ref": "openai_gpt41mini",
       "role": "ChartReader",
       "prompt": "qwen_vision.md",
       "order": 1,
@@ -85,7 +85,7 @@
     },
     {
       "name": "Grok_News",
-      "provider_ref": "duojie_opus4.5",
+      "provider_ref": "openai_gpt41mini",
       "role": "SentimentAnalyst",
       "prompt": "grok_news.md",
       "order": 2,
@@ -93,7 +93,7 @@
     },
     {
       "name": "GPT_Technical",
-      "provider_ref": "duojie_opus4.5",
+      "provider_ref": "openai_gpt41mini",
       "role": "TechnicalTrader",
       "prompt": "gpt_technical.md",
       "order": 3,
@@ -101,7 +101,7 @@
     },
     {
       "name": "Claude_Risk",
-      "provider_ref": "duojie_opus4.5",
+      "provider_ref": "openai_gpt41mini",
       "role": "RiskManager",
       "prompt": "claude_risk.md",
       "order": 4,
@@ -109,7 +109,7 @@
     },
     {
       "name": "DeepSeek_Leader",
-      "provider_ref": "duojie_opus4.5",
+      "provider_ref": "openai_gpt41mini",
       "role": "DecisionMaker",
       "prompt": "deepseek_leader.md",
       "order": 5,
@@ -118,7 +118,7 @@
     },
     {
       "name": "Gemini_Scribe",
-      "provider_ref": "duojie_opus4.5",
+      "provider_ref": "openai_gpt41mini",
       "role": "Summarizer",
       "prompt": "gemini_scribe.md",
       "order": 99,

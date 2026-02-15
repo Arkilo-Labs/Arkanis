@@ -1,8 +1,10 @@
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'crypto';
 import { constants as fsConstants } from 'fs';
 import { access, mkdir, readFile, rename, unlink, writeFile } from 'fs/promises';
-import { isAbsolute, join } from 'path';
+import { join } from 'path';
 import { promisify } from 'util';
+
+import { resolveDataDir } from '../../../core/utils/dataDir.js';
 
 const scrypt = promisify(scryptCallback);
 
@@ -18,13 +20,6 @@ function isTruthyEnv(value) {
 
 function nowIso() {
     return new Date().toISOString();
-}
-
-function resolveDataDir({ projectRoot }) {
-    const raw = String(process.env.ARKANIS_DATA_DIR || '').trim();
-    const configured = raw !== '' ? raw : '/data';
-    if (isAbsolute(configured)) return configured;
-    return join(projectRoot, configured);
 }
 
 async function ensureWritableDir(dirPath) {

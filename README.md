@@ -208,7 +208,7 @@ server 暴露了这些能力（见 `src/apps/server/index.mjs`）：
 - 日志推送：Socket.IO 广播事件 `log` / `process-exit`
 - Prompt 列表：`GET /api/prompts`（来自 `src/resources/prompts/vlm/`）
 - 配置读取/写入：`GET /api/config` / `POST /api/config`（白名单写 `.env`）
-- Provider 管理：`/api/ai-providers`（读写 `ai-providers.json`，支持激活）
+- Provider/密钥：`/api/ai-providers`（定义） + `/api/ai-providers/:id/key`（密钥，永不回显） + `/api/provider-config`（角色映射）
 - Telegram 推送：`POST /api/send-telegram`
 - Auth（最小可用）：`/api/auth/register`、`/api/auth/login`、`/api/auth/me`、`/api/auth/logout`
 
@@ -282,13 +282,21 @@ Run Tab 的交互说明见 `docs/RUN_TAB_GUIDE.md`。最小配置：
 - Telegram：`TG_BOT_TOKEN`、`TG_CHAT_ID`
 - 脚本与 server：`PORT`（server 端口）、`SERVER_URL`（脚本回传图表数据时使用）
 
-### 4.2 `ai-providers.json`（VLM Provider 列表）
+### 4.2 Provider 与密钥（定义/密钥分离）
 
-VLM 的“模型/网关/Key”等不放在 `.env`，而是由 `ai-providers.json` 管理，并支持“多 Provider + 激活”。
+VLM 的“模型/网关/Key”等不放在 `.env`，而是拆分为：
 
-- 读取位置：`src/core/services/providerService.js`
-- 激活 Provider：`VLMClient.fromActiveProvider()` 会选中 `isActive=true` 的那一条
-- 维护方式：建议通过 Web UI 的 Provider 管理页面；也可手动编辑（谨慎）
+- Provider 定义（可提交）：`ai-providers.default.json`
+- Provider 覆盖层（可写，data volume）：`<dataDir>/ai-providers.json`
+- 密钥存储（仅 data volume）：`<dataDir>/secrets.json`（可选 `SECRETS_ENC_KEY` 加密落盘）
+- 角色映射（仅 data volume）：`<dataDir>/provider-config.json`（固定 `vlm/newser/researcher/auditor`）
+
+其中 `<dataDir>` 由 `ARKANIS_DATA_DIR` 决定：默认 `/data`；本地开发常用 `./data`。
+
+- 读取位置：`src/core/services/aiProvidersStore.js`、`src/core/services/secretsStore.js`、`src/core/services/providerConfigStore.js`
+- VLM 选用 Provider：`VLMClient.fromRole('vlm')`（由 `data/provider-config.json` 绑定）
+- 优先级：`ENV(apiKeyEnv) > data/secrets.json > 未配置`
+- 维护方式：建议通过 Web UI 的「模型」页面；也可手动编辑 data volume 文件（谨慎）
 
 强约束：
 

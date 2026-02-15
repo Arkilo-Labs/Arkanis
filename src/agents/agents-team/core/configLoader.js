@@ -2,10 +2,13 @@ import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { z } from 'zod';
 
+import { resolveDataDir } from '../../../core/utils/dataDir.js';
+import { readProviderDefinitions } from '../../../core/services/aiProvidersStore.js';
+
 const ProviderSchema = z.object({
     type: z.enum(['openai_compatible']),
     base_url: z.string().min(1),
-    api_key_env: z.string().min(1),
+    api_key_env: z.string().optional().default(''),
     model: z.string().min(1),
     supports_vision: z.boolean().default(false),
     temperature: z.number().min(0).max(2).optional(),
@@ -124,14 +127,28 @@ function resolveExistingConfigPath(configDir, candidates) {
     return null;
 }
 
-export function loadProvidersConfig(configDir) {
-    const path = resolveExistingConfigPath(configDir, ['providers.json', 'providers.example.json']);
-    if (!path) {
-        throw new Error(
-            `未找到 Provider 配置文件：请在 ${configDir} 下提供 providers.json（本地）或 providers.example.json（示例）`,
-        );
-    }
-    return ProvidersConfigSchema.parse(readJson(path));
+export async function loadProvidersConfig(configDir) {
+    const projectRoot = join(configDir, '..', '..', '..', '..');
+    const dataDir = resolveDataDir({ projectRoot });
+
+    const { providers } = await readProviderDefinitions({ projectRoot, dataDir });
+    return ProvidersConfigSchema.parse({
+        version: 1,
+        providers: Object.fromEntries(
+            providers.map((p) => [
+                p.id,
+                {
+                    type: 'openai_compatible',
+                    base_url: p.baseUrl,
+                    api_key_env: p.apiKeyEnv || '',
+                    model: p.modelName,
+                    supports_vision: Boolean(p.supportsVision),
+                    temperature: typeof p.temperature === 'number' ? p.temperature : undefined,
+                    max_tokens: typeof p.maxTokens === 'number' ? p.maxTokens : undefined,
+                },
+            ]),
+        ),
+    });
 }
 
 export function loadAgentsConfig(configDir) {
