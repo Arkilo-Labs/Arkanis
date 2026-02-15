@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
-import { readdir, readFile, stat } from 'fs/promises';
+import { appendFile, mkdir, readdir, readFile, stat, writeFile } from 'fs/promises';
 import { join } from 'path';
 
 import { resolveDataDir } from '../../../core/utils/dataDir.js';
@@ -8,8 +8,16 @@ import { readProviderDefinitions } from '../../../core/services/aiProvidersStore
 import { readSecrets } from '../../../core/services/secretsStore.js';
 import { createRedactor } from '../../../core/utils/redactSecrets.js';
 import { ROUND_EVENT_TO_SOCKET_EVENT, SOCKET_EVENTS } from '../socket/events.js';
+import {
+    applySessionEvent,
+    createSessionMeta,
+    parseEventsNdjson,
+    parseSeqQuery,
+} from './roundtableSessionStore.js';
 
 const ROUND_EVENT_PREFIX = '__AGENTS_ROUND_EVENT__';
+const SESSION_META_FILE = 'session.meta.json';
+const SESSION_EVENTS_FILE = 'events.ndjson';
 
 function newSessionId() {
     const d = new Date();
@@ -118,7 +126,7 @@ function sanitizeRunArgs(args) {
     for (let i = 0; i < list.length; i++) {
         const token = list[i];
         if (stripFlagsWithValue.has(token)) {
-            i += 1; // 跳过 value
+            i += 1;
             continue;
         }
         out.push(token);
@@ -235,9 +243,120 @@ function summarizeDecisionForList(decisionText) {
     return preview ? { preview: preview.slice(0, 240) } : null;
 }
 
+function normalizePid(value) {
+    const pid = Number(value);
+    if (!Number.isFinite(pid) || pid <= 0) return null;
+    return Math.trunc(pid);
+}
+
+function normalizeExitCode(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const code = Number(value);
+    if (!Number.isFinite(code)) return null;
+    return Math.trunc(code);
+}
+
+function normalizeLastSeq(value) {
+    const seq = Number(value);
+    if (!Number.isFinite(seq) || seq < 0) return 0;
+    return Math.trunc(seq);
+}
+
+function buildSessionPaths(outputsDir, sessionId) {
+    const sessionDir = join(outputsDir, sessionId);
+    return {
+        sessionDir,
+        metaPath: join(sessionDir, SESSION_META_FILE),
+        eventsPath: join(sessionDir, SESSION_EVENTS_FILE),
+    };
+}
+
+function enqueueRuntimeTask(runtime, task) {
+    runtime.queue = runtime.queue.then(task, task);
+    return runtime.queue;
+}
+
+function allocateSessionEvent(runtime, { type, timestamp = Date.now(), pid, payload = {} } = {}) {
+    const event = {
+        seq: normalizeLastSeq(runtime.meta.lastSeq) + 1,
+        type: String(type || '').trim(),
+        timestamp: Number(timestamp) || Date.now(),
+        sessionId: runtime.id,
+        pid: normalizePid(pid ?? runtime.meta.pid),
+        payload: payload && typeof payload === 'object' ? payload : {},
+    };
+
+    runtime.meta = applySessionEvent(runtime.meta, event);
+    return event;
+}
+
+async function persistRuntimeMeta(runtime) {
+    await writeFile(runtime.paths.metaPath, JSON.stringify(runtime.meta, null, 2));
+}
+
+async function persistSessionEvent(runtime, event) {
+    await appendFile(runtime.paths.eventsPath, `${JSON.stringify(event)}\n`);
+    await persistRuntimeMeta(runtime);
+}
+
+function createRuntimeSession({ outputsDir, sessionId, pid }) {
+    return {
+        id: sessionId,
+        paths: buildSessionPaths(outputsDir, sessionId),
+        queue: Promise.resolve(),
+        meta: createSessionMeta({ id: sessionId, pid: normalizePid(pid), timestamp: Date.now() }),
+    };
+}
+
+function toSessionSnapshot({ sessionId, meta, createdAt, hasDecision = false }) {
+    const statusCandidates = new Set(['running', 'completed', 'failed', 'killed', 'incomplete']);
+    const status = statusCandidates.has(meta?.status)
+        ? meta.status
+        : hasDecision
+            ? 'completed'
+            : 'incomplete';
+
+    const snapshot = {
+        id: sessionId,
+        status,
+        pid: normalizePid(meta?.pid),
+        exitCode: normalizeExitCode(meta?.exitCode),
+        startedAt:
+            typeof meta?.startedAt === 'string' && meta.startedAt
+                ? meta.startedAt
+                : createdAt || null,
+        endedAt:
+            typeof meta?.endedAt === 'string' && meta.endedAt
+                ? meta.endedAt
+                : null,
+        lastSeq: normalizeLastSeq(meta?.lastSeq),
+    };
+
+    return snapshot;
+}
+
+async function readSessionEvents(eventsPath, { after = 0, limit = 200 } = {}) {
+    if (!(await fileExists(eventsPath))) return { events: [], nextAfter: parseSeqQuery(after) };
+
+    const raw = await safeReadText(eventsPath);
+    if (!raw) return { events: [], nextAfter: parseSeqQuery(after) };
+    return parseEventsNdjson(raw, { after: parseSeqQuery(after), limit });
+}
+
+function normalizeSocketPayload(event, extra = {}) {
+    return {
+        ...extra,
+        seq: event.seq,
+        sessionId: event.sessionId,
+        pid: event.pid,
+        timestamp: event.timestamp,
+    };
+}
+
 export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses }) {
     const dataDir = resolveDataDir({ projectRoot });
     const outputsDir = join(projectRoot, 'outputs', 'roundtable');
+    const runtimeSessions = new Map();
 
     let redactorCache = null;
     let redactorCacheTime = 0;
@@ -246,7 +365,9 @@ export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses
         const now = Date.now();
         if (redactorCache && now - redactorCacheTime < 3000) return redactorCache;
 
-        const { providers } = await readProviderDefinitions({ projectRoot, dataDir }).catch(() => ({ providers: [] }));
+        const { providers } = await readProviderDefinitions({ projectRoot, dataDir }).catch(() => ({
+            providers: [],
+        }));
         const secrets = await readSecrets({ dataDir, encKey: process.env.SECRETS_ENC_KEY || '' }).catch(() => ({
             providers: {},
         }));
@@ -293,104 +414,196 @@ export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses
                 stdio: ['ignore', 'pipe', 'pipe'],
             });
 
-            const pid = child.pid;
+            const pid = normalizePid(child.pid);
             if (pid) activeProcesses.set(pid, child);
+
+            const runtime = createRuntimeSession({
+                outputsDir,
+                sessionId,
+                pid,
+            });
+            runtimeSessions.set(sessionId, runtime);
+
+            await enqueueRuntimeTask(runtime, async () => {
+                await mkdir(runtime.paths.sessionDir, { recursive: true });
+                await persistRuntimeMeta(runtime);
+                const startEvent = allocateSessionEvent(runtime, {
+                    type: 'session-start',
+                    timestamp: Date.now(),
+                    pid,
+                    payload: {
+                        source: 'roundtable',
+                    },
+                });
+                await persistSessionEvent(runtime, startEvent);
+            });
 
             const allowedEventTypes = new Set(Object.keys(ROUND_EVENT_TO_SOCKET_EVENT));
 
-            const makeOnLine = (streamType) => async (line) => {
+            const handleLine = (streamType) => async (line) => {
                 if (!line) return;
 
-                if (line.startsWith(ROUND_EVENT_PREFIX)) {
-                    const raw = line.slice(ROUND_EVENT_PREFIX.length);
-                    let parsed = null;
-                    try {
-                        parsed = JSON.parse(raw);
-                    } catch {
-                        // 结构化事件解析失败时当普通日志处理
-                        parsed = null;
-                    }
-
-                    const eventType = parsed?.type ? String(parsed.type).trim() : '';
-                    if (parsed && eventType && allowedEventTypes.has(eventType)) {
-                        const eventName = ROUND_EVENT_TO_SOCKET_EVENT[eventType];
-                        if (!eventName) return;
+                await enqueueRuntimeTask(runtime, async () => {
+                    if (line.startsWith(ROUND_EVENT_PREFIX)) {
+                        const raw = line.slice(ROUND_EVENT_PREFIX.length);
+                        let parsed = null;
                         try {
-                            const redact = await getRedactor();
-                            const payload = {
+                            parsed = JSON.parse(raw);
+                        } catch {
+                            parsed = null;
+                        }
+
+                        const eventType = parsed?.type ? String(parsed.type).trim() : '';
+                        if (parsed && eventType && allowedEventTypes.has(eventType)) {
+                            const socketEventName = ROUND_EVENT_TO_SOCKET_EVENT[eventType];
+                            if (!socketEventName) return;
+
+                            const rawPayload = {
                                 sessionId: parsed.sessionId || sessionId,
-                                pid: parsed.pid || pid || null,
-                                timestamp: parsed.timestamp || Date.now(),
+                                pid: normalizePid(parsed.pid || pid),
+                                timestamp: Number(parsed.timestamp) || Date.now(),
                                 ...(parsed.payload || {}),
                             };
-                            io.emit(eventName, redactDeep(payload, redact));
-                            return;
-                        } catch {
-                            // redactor 异常时仍然推送
-                            io.emit(eventName, {
-                                sessionId: parsed.sessionId || sessionId,
-                                pid: parsed.pid || pid || null,
-                                timestamp: parsed.timestamp || Date.now(),
-                                ...(parsed.payload || {}),
+
+                            let sanitizedPayload = rawPayload;
+                            try {
+                                const redact = await getRedactor();
+                                sanitizedPayload = redactDeep(rawPayload, redact);
+                            } catch {
+                                sanitizedPayload = rawPayload;
+                            }
+
+                            const timestamp = Number(sanitizedPayload.timestamp) || Date.now();
+                            const event = allocateSessionEvent(runtime, {
+                                type: eventType,
+                                timestamp,
+                                pid: sanitizedPayload.pid,
+                                payload: sanitizedPayload,
                             });
+                            await persistSessionEvent(runtime, event);
+
+                            io.emit(
+                                socketEventName,
+                                normalizeSocketPayload(event, {
+                                    ...(event.payload || {}),
+                                }),
+                            );
                             return;
                         }
                     }
-                }
 
-                try {
-                    const redact = await getRedactor();
-                    io.emit(SOCKET_EVENTS.LOG, {
-                        type: streamType,
-                        data: redact(`${line}\n`),
-                        pid: pid || null,
-                        sessionId,
-                        source: 'roundtable',
-                    });
-                } catch {
-                    io.emit(SOCKET_EVENTS.LOG, {
+                    const baseLog = {
                         type: streamType,
                         data: `${line}\n`,
-                        pid: pid || null,
-                        sessionId,
                         source: 'roundtable',
+                    };
+
+                    let sanitizedLog = baseLog;
+                    try {
+                        const redact = await getRedactor();
+                        sanitizedLog = {
+                            ...baseLog,
+                            data: redact(baseLog.data),
+                        };
+                    } catch {
+                        sanitizedLog = baseLog;
+                    }
+
+                    const event = allocateSessionEvent(runtime, {
+                        type: 'log',
+                        timestamp: Date.now(),
+                        pid,
+                        payload: sanitizedLog,
                     });
-                }
+                    await persistSessionEvent(runtime, event);
+
+                    io.emit(
+                        SOCKET_EVENTS.LOG,
+                        normalizeSocketPayload(event, {
+                            ...(event.payload || {}),
+                        }),
+                    );
+                });
             };
 
-            const outBuffer = createLineBuffer((line) => void makeOnLine('stdout')(line));
-            const errBuffer = createLineBuffer((line) => void makeOnLine('stderr')(line));
+            const outBuffer = createLineBuffer((line) => void handleLine('stdout')(line));
+            const errBuffer = createLineBuffer((line) => void handleLine('stderr')(line));
 
             child.stdout.on('data', (chunk) => outBuffer.push(chunk));
             child.stderr.on('data', (chunk) => errBuffer.push(chunk));
 
-            child.on('close', (code) => {
+            child.on('close', (code, signal) => {
                 outBuffer.flush();
                 errBuffer.flush();
-                io.emit(SOCKET_EVENTS.PROCESS_EXIT, { code, pid, sessionId, source: 'roundtable' });
-                if (pid) activeProcesses.delete(pid);
+
+                void enqueueRuntimeTask(runtime, async () => {
+                    const rawCode =
+                        code === null || code === undefined || code === '' ? null : Number(code);
+                    const payload = {
+                        code: Number.isFinite(rawCode) ? rawCode : null,
+                        signal: signal || null,
+                        source: 'roundtable',
+                        killRequested: Boolean(child.__roundtableKilledByUser),
+                    };
+
+                    const event = allocateSessionEvent(runtime, {
+                        type: 'process-exit',
+                        timestamp: Date.now(),
+                        pid,
+                        payload,
+                    });
+                    await persistSessionEvent(runtime, event);
+
+                    io.emit(
+                        SOCKET_EVENTS.PROCESS_EXIT,
+                        normalizeSocketPayload(event, {
+                            ...(event.payload || {}),
+                        }),
+                    );
+                })
+                    .catch(() => null)
+                    .finally(() => {
+                        if (pid) activeProcesses.delete(pid);
+                        runtimeSessions.delete(sessionId);
+                    });
             });
 
-            child.on('error', async (err) => {
+            child.on('error', (err) => {
                 const msg = `Failed to start process: ${err.message}`;
-                try {
-                    const redact = await getRedactor();
-                    io.emit(SOCKET_EVENTS.LOG, {
-                        type: 'error',
-                        data: redact(`${msg}\n`),
-                        pid: pid || null,
-                        sessionId,
-                        source: 'roundtable',
-                    });
-                } catch {
-                    io.emit(SOCKET_EVENTS.LOG, {
+
+                void enqueueRuntimeTask(runtime, async () => {
+                    const basePayload = {
                         type: 'error',
                         data: `${msg}\n`,
-                        pid: pid || null,
-                        sessionId,
                         source: 'roundtable',
+                    };
+
+                    let payload = basePayload;
+                    try {
+                        const redact = await getRedactor();
+                        payload = {
+                            ...basePayload,
+                            data: redact(basePayload.data),
+                        };
+                    } catch {
+                        payload = basePayload;
+                    }
+
+                    const event = allocateSessionEvent(runtime, {
+                        type: 'log',
+                        timestamp: Date.now(),
+                        pid,
+                        payload,
                     });
-                }
+                    await persistSessionEvent(runtime, event);
+
+                    io.emit(
+                        SOCKET_EVENTS.LOG,
+                        normalizeSocketPayload(event, {
+                            ...(event.payload || {}),
+                        }),
+                    );
+                }).catch(() => null);
             });
 
             return res.json({ pid, sessionId });
@@ -427,15 +640,31 @@ export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses
                         ? summarizeDecisionForList(decisionData.decision)
                         : null;
 
+                    const runtime = runtimeSessions.get(id) || null;
+                    const metaPath = join(full, SESSION_META_FILE);
+                    const fileMeta = runtime ? null : await safeReadJson(metaPath);
+                    const sessionMeta = toSessionSnapshot({
+                        sessionId: id,
+                        meta: runtime?.meta || fileMeta,
+                        createdAt: st.mtime.toISOString(),
+                        hasDecision: Boolean(decisionData),
+                    });
+
                     return {
                         id,
                         createdAt: st.mtime.toISOString(),
+                        status: sessionMeta.status,
+                        pid: sessionMeta.pid,
+                        exitCode: sessionMeta.exitCode,
+                        lastSeq: sessionMeta.lastSeq,
                         hasDecision: Boolean(decisionData),
                         decision: decisionSummary,
                         urls: {
                             dir: `/outputs/roundtable/${id}/`,
                             log: `/outputs/roundtable/${id}/session.log`,
-                            decision: existsSync(decisionPath) ? `/outputs/roundtable/${id}/decision.json` : null,
+                            decision: existsSync(decisionPath)
+                                ? `/outputs/roundtable/${id}/decision.json`
+                                : null,
                         },
                     };
                 }),
@@ -445,6 +674,50 @@ export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses
             return res.json({ sessions: withStats.slice(0, limit) });
         } catch (error) {
             return res.status(500).json({ error: error?.message || String(error) });
+        }
+    });
+
+    app.get('/api/roundtable/sessions/:id/events', async (req, res) => {
+        const id = String(req.params.id || '').trim();
+        let sessionId = '';
+
+        try {
+            sessionId = normalizeSessionId(id);
+        } catch (e) {
+            return res.status(400).json({ error: e?.message || String(e) });
+        }
+        if (!sessionId) return res.status(400).json({ error: 'sessionId 不能为空' });
+
+        const after = parseSeqQuery(req.query?.after);
+        const limit = Math.max(1, Math.min(2000, Number(req.query?.limit) || 500));
+
+        const { sessionDir, eventsPath, metaPath } = buildSessionPaths(outputsDir, sessionId);
+
+        try {
+            const st = await stat(sessionDir);
+            if (!st.isDirectory()) return res.status(404).json({ error: 'Session not found' });
+
+            const runtime = runtimeSessions.get(sessionId) || null;
+            const fileMeta = runtime ? null : await safeReadJson(metaPath);
+            const decision = await safeReadJson(join(sessionDir, 'decision.json'));
+
+            const { events, nextAfter } = await readSessionEvents(eventsPath, { after, limit });
+            const snapshot = toSessionSnapshot({
+                sessionId,
+                meta: runtime?.meta || fileMeta,
+                createdAt: st.mtime.toISOString(),
+                hasDecision: Boolean(decision),
+            });
+
+            return res.json({
+                session: snapshot,
+                events,
+                nextAfter,
+            });
+        } catch (error) {
+            const msg = error?.message || String(error);
+            if (msg.includes('ENOENT')) return res.status(404).json({ error: 'Session not found' });
+            return res.status(500).json({ error: msg });
         }
     });
 
@@ -466,9 +739,17 @@ export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses
 
             const chartsDir = join(sessionDir, 'charts');
             const toolShotsDir = join(sessionDir, 'tool_shots');
+            const runtime = runtimeSessions.get(sessionId) || null;
+            const sessionMetaRaw = runtime?.meta || (await safeReadJson(join(sessionDir, SESSION_META_FILE)));
+            const decision = await safeReadJson(join(sessionDir, 'decision.json'));
+            const sessionMeta = toSessionSnapshot({
+                sessionId,
+                meta: sessionMetaRaw,
+                createdAt: st.mtime.toISOString(),
+                hasDecision: Boolean(decision),
+            });
 
-            const [decision, auditReport, newsMeta] = await Promise.all([
-                safeReadJson(join(sessionDir, 'decision.json')),
+            const [auditReport, newsMeta] = await Promise.all([
                 safeReadJson(join(sessionDir, 'audit_report.json')),
                 safeReadJson(join(sessionDir, 'news_meta.json')),
             ]);
@@ -500,6 +781,11 @@ export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses
             return res.json({
                 id: sessionId,
                 createdAt: st.mtime.toISOString(),
+                status: sessionMeta.status,
+                pid: sessionMeta.pid,
+                exitCode: sessionMeta.exitCode,
+                lastSeq: sessionMeta.lastSeq,
+                session: sessionMeta,
                 decision,
                 transcriptText,
                 sessionLog,

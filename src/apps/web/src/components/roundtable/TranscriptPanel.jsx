@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
 import MarkdownView from './MarkdownView.jsx';
+import { summarizeTranscriptEntry } from './summaryRules.js';
 
 const PHASE_LABEL = Object.freeze({
     opening: '开场',
@@ -7,6 +9,7 @@ const PHASE_LABEL = Object.freeze({
     discussion: '讨论',
     finalize: '收敛',
     summary: '总结',
+    history: '历史',
 });
 
 function normalizeTimestamp(value) {
@@ -49,9 +52,15 @@ function buildEntryKey(entry) {
     ].join('__');
 }
 
+function isMobileViewport() {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768;
+}
+
 export default function TranscriptPanel({ entries, isRunning }) {
     const containerRef = useRef(null);
     const [autoScroll, setAutoScroll] = useState(true);
+    const [expanded, setExpanded] = useState({});
     const normalizedEntries = useMemo(() => normalizeEntries(entries), [entries]);
 
     const scrollToBottom = useCallback((behavior = 'auto') => {
@@ -72,6 +81,19 @@ export default function TranscriptPanel({ entries, isRunning }) {
         });
     }, []);
 
+    const toggleExpanded = useCallback((key) => {
+        setExpanded((prev) => {
+            const nextValue = !prev[key];
+            if (isMobileViewport()) {
+                return nextValue ? { [key]: true } : {};
+            }
+            return {
+                ...prev,
+                [key]: nextValue,
+            };
+        });
+    }, []);
+
     useEffect(() => {
         if (!autoScroll) return;
         scrollToBottom();
@@ -80,16 +102,26 @@ export default function TranscriptPanel({ entries, isRunning }) {
     useEffect(() => {
         if (!normalizedEntries.length) {
             setAutoScroll(true);
+            setExpanded({});
+            return;
         }
-    }, [normalizedEntries.length]);
+
+        if (!isMobileViewport()) return;
+        const latest = normalizedEntries[normalizedEntries.length - 1];
+        const key = buildEntryKey(latest);
+        setExpanded((prev) => {
+            if (Object.keys(prev).length) return prev;
+            return { [key]: true };
+        });
+    }, [normalizedEntries]);
 
     return (
         <section className="card card-hover p-6">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                 <div>
-                    <h2 className="text-sm font-semibold">发言记录流</h2>
+                    <h2 className="text-sm font-semibold">发言时间线</h2>
                     <div className="text-xs text-text-muted mt-1">
-                        按时间顺序展示 Agent 发言，支持实时追加
+                        默认展示摘要，按需展开全文
                     </div>
                 </div>
 
@@ -133,9 +165,12 @@ export default function TranscriptPanel({ entries, isRunning }) {
                             ? `第 ${Number(entry.turn)} 轮`
                             : '轮次未知';
                         const isFiltered = Boolean(entry.filtered);
+                        const key = buildEntryKey(entry);
+                        const summary = summarizeTranscriptEntry(entry);
+                        const isExpanded = Boolean(expanded[key]);
 
                         return (
-                            <article key={buildEntryKey(entry)} className="rt-transcript-item">
+                            <article key={key} className="rt-transcript-item">
                                 <header className="flex flex-wrap items-start justify-between gap-3">
                                     <div className="space-y-2 min-w-0">
                                         <div className="font-semibold text-sm truncate">
@@ -146,6 +181,12 @@ export default function TranscriptPanel({ entries, isRunning }) {
                                             <span className="badge badge-muted">{turnText}</span>
                                             <span className="badge badge-muted">{phase}</span>
                                             <span className="badge badge-muted">{provider}</span>
+                                            {summary.isDebateNode ? (
+                                                <span className="badge badge-accent">
+                                                    <i className="fas fa-people-arrows"></i>
+                                                    争论节点
+                                                </span>
+                                            ) : null}
                                         </div>
                                     </div>
 
@@ -154,15 +195,60 @@ export default function TranscriptPanel({ entries, isRunning }) {
                                     </div>
                                 </header>
 
-                                {isFiltered ? (
-                                    <div className="rounded-xl border border-accent/20 bg-accent/10 px-4 py-3 text-xs text-text-muted mt-4">
-                                        该发言经审计后被过滤，内容不对外展示。
-                                    </div>
-                                ) : (
-                                    <div className="mt-4">
-                                        <MarkdownView markdown={entry.text || ''} />
-                                    </div>
-                                )}
+                                <div className="mt-4 space-y-2">
+                                    <div className="text-sm font-medium">{summary.title}</div>
+                                    {summary.highlights.length ? (
+                                        <ul className="text-xs text-text-muted space-y-1">
+                                            {summary.highlights.map((line) => (
+                                                <li key={line} className="leading-relaxed">
+                                                    - {line}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <div className="text-xs text-text-muted italic">
+                                            暂无可提炼摘要
+                                        </div>
+                                    )}
+
+                                    {summary.tags.length ? (
+                                        <div className="flex flex-wrap gap-2 pt-1">
+                                            {summary.tags.map((tag) => (
+                                                <span key={tag} className="badge badge-muted">
+                                                    {tag}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    ) : null}
+                                </div>
+
+                                <div className="mt-4">
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => toggleExpanded(key)}
+                                    >
+                                        <i
+                                            className={[
+                                                'fas',
+                                                isExpanded ? 'fa-chevron-up' : 'fa-chevron-down',
+                                            ].join(' ')}
+                                        ></i>
+                                        {isExpanded ? '收起全文' : '查看全文'}
+                                    </button>
+                                </div>
+
+                                {isExpanded ? (
+                                    isFiltered ? (
+                                        <div className="rounded-xl border border-accent/20 bg-accent/10 px-4 py-3 text-xs text-text-muted mt-4">
+                                            该发言经审计后被过滤，内容不对外展示。
+                                        </div>
+                                    ) : (
+                                        <div className="mt-4">
+                                            <MarkdownView markdown={entry.text || ''} />
+                                        </div>
+                                    )
+                                ) : null}
                             </article>
                         );
                     })

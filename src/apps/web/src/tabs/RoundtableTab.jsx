@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import LogTerminal from '../components/LogTerminal.jsx';
+
 import AgentCard from '../components/roundtable/AgentCard.jsx';
+import DecisionResultCard from '../components/roundtable/DecisionResultCard.jsx';
 import TranscriptPanel from '../components/roundtable/TranscriptPanel.jsx';
+import LogTerminal from '../components/LogTerminal.jsx';
 import { authedFetch } from '../composables/useAuth.js';
 import { useRoundtable } from '../composables/useRoundtable.js';
 import { useSocket } from '../composables/useSocket.js';
@@ -16,6 +18,14 @@ function normalizeTimestamp(value) {
     return Date.now();
 }
 
+const SESSION_STATUS_META = Object.freeze({
+    running: { label: '运行中', className: 'badge-accent', icon: 'fa-spinner fa-spin' },
+    completed: { label: '已完成', className: 'badge-success', icon: 'fa-circle-check' },
+    failed: { label: '失败', className: 'badge-error', icon: 'fa-circle-xmark' },
+    killed: { label: '已终止', className: 'badge-muted', icon: 'fa-hand' },
+    incomplete: { label: '不完整', className: 'badge-muted', icon: 'fa-circle-question' },
+});
+
 export default function RoundtableTab() {
     const { socket, isConnected } = useSocket();
 
@@ -29,41 +39,20 @@ export default function RoundtableTab() {
         skipLiquidation: false,
         skipMcp: false,
     });
-
-    const [pid, setPid] = useState(null);
-    const [sessionId, setSessionId] = useState(null);
     const [error, setError] = useState('');
+    const [isStarting, setIsStarting] = useState(false);
+    const [isPanelOpen, setIsPanelOpen] = useState(false);
 
-    const roundtable = useRoundtable({ sessionId });
-
-    const isRunning = Boolean(pid) && !roundtable.processExit;
-
+    const roundtable = useRoundtable();
     const timeframes = useMemo(() => ['5m', '15m', '30m', '1h', '4h', '1d'], []);
 
-    const displaySessionId = useMemo(() => {
-        if (sessionId) return sessionId;
-        if (roundtable.processExit?.sessionId) return roundtable.processExit.sessionId;
-        return null;
-    }, [roundtable.processExit?.sessionId, sessionId]);
+    const isRunning = roundtable.isSessionRunning;
+    const activeSessionId = roundtable.selectedSessionId;
+    const activePid = roundtable.sessionMeta?.pid || null;
 
-    const displayPid = useMemo(() => {
-        if (pid) return pid;
-        if (roundtable.processExit?.pid) return roundtable.processExit.pid;
-        return null;
-    }, [pid, roundtable.processExit?.pid]);
-
-    const lastDecision = useMemo(() => {
-        const list = roundtable.decisions || [];
-        if (!list.length) return null;
-        return list[list.length - 1];
-    }, [roundtable.decisions]);
-
-    const decisionPreview = useMemo(() => {
-        if (!lastDecision) return '';
-        const value = lastDecision?.json;
-        if (value && typeof value === 'object') return JSON.stringify(value, null, 2);
-        return String(value ?? '');
-    }, [lastDecision]);
+    const statusMeta =
+        SESSION_STATUS_META[roundtable.sessionMeta?.status] ||
+        SESSION_STATUS_META.incomplete;
 
     const transcriptEntries = useMemo(() => {
         const source = Array.isArray(roundtable.agentSpeaks)
@@ -83,6 +72,38 @@ export default function RoundtableTab() {
                 return left._index - right._index;
             });
     }, [roundtable.agentSpeaks]);
+
+    const finalDecision = useMemo(() => {
+        for (let i = roundtable.decisions.length - 1; i >= 0; i -= 1) {
+            const item = roundtable.decisions[i];
+            if (String(item?.stage || '').trim() === 'final') return item;
+        }
+        return null;
+    }, [roundtable.decisions]);
+
+    const draftDecision = useMemo(() => {
+        if (finalDecision) return null;
+        for (let i = roundtable.decisions.length - 1; i >= 0; i -= 1) {
+            const item = roundtable.decisions[i];
+            if (String(item?.stage || '').trim() === 'draft') return item;
+        }
+        return null;
+    }, [finalDecision, roundtable.decisions]);
+
+    const configSummary = useMemo(() => {
+        return [
+            `symbol=${config.symbol}`,
+            `bars=${config.bars}`,
+            `primary=${config.primary}`,
+            `aux=${config.aux}`,
+            config.skipNews ? 'skipNews=1' : null,
+            config.skipLlm ? 'skipLlm=1' : null,
+            config.skipLiquidation ? 'skipLiquidation=1' : null,
+            config.skipMcp ? 'skipMcp=1' : null,
+        ]
+            .filter(Boolean)
+            .join('  ');
+    }, [config]);
 
     const agentCards = useMemo(() => {
         const byName = new Map();
@@ -140,11 +161,9 @@ export default function RoundtableTab() {
         }
 
         setError('');
-        roundtable.clear();
+        setIsStarting(true);
 
         const nextSessionId = newSessionId();
-        setSessionId(nextSessionId);
-        setPid(null);
 
         try {
             const response = await authedFetch('/api/roundtable/run', {
@@ -172,127 +191,198 @@ export default function RoundtableTab() {
                 throw new Error(msg);
             }
 
-            if (!payload?.pid || !payload?.sessionId) {
-                throw new Error('后端返回缺少 pid/sessionId');
+            if (!payload?.sessionId) {
+                throw new Error('后端返回缺少 sessionId');
             }
 
-            setPid(payload.pid);
-            setSessionId(payload.sessionId);
+            await roundtable.loadSessions().catch(() => null);
+            await roundtable.selectSession(payload.sessionId, { replace: true });
+            setIsPanelOpen(false);
         } catch (caught) {
-            setPid(null);
-            setSessionId(null);
             setError(caught?.message || String(caught));
+        } finally {
+            setIsStarting(false);
         }
     }, [config, isRunning, roundtable]);
 
     const stopRoundtable = useCallback(() => {
-        if (!pid) return;
-        socket.emit('kill-process', pid);
-    }, [pid, socket]);
+        if (!activePid) return;
+        socket.emit('kill-process', activePid);
+    }, [activePid, socket]);
+
+    const refreshSessions = useCallback(async () => {
+        setError('');
+        await roundtable.loadSessions();
+        if (activeSessionId) {
+            await roundtable.replayFrom(roundtable.lastSeq, {
+                sessionId: activeSessionId,
+                replace: false,
+                includeFallback: false,
+            });
+        }
+    }, [activeSessionId, roundtable]);
 
     useEffect(() => {
         function onProcessKilled(killedPid) {
-            if (!pid) return;
-            if (String(killedPid) !== String(pid)) return;
-            setPid(null);
+            if (!activePid) return;
+            if (String(killedPid) !== String(activePid)) return;
+            void refreshSessions().catch(() => null);
         }
 
         socket.on('process-killed', onProcessKilled);
         return () => socket.off('process-killed', onProcessKilled);
-    }, [pid, socket]);
-
-    useEffect(() => {
-        if (!roundtable.processExit) return;
-        setPid(null);
-    }, [roundtable.processExit]);
-
-    const disabled = isRunning;
+    }, [activePid, refreshSessions, socket]);
 
     return (
         <div className="space-y-6">
-            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-                <div>
-                    <div className="text-xs tracking-wide text-text-muted">
-                        Trade Roundtable
-                    </div>
-                    <h1 className="text-2xl md:text-3xl font-bold mt-2">圆桌</h1>
-
-                    <div className="text-xs text-text-muted mt-2 space-y-1">
-                        {displaySessionId ? (
-                            <div>
-                                Session:{' '}
-                                <span className="font-mono">{displaySessionId}</span>
-                            </div>
-                        ) : null}
-                        {displayPid ? (
-                            <div>
-                                PID: <span className="font-mono">{displayPid}</span>
-                            </div>
-                        ) : null}
-                    </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                    <span
-                        className={[
-                            'badge',
-                            isConnected ? 'badge-success' : 'badge-error',
-                        ].join(' ')}
-                    >
-                        <i className="fas fa-signal"></i>
-                        {isConnected ? 'Socket 已连接' : 'Socket 未连接'}
-                    </span>
-
-                    <span
-                        className={[
-                            'badge',
-                            isRunning ? 'badge-accent' : 'badge-muted',
-                        ].join(' ')}
-                    >
-                        <i
-                            className={[
-                                'fas',
-                                isRunning ? 'fa-spinner fa-spin' : 'fa-circle',
-                            ].join(' ')}
-                        ></i>
-                        {isRunning ? '运行中' : '空闲'}
-                    </span>
-
-                    {roundtable.processExit ? (
-                        <span className="badge badge-muted">
-                            <i className="fas fa-flag-checkered"></i>
-                            exit {roundtable.processExit.code ?? '-'}
-                        </span>
-                    ) : null}
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="card card-hover p-6">
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-sm font-semibold">启动面板</h2>
-                        <span className="text-xs text-text-muted">Runner</span>
-                    </div>
-
-                    <div className="space-y-4">
-                        <div>
-                            <label className="form-label">交易对 Symbol</label>
-                            <input
-                                value={config.symbol}
-                                onChange={(e) =>
-                                    setConfig((prev) => ({
-                                        ...prev,
-                                        symbol: e.target.value,
-                                    }))
-                                }
-                                type="text"
-                                className="form-input font-mono"
-                                placeholder="BTCUSDT"
-                                disabled={disabled}
-                            />
+            <section className="card card-hover p-6">
+                <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+                    <div>
+                        <div className="text-xs tracking-wide text-text-muted">Trade Roundtable</div>
+                        <h1 className="text-2xl md:text-3xl font-bold mt-2">圆桌</h1>
+                        <div className="text-xs text-text-muted mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                            <span>
+                                Session: <span className="font-mono">{activeSessionId || '--'}</span>
+                            </span>
+                            <span>
+                                PID: <span className="font-mono">{activePid || '--'}</span>
+                            </span>
+                            <span>
+                                Seq: <span className="font-mono">{roundtable.lastSeq}</span>
+                            </span>
                         </div>
+                    </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span className={['badge', isConnected ? 'badge-success' : 'badge-error'].join(' ')}>
+                            <i className="fas fa-signal"></i>
+                            {isConnected ? 'Socket 已连接' : 'Socket 未连接'}
+                        </span>
+
+                        <span className={['badge', statusMeta.className].join(' ')}>
+                            <i className={['fas', statusMeta.icon].join(' ')}></i>
+                            {statusMeta.label}
+                        </span>
+
+                        {roundtable.isReplaying ? (
+                            <span className="badge badge-muted">
+                                <i className="fas fa-rotate fa-spin"></i>
+                                回放中
+                            </span>
+                        ) : null}
+                    </div>
+                </div>
+
+                <div className="mt-5 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto] gap-3 items-end">
+                    <div>
+                        <label className="form-label">会话选择</label>
+                        <select
+                            className="form-input font-mono"
+                            value={activeSessionId || ''}
+                            onChange={(e) => {
+                                const id = e.target.value;
+                                if (!id) return;
+                                void roundtable.selectSession(id, { replace: true }).catch((caught) => {
+                                    setError(caught?.message || String(caught));
+                                });
+                            }}
+                        >
+                            {!roundtable.sessions.length ? <option value="">暂无会话</option> : null}
+                            {roundtable.sessions.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                    {item.id} · {item.status || 'incomplete'}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => {
+                                void refreshSessions().catch((caught) => {
+                                    setError(caught?.message || String(caught));
+                                });
+                            }}
+                        >
+                            <i className="fas fa-rotate-right"></i>
+                            刷新
+                        </button>
+
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => setIsPanelOpen((prev) => !prev)}
+                        >
+                            <i className={['fas', isPanelOpen ? 'fa-chevron-up' : 'fa-sliders'].join(' ')}></i>
+                            {isPanelOpen ? '收起启动面板' : '展开启动面板'}
+                        </button>
+
+                        <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={startRoundtable}
+                            disabled={isRunning || isStarting}
+                        >
+                            <i className={['fas', isStarting ? 'fa-spinner fa-spin' : 'fa-play'].join(' ')}></i>
+                            启动
+                        </button>
+
+                        <button
+                            type="button"
+                            className="btn btn-danger"
+                            onClick={stopRoundtable}
+                            disabled={!isRunning || !activePid}
+                        >
+                            <i className="fas fa-stop"></i>
+                            终止
+                        </button>
+                    </div>
+                </div>
+
+                {!isPanelOpen ? (
+                    <div className="mt-4 rounded-xl border border-border-light/10 bg-black/20 px-4 py-3 text-xs text-text-muted font-mono whitespace-pre-wrap break-all">
+                        {configSummary}
+                    </div>
+                ) : (
+                    <div className="mt-5 card p-5">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div>
+                                <label className="form-label">交易对 Symbol</label>
+                                <input
+                                    value={config.symbol}
+                                    onChange={(e) =>
+                                        setConfig((prev) => ({
+                                            ...prev,
+                                            symbol: e.target.value,
+                                        }))
+                                    }
+                                    type="text"
+                                    className="form-input font-mono"
+                                    placeholder="BTCUSDT"
+                                    disabled={isRunning || isStarting}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="form-label">K 线数量 Bars</label>
+                                <input
+                                    value={config.bars}
+                                    onChange={(e) =>
+                                        setConfig((prev) => ({
+                                            ...prev,
+                                            bars: Number(e.target.value || 0),
+                                        }))
+                                    }
+                                    type="number"
+                                    min="50"
+                                    max="5000"
+                                    className="form-input font-mono"
+                                    disabled={isRunning || isStarting}
+                                />
+                            </div>
+
                             <div>
                                 <label className="form-label">主周期 Primary</label>
                                 <select
@@ -304,7 +394,7 @@ export default function RoundtableTab() {
                                         }))
                                     }
                                     className="form-input font-mono"
-                                    disabled={disabled}
+                                    disabled={isRunning || isStarting}
                                 >
                                     {timeframes.map((tf) => (
                                         <option key={tf} value={tf}>
@@ -313,6 +403,7 @@ export default function RoundtableTab() {
                                     ))}
                                 </select>
                             </div>
+
                             <div>
                                 <label className="form-label">辅助周期 Aux</label>
                                 <select
@@ -324,7 +415,7 @@ export default function RoundtableTab() {
                                         }))
                                     }
                                     className="form-input font-mono"
-                                    disabled={disabled}
+                                    disabled={isRunning || isStarting}
                                 >
                                     {timeframes.map((tf) => (
                                         <option key={tf} value={tf}>
@@ -335,32 +426,8 @@ export default function RoundtableTab() {
                             </div>
                         </div>
 
-                        <div>
-                            <label className="form-label">K 线数量 Bars</label>
-                            <input
-                                value={config.bars}
-                                onChange={(e) =>
-                                    setConfig((prev) => ({
-                                        ...prev,
-                                        bars: Number(e.target.value || 0),
-                                    }))
-                                }
-                                type="number"
-                                min="50"
-                                max="5000"
-                                className="form-input font-mono"
-                                disabled={disabled}
-                            />
-                            <div className="form-hint">范围：50 ~ 5000</div>
-                        </div>
-
-                        <div className="pt-4 border-t border-border-light/10 space-y-3">
-                            <label
-                                className={[
-                                    'switch',
-                                    disabled ? 'opacity-60 cursor-not-allowed' : '',
-                                ].join(' ')}
-                            >
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                            <label className="switch">
                                 <input
                                     checked={config.skipNews}
                                     onChange={(e) =>
@@ -370,23 +437,16 @@ export default function RoundtableTab() {
                                         }))
                                     }
                                     type="checkbox"
-                                    disabled={disabled}
+                                    disabled={isRunning || isStarting}
                                 />
                                 <span className="switch-control">
                                     <span className="switch-track"></span>
                                     <span className="switch-thumb"></span>
                                 </span>
-                                <span className="text-sm text-text-muted">
-                                    跳过新闻
-                                </span>
+                                <span className="text-sm text-text-muted">跳过新闻</span>
                             </label>
 
-                            <label
-                                className={[
-                                    'switch',
-                                    disabled ? 'opacity-60 cursor-not-allowed' : '',
-                                ].join(' ')}
-                            >
+                            <label className="switch">
                                 <input
                                     checked={config.skipLlm}
                                     onChange={(e) =>
@@ -396,23 +456,16 @@ export default function RoundtableTab() {
                                         }))
                                     }
                                     type="checkbox"
-                                    disabled={disabled}
+                                    disabled={isRunning || isStarting}
                                 />
                                 <span className="switch-control">
                                     <span className="switch-track"></span>
                                     <span className="switch-thumb"></span>
                                 </span>
-                                <span className="text-sm text-text-muted">
-                                    跳过模型调用
-                                </span>
+                                <span className="text-sm text-text-muted">跳过模型调用</span>
                             </label>
 
-                            <label
-                                className={[
-                                    'switch',
-                                    disabled ? 'opacity-60 cursor-not-allowed' : '',
-                                ].join(' ')}
-                            >
+                            <label className="switch">
                                 <input
                                     checked={config.skipLiquidation}
                                     onChange={(e) =>
@@ -422,23 +475,16 @@ export default function RoundtableTab() {
                                         }))
                                     }
                                     type="checkbox"
-                                    disabled={disabled}
+                                    disabled={isRunning || isStarting}
                                 />
                                 <span className="switch-control">
                                     <span className="switch-track"></span>
                                     <span className="switch-thumb"></span>
                                 </span>
-                                <span className="text-sm text-text-muted">
-                                    跳过清算地图截图
-                                </span>
+                                <span className="text-sm text-text-muted">跳过清算截图</span>
                             </label>
 
-                            <label
-                                className={[
-                                    'switch',
-                                    disabled ? 'opacity-60 cursor-not-allowed' : '',
-                                ].join(' ')}
-                            >
+                            <label className="switch">
                                 <input
                                     checked={config.skipMcp}
                                     onChange={(e) =>
@@ -448,53 +494,39 @@ export default function RoundtableTab() {
                                         }))
                                     }
                                     type="checkbox"
-                                    disabled={disabled}
+                                    disabled={isRunning || isStarting}
                                 />
                                 <span className="switch-control">
                                     <span className="switch-track"></span>
                                     <span className="switch-thumb"></span>
                                 </span>
-                                <span className="text-sm text-text-muted">
-                                    跳过 MCP
-                                </span>
+                                <span className="text-sm text-text-muted">跳过 MCP</span>
                             </label>
                         </div>
-
-                        {error ? <div className="form-error">{error}</div> : null}
-
-                        <div className="pt-2 flex flex-col sm:flex-row gap-3">
-                            <button
-                                type="button"
-                                className="btn btn-primary"
-                                onClick={startRoundtable}
-                                disabled={disabled}
-                            >
-                                <i className="fas fa-play"></i>
-                                启动圆桌
-                            </button>
-
-                            {pid ? (
-                                <button
-                                    type="button"
-                                    className="btn btn-danger"
-                                    onClick={stopRoundtable}
-                                >
-                                    <i className="fas fa-stop"></i>
-                                    终止
-                                </button>
-                            ) : null}
-                        </div>
                     </div>
-                </div>
+                )}
 
-                <div className="card card-hover p-6">
+                {error ? <div className="form-error mt-4">{error}</div> : null}
+            </section>
+
+            <DecisionResultCard
+                finalDecision={finalDecision}
+                draftDecision={draftDecision}
+                processExit={roundtable.processExit}
+                isRunning={isRunning}
+            />
+
+            <TranscriptPanel entries={transcriptEntries} isRunning={isRunning} />
+
+            <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                <div className="card card-hover p-6 xl:col-span-1">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-sm font-semibold">Agent 状态</h2>
-                        <span className="text-xs text-text-muted">Roster</span>
+                        <span className="text-xs text-text-muted">Compact</span>
                     </div>
 
                     {agentCards.length ? (
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                        <div className="space-y-3">
                             {agentCards.map((agent) => (
                                 <AgentCard
                                     key={agent.name}
@@ -511,41 +543,29 @@ export default function RoundtableTab() {
                         </div>
                     ) : (
                         <div className="text-sm text-text-muted italic rounded-xl border border-dashed border-border-light/10 px-4 py-6 text-center">
-                            会议开始后会在这里显示 Agent 身份卡片
+                            当前会话尚无发言
                         </div>
                     )}
                 </div>
-            </div>
 
-            <TranscriptPanel entries={transcriptEntries} isRunning={isRunning} />
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="card card-hover p-6">
+                <div className="card card-hover p-6 xl:col-span-2">
                     <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-sm font-semibold">终端日志</h2>
-                        <span className="text-xs text-text-muted">Logs</span>
-                    </div>
-                    <LogTerminal logs={roundtable.logs} className="h-[360px]" />
-                </div>
-
-                <div className="card card-hover p-6">
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-sm font-semibold">事件概览</h2>
-                        <span className="text-xs text-text-muted">Events</span>
+                        <h2 className="text-sm font-semibold">事件与日志</h2>
+                        <span className="text-xs text-text-muted">Diagnostics</span>
                     </div>
 
                     <div className="flex flex-wrap gap-2 mb-4">
                         <span className="badge badge-muted">
                             <i className="fas fa-user"></i>
-                            Agent 发言 {roundtable.agentSpeaks.length}
+                            发言 {roundtable.agentSpeaks.length}
                         </span>
                         <span className="badge badge-muted">
                             <i className="fas fa-wrench"></i>
-                            工具调用 {roundtable.toolCalls.length}
+                            工具 {roundtable.toolCalls.length}
                         </span>
                         <span className="badge badge-muted">
                             <i className="fas fa-chart-line"></i>
-                            信念更新 {roundtable.beliefUpdates.length}
+                            信念 {roundtable.beliefUpdates.length}
                         </span>
                         <span className="badge badge-muted">
                             <i className="fas fa-gavel"></i>
@@ -553,33 +573,9 @@ export default function RoundtableTab() {
                         </span>
                     </div>
 
-                    {roundtable.processExit ? (
-                        <div className="text-xs text-text-muted mb-4">
-                            退出时间:{' '}
-                            <span className="font-mono">
-                                {new Date(
-                                    roundtable.processExit.timestamp,
-                                ).toLocaleString('zh-CN')}
-                            </span>
-                        </div>
-                    ) : null}
-
-                    {lastDecision ? (
-                        <div className="space-y-3">
-                            <div className="text-xs tracking-wide text-text-muted">
-                                最新决策 JSON
-                            </div>
-                            <pre className="terminal p-4 overflow-auto scrollbar max-h-[320px] whitespace-pre-wrap break-all">
-                                {decisionPreview || '(empty)'}
-                            </pre>
-                        </div>
-                    ) : (
-                        <div className="text-xs text-text-muted italic">
-                            暂无决策事件
-                        </div>
-                    )}
+                    <LogTerminal logs={roundtable.logs} className="h-[300px]" />
                 </div>
-            </div>
+            </section>
         </div>
     );
 }

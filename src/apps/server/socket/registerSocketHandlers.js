@@ -12,6 +12,7 @@ export function registerSocketHandlers({ io, activeProcesses }) {
             if (!activeProcesses.has(pid)) return;
             const child = activeProcesses.get(pid);
             try {
+                child.__roundtableKilledByUser = true;
                 child.kill();
             } catch {
                 // 忽略
@@ -21,4 +22,3 @@ export function registerSocketHandlers({ io, activeProcesses }) {
         });
     });
 }
-
