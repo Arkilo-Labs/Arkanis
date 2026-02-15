@@ -214,7 +214,10 @@ export default function RunTab() {
     }, []);
 
     useEffect(() => {
-        const onLog = (msg) => addLog(msg.type, msg.data);
+        const onLog = (msg) => {
+            if (msg?.source === 'roundtable') return;
+            addLog(msg.type, msg.data);
+        };
 
         const onProcessExit = async (msg) => {
             if (!pidRef.current || msg.pid !== pidRef.current) return;

@@ -111,7 +111,10 @@ export default function BacktestTab() {
     }, [socket]);
 
     useEffect(() => {
-        const onLog = (msg) => addLog(msg.type, msg.data);
+        const onLog = (msg) => {
+            if (msg?.source === 'roundtable') return;
+            addLog(msg.type, msg.data);
+        };
 
         const onProcessExit = (msg) => {
             if (!pidRef.current || msg.pid !== pidRef.current) return;

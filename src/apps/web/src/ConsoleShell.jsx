@@ -4,6 +4,7 @@ import AIProvidersTab from './tabs/AIProvidersTab.jsx';
 import BacktestTab from './tabs/BacktestTab.jsx';
 import ConfigTab from './tabs/ConfigTab.jsx';
 import MainTab from './tabs/MainTab.jsx';
+import RoundtableTab from './tabs/RoundtableTab.jsx';
 import RunTab from './tabs/RunTab.jsx';
 import { useAuth } from './composables/useAuth.js';
 import { useSocket } from './composables/useSocket.js';
@@ -18,6 +19,7 @@ export default function ConsoleShell() {
         () => [
             { id: 'main', label: '策略' },
             { id: 'run', label: '自动运行' },
+            { id: 'roundtable', label: '圆桌' },
             { id: 'backtest', label: '回测' },
             { id: 'config', label: '配置' },
             { id: 'ai-providers', label: '模型' },
@@ -79,6 +81,9 @@ export default function ConsoleShell() {
                     </div>
                     <div className={currentTab === 'run' ? '' : 'hidden'}>
                         <RunTab />
+                    </div>
+                    <div className={currentTab === 'roundtable' ? '' : 'hidden'}>
+                        <RoundtableTab />
                     </div>
                     <div className={currentTab === 'backtest' ? '' : 'hidden'}>
                         <BacktestTab />
