@@ -5,8 +5,8 @@
  * 从 PostgreSQL 获取 K 线数据，渲染图表，调用 Lens API 分析，生成带标注的决策图表。
  *
  * 用法:
- *   node src/cli/lens/main.js --symbol BTCUSDT --timeframe 5m --bars 200
- *   node src/cli/lens/main.js --symbol BTCUSDT --timeframe 1h --bars 200 --enable-4x-chart
+ *   node src/agents/lens/main.js --symbol BTCUSDT --timeframe 5m --bars 200
+ *   node src/agents/lens/main.js --symbol BTCUSDT --timeframe 1h --bars 200 --enable-4x-chart
  */
 
 import { Command } from 'commander';

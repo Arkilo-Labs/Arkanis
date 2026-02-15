@@ -5,7 +5,7 @@
  * 对指定时间范围内的每根 K 线进行 Lens 分析，记录进场点、出场点、止盈止损等信息。
  *
  * 用法:
- *   node src/cli/lens/backtest.js --symbol BTCUSDT --timeframe 5m --start-time "2024-12-01" --end-time "2024-12-13" --workers 4
+ *   node src/agents/lens/backtest.js --symbol BTCUSDT --timeframe 5m --start-time "2024-12-01" --end-time "2024-12-13" --workers 4
  */
 
 import { Command } from 'commander';

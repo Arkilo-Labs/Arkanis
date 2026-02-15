@@ -8,7 +8,7 @@
 
 ### 现状：可跑的实验环境
 
-- **脚本驱动**：`src/cli/lens/main.js` / `src/cli/lens/backtest.js` 负责拉 K 线、渲图、调用 Lens、产出结果。
+- **脚本驱动**：`src/agents/lens/main.js` / `src/agents/lens/backtest.js` 负责拉 K 线、渲图、调用 Lens、产出结果。
 - **数据底座**：PostgreSQL 双库（`arkanis_core` + `arkanis_market_data`）已落地，迁移体系已落地。
 - **开发控制台**：`src/apps/server/` + `src/apps/web/` 提供“运行脚本 / 日志推送 / 配置编辑 / Provider 管理 / Telegram 推送”等能力。
 
@@ -155,7 +155,7 @@ pnpm main -- --symbol BTCUSDT --timeframe 1h --bars 200 --enable-4x-chart
 pnpm main -- --skip-png --skip-lens
 ```
 
-`src/cli/lens/main.js` 参数一览：
+`src/agents/lens/main.js` 参数一览：
 
 | 参数 | 说明 | 默认值 |
 |---|---|---|
@@ -182,7 +182,7 @@ pnpm backtest -- --symbol BTCUSDT --timeframe 1h --start-time "2024-12-01" --end
 pnpm backtest -- --start-time "2024-12-01" --end-time "2024-12-03" --save-charts
 ```
 
-`src/cli/lens/backtest.js` 参数一览：
+`src/agents/lens/backtest.js` 参数一览：
 
 | 参数 | 说明 | 默认值 |
 |---|---|---|
@@ -217,7 +217,7 @@ server 暴露了这些能力（见 `src/apps/server/index.mjs`）：
 以 `http://localhost:3000` 为例（按需改 `PORT`）：
 
 ```bash
-# 运行 main 脚本（args 会原样透传给 src/cli/lens/main.js）
+# 运行 main 脚本（args 会原样透传给 src/agents/lens/main.js）
 curl -X POST http://localhost:3000/api/run-script \
   -H "Content-Type: application/json" \
   -d "{\"script\":\"main\",\"args\":[\"--symbol\",\"BTCUSDT\",\"--timeframe\",\"5m\",\"--bars\",\"200\"]}"
@@ -341,7 +341,7 @@ pnpm db:migrate:market
                     │ Socket.IO(log/config-reload/providers-updated)
                     ▼
             ┌───────────────┐        ┌──────────────────────┐
-            │ server (Express)│ spawn │ src/cli/lens/main/backtest │
+            │ server (Express)│ spawn │ src/agents/lens/main/backtest │
             │ /api/run-script │──────▶│ 渲图 + Lens + 产出结果 │
             └───────┬────────┘        └───────────┬──────────┘
                     │                              │
