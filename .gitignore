@@ -4,6 +4,7 @@ node_modules/
 # 环境配置
 .env
 deploy/searxng-firecrawl/.env
+deploy/searxng-firecrawl/searxng/settings.local.yml
 
 # 输出目录
 outputs/

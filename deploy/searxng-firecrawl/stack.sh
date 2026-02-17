@@ -4,7 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$SCRIPT_DIR/.env"
 ENV_EXAMPLE_FILE="$SCRIPT_DIR/.env.example"
-SEARXNG_SETTINGS_FILE="$SCRIPT_DIR/searxng/settings.yml"
+SEARXNG_SETTINGS_TEMPLATE_FILE="$SCRIPT_DIR/searxng/settings.yml"
+SEARXNG_SETTINGS_LOCAL_FILE="$SCRIPT_DIR/searxng/settings.local.yml"
 
 die() {
   echo "错误：$*" >&2
@@ -95,11 +96,17 @@ ensure_env() {
     die "SEARXNG_PORT 不是合法端口：$port"
   fi
 
+  [[ -f "$SEARXNG_SETTINGS_TEMPLATE_FILE" ]] || die "缺少文件：$SEARXNG_SETTINGS_TEMPLATE_FILE"
+
+  if [[ ! -f "$SEARXNG_SETTINGS_LOCAL_FILE" ]]; then
+    cp "$SEARXNG_SETTINGS_TEMPLATE_FILE" "$SEARXNG_SETTINGS_LOCAL_FILE"
+  fi
+
   local new_secret=""
-  if grep -q 'secret_key:[[:space:]]*\"ultrasecretkey\"' "$SEARXNG_SETTINGS_FILE" 2>/dev/null; then
+  if grep -q 'secret_key:[[:space:]]*\"ultrasecretkey\"' "$SEARXNG_SETTINGS_LOCAL_FILE" 2>/dev/null; then
     new_secret="$(random_hex 32)"
   fi
-  update_settings_yml "$port" "$new_secret" "$SEARXNG_SETTINGS_FILE"
+  update_settings_yml "$port" "$new_secret" "$SEARXNG_SETTINGS_LOCAL_FILE"
 }
 
 cmd="${1:-}"

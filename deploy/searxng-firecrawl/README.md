@@ -27,7 +27,7 @@ powershell -ExecutionPolicy Bypass -File .\deploy\searxng-firecrawl\stack.ps1 up
 
 - 生成 `deploy/searxng-firecrawl/.env`
 - 自动填充 `BULL_AUTH_KEY`
-- 如果 `searxng/settings.yml` 还是占位 `ultrasecretkey`，会自动替换为随机值
+- 生成 `searxng/settings.local.yml`（从模板复制），并写入随机 `secret_key`
 
 ## 如果拉取镜像报 denied（GHCR）
 

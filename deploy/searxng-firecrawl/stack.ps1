@@ -65,7 +65,8 @@ function UpdateSearxngSettings([string]$File, [int]$Port, [string]$SecretKey) {
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $EnvFile = Join-Path $ScriptDir ".env"
 $EnvExampleFile = Join-Path $ScriptDir ".env.example"
-$SettingsFile = Join-Path $ScriptDir "searxng/settings.yml"
+$SettingsTemplateFile = Join-Path $ScriptDir "searxng/settings.yml"
+$SettingsLocalFile = Join-Path $ScriptDir "searxng/settings.local.yml"
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { Fail "未找到命令：docker" }
 
@@ -123,7 +124,11 @@ switch ($Command) {
     $port = 0
     if (-not [int]::TryParse($portStr, [ref]$port)) { Fail "SEARXNG_PORT 不是合法端口：$portStr" }
 
-    UpdateSearxngSettings $SettingsFile $port (RandomHex 32)
+    if (-not (Test-Path -LiteralPath $SettingsTemplateFile)) { Fail "缺少文件：$SettingsTemplateFile" }
+    if (-not (Test-Path -LiteralPath $SettingsLocalFile)) {
+      Copy-Item -LiteralPath $SettingsTemplateFile -Destination $SettingsLocalFile
+    }
+    UpdateSearxngSettings $SettingsLocalFile $port (RandomHex 32)
 
     Push-Location $ScriptDir
     try {
