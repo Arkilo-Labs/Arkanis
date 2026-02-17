@@ -7,7 +7,7 @@ deploy/searxng-firecrawl/.env
 deploy/searxng-firecrawl/searxng/settings.local.yml
 
 # 输出目录
-outputs/
+/outputs/
 src/apps/web_console/dist/
 
 # 系统文件
