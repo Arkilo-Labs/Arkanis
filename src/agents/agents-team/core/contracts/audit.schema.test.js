@@ -157,3 +157,13 @@ test('appendJsonlLine：拒绝写入不可序列化值', async () => {
     await assert.rejects(() => appendJsonlLine(filePath, undefined), /JSON 序列化失败/);
 });
 
+test('appendJsonlLine：序列化异常返回稳定错误', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'arkanis-audit-p3-'));
+    const filePath = path.join(dir, 'x.jsonl');
+
+    await assert.rejects(() => appendJsonlLine(filePath, { n: 1n }), /JSON 序列化失败/);
+
+    const circular = {};
+    circular.self = circular;
+    await assert.rejects(() => appendJsonlLine(filePath, circular), /JSON 序列化失败/);
+});

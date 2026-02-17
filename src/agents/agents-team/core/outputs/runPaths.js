@@ -1,10 +1,15 @@
 import path from 'node:path';
 
+import { RUN_ID_REGEX, SAFE_SEGMENT_REGEX } from '../contracts/patterns.js';
+
 function pad2(n) {
     return String(n).padStart(2, '0');
 }
 
 export function formatUtcRunId(date) {
+    if (date !== undefined && !(date instanceof Date)) {
+        throw new Error('date 必须是 Date 或 undefined');
+    }
     const d = date instanceof Date ? date : new Date();
     return `${d.getUTCFullYear()}${pad2(d.getUTCMonth() + 1)}${pad2(d.getUTCDate())}_${pad2(
         d.getUTCHours(),
@@ -14,7 +19,7 @@ export function formatUtcRunId(date) {
 export function normalizeRunId(value) {
     const id = String(value || '').trim();
     if (!id) throw new Error('run_id 不能为空');
-    if (!/^[0-9]{8}_[0-9]{6}$/.test(id)) {
+    if (!RUN_ID_REGEX.test(id)) {
         throw new Error(`run_id 格式不合法: ${id}`);
     }
     return id;
@@ -23,7 +28,7 @@ export function normalizeRunId(value) {
 function normalizeSafeSegment(label, value) {
     const id = String(value || '').trim();
     if (!id) throw new Error(`${label} 不能为空`);
-    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$/.test(id)) {
+    if (!SAFE_SEGMENT_REGEX.test(id)) {
         throw new Error(`${label} 格式不合法: ${id}`);
     }
     return id;

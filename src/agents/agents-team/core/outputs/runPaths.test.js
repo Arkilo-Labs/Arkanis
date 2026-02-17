@@ -9,6 +9,10 @@ test('formatUtcRunId 使用 UTC 时间戳风格', () => {
     assert.equal(formatUtcRunId(d), '20260217_153012');
 });
 
+test('formatUtcRunId：拒绝非 Date 参数', () => {
+    assert.throws(() => formatUtcRunId('2026-02-17'), /date 必须是 Date/);
+});
+
 test('normalizeRunId 只接受固定格式', () => {
     assert.equal(normalizeRunId('20260217_153012'), '20260217_153012');
     assert.throws(() => normalizeRunId('2026-02-17'), /run_id 格式不合法/);
@@ -51,4 +55,3 @@ test('createRunPaths 生成的路径是绝对路径且可预测', () => {
         path.join(expectedRunDir, 'sandbox', 'sb1', 'env_fingerprint.json'),
     );
 });
-

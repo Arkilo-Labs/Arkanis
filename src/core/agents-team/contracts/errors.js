@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { DenyReasonSchema } from './denyReasons.js';
+import { JsonValueSchema } from './json.schema.js';
 
 export const ErrorCode = Object.freeze({
     ERR_INVALID_ARGUMENT: 'ERR_INVALID_ARGUMENT',
@@ -27,7 +28,7 @@ const BaseErrorSchema = z
     .object({
         code: ErrorCodeSchema,
         message: z.string().min(1),
-        details: z.unknown().optional(),
+        details: JsonValueSchema.optional(),
     })
     .strict();
 
@@ -44,4 +45,3 @@ export const AgentsTeamErrorSchema = z.discriminatedUnion('code', [
     PolicyDeniedErrorSchema,
     NonPolicyErrorSchema,
 ]);
-

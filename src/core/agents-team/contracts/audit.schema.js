@@ -2,10 +2,12 @@ import { z } from 'zod';
 
 import { AgentsTeamErrorSchema } from './errors.js';
 import { DenyReasonSchema } from './denyReasons.js';
+import { JsonValueSchema } from './json.schema.js';
+import { RUN_ID_REGEX, SAFE_SEGMENT_REGEX } from './patterns.js';
 
-export const RunIdSchema = z.string().regex(/^[0-9]{8}_[0-9]{6}$/);
+export const RunIdSchema = z.string().regex(RUN_ID_REGEX);
 
-export const SafeSegmentSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,80}$/);
+export const SafeSegmentSchema = z.string().regex(SAFE_SEGMENT_REGEX);
 
 export const CorrelationIdSchema = z.string().min(1);
 
@@ -24,20 +26,20 @@ export const PolicyDecisionSchema = z.discriminatedUnion('decision', [
     z
         .object({
             decision: z.literal('allow'),
-            details: z.unknown().optional(),
+            details: JsonValueSchema.optional(),
         })
         .strict(),
     z
         .object({
             decision: z.literal('needs_approval'),
-            details: z.unknown().optional(),
+            details: JsonValueSchema.optional(),
         })
         .strict(),
     z
         .object({
             decision: z.literal('deny'),
             reason: DenyReasonSchema,
-            details: z.unknown().optional(),
+            details: JsonValueSchema.optional(),
         })
         .strict(),
 ]);
@@ -127,7 +129,7 @@ const ToolCallFieldsSchema = z
 
         args_hash: HashSchema,
         args_size_bytes: z.number().int().nonnegative(),
-        args_preview: z.unknown().optional(),
+        args_preview: JsonValueSchema.optional(),
 
         policy_decision: PolicyDecisionSchema.optional(),
 
@@ -182,4 +184,3 @@ export const AuditSkillRunRecordSchema = z.discriminatedUnion('ok', [
         error: AgentsTeamErrorSchema,
     }).strict(),
 ]);
-
