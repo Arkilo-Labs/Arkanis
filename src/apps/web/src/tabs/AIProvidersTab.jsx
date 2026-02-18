@@ -827,12 +827,11 @@ function RoleMappingPanel({
     const selKey = selectedKey ? `${selectedKey.type}:${selectedKey.name}` : '';
 
     return (
-        <div className="space-y-2">
-            <div className="flex items-end justify-between">
+        <div className="space-y-3">
+            <div className="flex items-center justify-between">
                 <div>
                     <div className="text-xs tracking-wide text-text-muted">Role Mapping</div>
                     <h2 className="text-xl font-bold mt-1">角色映射</h2>
-                    <p className="text-sm text-text-muted mt-0.5">左侧选角色，右侧指定 Provider</p>
                 </div>
                 <div className="flex gap-2">
                     <button type="button" className="btn btn-secondary btn-sm" onClick={onResetRt}>
@@ -840,19 +839,22 @@ function RoleMappingPanel({
                     </button>
                     <button type="button" className="btn btn-primary btn-sm" onClick={onSave} disabled={saving}>
                         <i className={saving ? 'fas fa-spinner fa-spin' : 'fas fa-save'}></i>
-                        保存更改
+                        保存
                     </button>
                 </div>
             </div>
 
-            <div className="card overflow-hidden">
-                <div className="grid grid-cols-[220px_1fr] divide-x divide-border-light/10" style={{ minHeight: '360px' }}>
+            <div className="card overflow-hidden" style={{ minHeight: '340px' }}>
+                <div className="grid grid-cols-[200px_1fr] h-full" style={{ minHeight: '340px' }}>
                     {/* 左栏：角色列表 */}
-                    <div className="overflow-y-auto scrollbar">
+                    <div className="overflow-y-auto scrollbar border-r border-border-light/10">
                         {allRoles.map((item, idx) => {
                             if (item.type === 'section') {
                                 return (
-                                    <div key={`sec-${idx}`} className="px-3 py-2 text-[10px] tracking-widest text-text-muted bg-black/20 border-b border-border-light/8 uppercase font-semibold">
+                                    <div
+                                        key={`sec-${idx}`}
+                                        className="px-3 pt-3 pb-1 text-[10px] tracking-[0.1em] uppercase font-semibold text-text-muted/50"
+                                    >
                                         {item.label}
                                     </div>
                                 );
@@ -870,28 +872,28 @@ function RoleMappingPanel({
                                     type="button"
                                     onClick={() => setSelectedKey({ type: item.type, name: item.name, defaultRef: item.defaultRef })}
                                     className={[
-                                        'w-full text-left px-3 py-2.5 border-b border-border-light/8 transition-colors',
-                                        isSelected ? 'bg-accent/10 border-l-2 border-l-accent' : 'hover:bg-white/4',
+                                        // 用 border-l-[3px] 统一占位，selected 才变 accent，无布局抖动
+                                        'w-full text-left pl-[9px] pr-3 py-2 border-l-[3px] transition-colors',
+                                        isSelected
+                                            ? 'border-l-accent bg-accent/8 text-text'
+                                            : 'border-l-transparent hover:bg-white/4 text-text',
                                     ].join(' ')}
                                 >
-                                    <div className="flex items-start justify-between gap-1.5 min-w-0">
-                                        <div className="min-w-0 flex-1">
-                                            <div className="text-sm font-semibold truncate">{item.name}</div>
-                                            <div className="text-[11px] text-text-muted truncate">{item.role}</div>
-                                        </div>
+                                    <div className="flex items-center justify-between gap-1 min-w-0">
+                                        <span className="text-sm font-medium truncate">{item.name}</span>
                                         {isOverridden ? (
-                                            <span className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5 flex-shrink-0"></span>
+                                            <span className="w-1 h-1 rounded-full bg-accent flex-shrink-0"></span>
                                         ) : null}
                                     </div>
-                                    {assignedProvider ? (
-                                        <div className="text-[11px] text-accent mt-1 truncate">
-                                            {assignedProvider.name}
-                                        </div>
-                                    ) : (
-                                        <div className="text-[11px] text-text-muted/50 mt-1">
-                                            {item.type === 'rt' ? `默认: ${item.defaultRef}` : '未设置'}
-                                        </div>
-                                    )}
+                                    <div className="text-[11px] truncate mt-0.5">
+                                        {assignedProvider ? (
+                                            <span className="text-accent/80">{assignedProvider.name}</span>
+                                        ) : (
+                                            <span className="text-text-muted/40">
+                                                {item.type === 'rt' ? item.defaultRef : '未设置'}
+                                            </span>
+                                        )}
+                                    </div>
                                 </button>
                             );
                         })}
@@ -900,104 +902,76 @@ function RoleMappingPanel({
                     {/* 右栏：provider 选择器 */}
                     <div className="overflow-y-auto scrollbar">
                         {selectedKey ? (
-                            <div>
-                                <div className="px-4 py-3 border-b border-border-light/10 bg-black/10">
-                                    <div className="text-xs text-text-muted">为以下角色选择 Provider</div>
-                                    <div className="text-sm font-semibold mt-0.5">{selectedKey.name}</div>
-                                    <div className="text-xs text-text-muted mt-0.5">
-                                        {providerList.length} 个可用 Provider
+                            <>
+                                {/* 右栏顶部：当前角色信息 */}
+                                <div className="px-4 pt-3 pb-2 border-b border-border-light/8">
+                                    <span className="text-xs text-text-muted">{selectedKey.name}</span>
+                                    <span className="text-xs text-text-muted/40 ml-2">
+                                        {providerList.length} 个 Provider 可选
+                                        {selectedKey.type === 'rt' && selectedKey.defaultRef
+                                            ? `  ·  默认 ${selectedKey.defaultRef}`
+                                            : null}
+                                    </span>
+                                </div>
+
+                                {/* 清空 / 默认选项 */}
+                                <button
+                                    type="button"
+                                    onClick={() => assignProvider('')}
+                                    className={[
+                                        'w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors border-b border-border-light/6',
+                                        rightCurrentPid === '' ? 'bg-white/4' : 'hover:bg-white/3',
+                                    ].join(' ')}
+                                >
+                                    <div className="min-w-0">
+                                        <span className="text-sm text-text-muted">
+                                            {selectedKey.type === 'rt' ? '使用默认' : '不使用'}
+                                        </span>
                                         {selectedKey.type === 'rt' && selectedKey.defaultRef ? (
-                                            <span className="ml-2 text-text-muted/60">· 默认: {selectedKey.defaultRef}</span>
+                                            <span className="text-[11px] text-text-muted/40 font-mono ml-2">
+                                                {selectedKey.defaultRef}
+                                            </span>
                                         ) : null}
                                     </div>
-                                </div>
+                                    {rightCurrentPid === '' ? (
+                                        <i className="fas fa-check text-accent text-xs flex-shrink-0"></i>
+                                    ) : null}
+                                </button>
 
-                                <div className="divide-y divide-border-light/8">
-                                    {/* 恢复默认选项（仅 RT） */}
-                                    {selectedKey.type === 'rt' ? (
+                                {/* Provider 列表 */}
+                                {providerList.map((p) => {
+                                    const isActive = rightCurrentPid === p.id;
+                                    return (
                                         <button
+                                            key={p.id}
                                             type="button"
-                                            onClick={() => assignProvider('')}
+                                            onClick={() => assignProvider(p.id)}
                                             className={[
-                                                'w-full text-left px-4 py-3 flex items-center gap-3 transition-colors',
-                                                rightCurrentPid === '' ? 'bg-white/5' : 'hover:bg-white/3',
+                                                'w-full text-left px-4 py-2.5 flex items-center justify-between gap-3 transition-colors border-b border-border-light/6',
+                                                isActive ? 'bg-accent/8' : 'hover:bg-white/3',
                                             ].join(' ')}
                                         >
-                                            <span className={[
-                                                'w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center',
-                                                rightCurrentPid === '' ? 'border-accent' : 'border-border-light/30',
-                                            ].join(' ')}>
-                                                {rightCurrentPid === '' ? <span className="w-2 h-2 rounded-full bg-accent"></span> : null}
-                                            </span>
-                                            <div className="min-w-0">
-                                                <div className="text-sm font-medium">使用默认</div>
-                                                <div className="text-xs text-text-muted font-mono truncate">{selectedKey.defaultRef}</div>
-                                            </div>
-                                        </button>
-                                    ) : null}
-
-                                    {/* Lens 清空选项 */}
-                                    {selectedKey.type === 'lens' ? (
-                                        <button
-                                            type="button"
-                                            onClick={() => assignProvider('')}
-                                            className={[
-                                                'w-full text-left px-4 py-3 flex items-center gap-3 transition-colors',
-                                                rightCurrentPid === '' ? 'bg-white/5' : 'hover:bg-white/3',
-                                            ].join(' ')}
-                                        >
-                                            <span className={[
-                                                'w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center',
-                                                rightCurrentPid === '' ? 'border-accent' : 'border-border-light/30',
-                                            ].join(' ')}>
-                                                {rightCurrentPid === '' ? <span className="w-2 h-2 rounded-full bg-accent"></span> : null}
-                                            </span>
-                                            <div className="min-w-0">
-                                                <div className="text-sm font-medium text-text-muted">不使用（未设置）</div>
-                                            </div>
-                                        </button>
-                                    ) : null}
-
-                                    {/* Provider 列表 */}
-                                    {providerList.map((p) => {
-                                        const isActive = rightCurrentPid === p.id;
-                                        return (
-                                            <button
-                                                key={p.id}
-                                                type="button"
-                                                onClick={() => assignProvider(p.id)}
-                                                className={[
-                                                    'w-full text-left px-4 py-3 flex items-center gap-3 transition-colors',
-                                                    isActive ? 'bg-accent/8' : 'hover:bg-white/3',
-                                                ].join(' ')}
-                                            >
-                                                <span className={[
-                                                    'w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center',
-                                                    isActive ? 'border-accent' : 'border-border-light/30',
-                                                ].join(' ')}>
-                                                    {isActive ? <span className="w-2 h-2 rounded-full bg-accent"></span> : null}
-                                                </span>
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="text-sm font-semibold truncate flex items-center gap-2">
-                                                        {p.name}
-                                                        {p.hasKey ? (
-                                                            <span className="badge badge-success text-[9px]">已配置</span>
-                                                        ) : (
-                                                            <span className="badge badge-error text-[9px]">未配置</span>
-                                                        )}
-                                                    </div>
-                                                    <div className="text-xs text-text-muted font-mono truncate">{p.modelName}</div>
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <span className="text-sm font-medium truncate">{p.name}</span>
+                                                    {p.hasKey ? (
+                                                        <span className="badge badge-success text-[9px] flex-shrink-0">已配置</span>
+                                                    ) : (
+                                                        <span className="badge badge-error text-[9px] flex-shrink-0">未配置</span>
+                                                    )}
                                                 </div>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
+                                                <div className="text-[11px] text-text-muted font-mono truncate mt-0.5">{p.modelName}</div>
+                                            </div>
+                                            {isActive ? (
+                                                <i className="fas fa-check text-accent text-xs flex-shrink-0"></i>
+                                            ) : null}
+                                        </button>
+                                    );
+                                })}
+                            </>
                         ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-center px-6" style={{ minHeight: '300px' }}>
-                                <i className="fas fa-arrow-left text-2xl text-text-muted/30 mb-3"></i>
-                                <div className="text-sm text-text-muted">从左侧选择角色</div>
-                                <div className="text-xs text-text-muted/50 mt-1">选择后在此指定使用哪个 Provider</div>
+                            <div className="flex items-center justify-center h-full text-text-muted/40 text-sm" style={{ minHeight: '280px' }}>
+                                从左侧选择角色
                             </div>
                         )}
                     </div>

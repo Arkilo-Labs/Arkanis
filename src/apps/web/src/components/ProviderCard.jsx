@@ -92,12 +92,15 @@ export default function ProviderCard({ provider, usedRoles = [], onUpdate, onDel
                                 <div className="text-xs text-text-muted font-mono truncate">
                                     {provider.modelName}
                                 </div>
-                                {usedRoles.length ? (
-                                    <span className="badge badge-muted mt-2 inline-flex">
-                                        <i className="fas fa-plug text-[9px]"></i>
-                                        {usedRoles.length} 个角色
-                                    </span>
-                                ) : null}
+                                {/* 固定高度容器，保证所有卡片等高 */}
+                                <div className="h-5 mt-2 flex items-center">
+                                    {usedRoles.length ? (
+                                        <span className="badge badge-muted inline-flex">
+                                            <i className="fas fa-plug text-[9px]"></i>
+                                            {usedRoles.length} 个角色
+                                        </span>
+                                    ) : null}
+                                </div>
                             </div>
                         </div>
 
