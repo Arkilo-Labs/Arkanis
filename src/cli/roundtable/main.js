@@ -183,6 +183,7 @@ async function main() {
         .option('--data-source <mode>', 'K线数据源：auto|db|exchange', 'auto')
         .option('--db-timeout-ms <n>', 'DB 超时(ms)', (v) => parseInt(v, 10), 6000)
         .option('--exchange-timeout-ms <n>', '交易所超时(ms)', (v) => parseInt(v, 10), 25000)
+        .option('--agent-provider-overrides <json>', 'Agent provider 覆盖 JSON，格式: {"agentName":"providerId"}', '')
         .parse(normalizeArgv(process.argv));
 
     const opts = program.opts();
@@ -201,7 +202,27 @@ async function main() {
     const emitEvent = createEventEmitter({ sessionId });
 
     const providers = await loadProvidersConfig(opts.configDir);
-    const agentsConfig = loadAgentsConfig(opts.configDir);
+    let agentsConfig = loadAgentsConfig(opts.configDir);
+
+    // 应用 agent provider 覆盖（来自 UI 配置）
+    if (opts.agentProviderOverrides) {
+        try {
+            const overrideMap = JSON.parse(opts.agentProviderOverrides);
+            if (overrideMap && typeof overrideMap === 'object') {
+                const applyOverrides = (list) =>
+                    list.map((a) =>
+                        overrideMap[a.name] ? { ...a, provider_ref: overrideMap[a.name] } : a,
+                    );
+                agentsConfig = {
+                    ...agentsConfig,
+                    agents: applyOverrides(agentsConfig.agents || []),
+                    subagents: applyOverrides(agentsConfig.subagents || []),
+                };
+            }
+        } catch (e) {
+            logger.warn(`[配置] --agent-provider-overrides 解析失败，已忽略: ${e?.message}`);
+        }
+    }
     const mcpConfig = loadMcpConfig(opts.configDir);
     const promptStore = new PromptStore({ promptsDir: opts.promptsDir });
 

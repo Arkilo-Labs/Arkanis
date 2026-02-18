@@ -8,6 +8,11 @@ import { readProviderDefinitions } from '../../../core/services/aiProvidersStore
 import { readSecrets } from '../../../core/services/secretsStore.js';
 import { createRedactor } from '../../../core/utils/redactSecrets.js';
 import { ROUND_EVENT_TO_SOCKET_EVENT, SOCKET_EVENTS } from '../socket/events.js';
+import { loadAgentsConfig } from '../../../agents/agents-round/core/configLoader.js';
+import {
+    readAgentProviderOverrides,
+    writeAgentProviderOverrides,
+} from '../../../core/services/agentProviderOverrideStore.js';
 import {
     applySessionEvent,
     createSessionMeta,
@@ -404,8 +409,23 @@ export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses
         }
 
         const args = upsertSessionIdArg(sanitizeRunArgs(rawArgs), sessionId);
+
+        // 加载 agent provider 覆盖，注入 CLI 参数
+        let overrideArgs = [];
+        try {
+            const { overrides } = await readAgentProviderOverrides({ dataDir });
+            const nonNullOverrides = Object.fromEntries(
+                Object.entries(overrides).filter(([, v]) => v !== null),
+            );
+            if (Object.keys(nonNullOverrides).length > 0) {
+                overrideArgs = ['--agent-provider-overrides', JSON.stringify(nonNullOverrides)];
+            }
+        } catch {
+            // 覆盖读取失败不阻断启动
+        }
+
         const scriptPath = resolveRoundtableScriptPath({ projectRoot });
-        const cmdArgs = [scriptPath, ...args];
+        const cmdArgs = [scriptPath, ...args, ...overrideArgs];
 
         try {
             const child = spawn(process.execPath, cmdArgs, {
@@ -817,6 +837,74 @@ export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses
             const msg = error?.message || String(error);
             if (msg.includes('ENOENT')) return res.status(404).json({ error: 'Session not found' });
             return res.status(500).json({ error: msg });
+        }
+    });
+
+    // --- Agent Provider 覆盖管理 ---
+
+    const ROUNDTABLE_CONFIG_DIR = join(projectRoot, 'src', 'agents', 'agents-round', 'config');
+
+    app.get('/api/roundtable/agent-providers', async (_req, res) => {
+        try {
+            const [agentsConfig, { overrides }, { providers }] = await Promise.all([
+                Promise.resolve().then(() => loadAgentsConfig(ROUNDTABLE_CONFIG_DIR)),
+                readAgentProviderOverrides({ dataDir }),
+                readProviderDefinitions({ projectRoot, dataDir }),
+            ]);
+
+            const allAgents = [
+                ...(agentsConfig.agents || []),
+                ...(agentsConfig.subagents || []),
+            ];
+
+            const agents = allAgents.map((a) => ({
+                name: a.name,
+                role: a.role,
+                defaultProviderRef: a.provider_ref,
+                overrideProviderRef: overrides[a.name] ?? null,
+                effectiveProviderRef: overrides[a.name] ?? a.provider_ref,
+                isOverridden: Boolean(overrides[a.name]),
+                order: a.order,
+                isSubagent: (agentsConfig.subagents || []).some((s) => s.name === a.name),
+            }));
+
+            const providerList = providers.map((p) => ({ id: p.id, name: p.name }));
+            return res.json({ agents, providers: providerList });
+        } catch (error) {
+            return res.status(500).json({ error: error?.message || String(error) });
+        }
+    });
+
+    app.put('/api/roundtable/agent-providers', async (req, res) => {
+        try {
+            const overridesMap = req.body?.overrides;
+            if (!overridesMap || typeof overridesMap !== 'object' || Array.isArray(overridesMap)) {
+                return res.status(400).json({ error: 'overrides 必须是对象' });
+            }
+
+            const [agentsConfig, { providers }] = await Promise.all([
+                Promise.resolve().then(() => loadAgentsConfig(ROUNDTABLE_CONFIG_DIR)),
+                readProviderDefinitions({ projectRoot, dataDir }),
+            ]);
+
+            const allAgents = [
+                ...(agentsConfig.agents || []),
+                ...(agentsConfig.subagents || []),
+            ];
+            const knownAgentNames = allAgents.map((a) => a.name);
+            const knownProviderIds = providers.map((p) => p.id);
+
+            const result = await writeAgentProviderOverrides({
+                dataDir,
+                overridesMap,
+                knownAgentNames,
+                knownProviderIds,
+            });
+
+            io.emit(SOCKET_EVENTS.PROVIDERS_UPDATED);
+            return res.json(result);
+        } catch (error) {
+            return res.status(400).json({ error: error?.message || String(error) });
         }
     });
 }
