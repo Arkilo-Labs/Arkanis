@@ -15,7 +15,7 @@ import {
 } from '../../core/services/telegram/index.js';
 
 import { registerAuthMiddleware } from './middleware/auth.js';
-import { registerHttpMiddleware, registerStaticMiddleware } from './middleware/http.js';
+import { registerHttpMiddleware, registerSpaFallback, registerStaticMiddleware } from './middleware/http.js';
 import { registerChartDataRoutes } from './routes/chartData.js';
 import { registerConfigRoutes } from './routes/config.js';
 import { registerPromptRoutes } from './routes/prompts.js';
@@ -88,6 +88,9 @@ registerTelegramRoutes({
     buildBinanceUrl,
     buildDecisionMessageHtml,
 });
+
+// SPA fallback 必须在所有 API 路由之后注册
+registerSpaFallback({ app, projectRoot: PROJECT_ROOT });
 
 function setupConfigWatcher({ io, projectRoot }) {
     const envPath = join(projectRoot, '.env');
