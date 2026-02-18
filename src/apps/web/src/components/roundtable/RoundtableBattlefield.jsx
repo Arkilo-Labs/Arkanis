@@ -151,16 +151,6 @@ export default function RoundtableBattlefield({
     finalDecision,
     draftDecision,
     counts = null,
-    activeSessionId = null,
-    newSessionTick = 0,
-    config = null,
-    onConfigChange,
-    isStarting = false,
-    onStart,
-    onStop,
-    activePid = null,
-    launchError = '',
-    timeframes = [],
 }) {
     const battlefieldRef = useRef(null);
     const feedRef = useRef(null);
@@ -176,33 +166,6 @@ export default function RoundtableBattlefield({
     const [impactMap, setImpactMap] = useState({});
     const [hideFinalOverlay, setHideFinalOverlay] = useState(false);
     const [terminalOpen, setTerminalOpen] = useState(false);
-    const [showLaunchOverlay, setShowLaunchOverlay] = useState(true);
-
-    // 有 active session 时自动隐藏启动覆层
-    useEffect(() => {
-        if (activeSessionId) setShowLaunchOverlay(false);
-    }, [activeSessionId]);
-
-    // 父级请求新建 session 时显示启动覆层
-    useEffect(() => {
-        if (newSessionTick > 0) setShowLaunchOverlay(true);
-    }, [newSessionTick]);
-
-    const displayLaunchOverlay = showLaunchOverlay && !isRunning;
-
-    const configSummary = useMemo(() => {
-        if (!config) return '';
-        return [
-            `symbol=${config.symbol}`,
-            `bars=${config.bars}`,
-            `primary=${config.primary}`,
-            `aux=${config.aux}`,
-            config.skipNews ? 'skipNews=1' : null,
-            config.skipLlm ? 'skipLlm=1' : null,
-            config.skipLiquidation ? 'skipLiquidation=1' : null,
-            config.skipMcp ? 'skipMcp=1' : null,
-        ].filter(Boolean).join('  ');
-    }, [config]);
 
     const normalizedEntries = useMemo(() => normalizeEntries(entries), [entries]);
     const latestBeliefs = useMemo(() => computeLatestBeliefs(beliefUpdates), [beliefUpdates]);
@@ -1000,154 +963,7 @@ export default function RoundtableBattlefield({
                     </aside>
 
                     <div className="rt-bf-center">
-                        {displayLaunchOverlay && config ? (
-                            <div className="rt-bf-launch-overlay">
-                                <div className="rt-bf-launch-card">
-                                    <div className="rt-bf-launch-title">启动新会话</div>
-
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                                        <div>
-                                            <label className="form-label">交易对</label>
-                                            <input
-                                                value={config.symbol}
-                                                onChange={(e) => onConfigChange?.({ symbol: e.target.value })}
-                                                type="text"
-                                                className="form-input font-mono"
-                                                placeholder="BTCUSDT"
-                                                disabled={isRunning || isStarting}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="form-label">Bars</label>
-                                            <input
-                                                value={config.bars}
-                                                onChange={(e) => onConfigChange?.({ bars: Number(e.target.value || 0) })}
-                                                type="number"
-                                                min="50"
-                                                max="5000"
-                                                className="form-input font-mono"
-                                                disabled={isRunning || isStarting}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="form-label">Primary</label>
-                                            <select
-                                                value={config.primary}
-                                                onChange={(e) => onConfigChange?.({ primary: e.target.value })}
-                                                className="form-input font-mono"
-                                                disabled={isRunning || isStarting}
-                                            >
-                                                {timeframes.map((tf) => (
-                                                    <option key={tf} value={tf}>{tf}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="form-label">Aux</label>
-                                            <select
-                                                value={config.aux}
-                                                onChange={(e) => onConfigChange?.({ aux: e.target.value })}
-                                                className="form-input font-mono"
-                                                disabled={isRunning || isStarting}
-                                            >
-                                                {timeframes.map((tf) => (
-                                                    <option key={tf} value={tf}>{tf}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                                        <label className="switch">
-                                            <input
-                                                checked={config.skipNews}
-                                                onChange={(e) => onConfigChange?.({ skipNews: e.target.checked })}
-                                                type="checkbox"
-                                                disabled={isRunning || isStarting}
-                                            />
-                                            <span className="switch-control">
-                                                <span className="switch-track"></span>
-                                                <span className="switch-thumb"></span>
-                                            </span>
-                                            <span className="text-sm text-text-muted">跳过新闻</span>
-                                        </label>
-                                        <label className="switch">
-                                            <input
-                                                checked={config.skipLlm}
-                                                onChange={(e) => onConfigChange?.({ skipLlm: e.target.checked })}
-                                                type="checkbox"
-                                                disabled={isRunning || isStarting}
-                                            />
-                                            <span className="switch-control">
-                                                <span className="switch-track"></span>
-                                                <span className="switch-thumb"></span>
-                                            </span>
-                                            <span className="text-sm text-text-muted">跳过模型</span>
-                                        </label>
-                                        <label className="switch">
-                                            <input
-                                                checked={config.skipLiquidation}
-                                                onChange={(e) => onConfigChange?.({ skipLiquidation: e.target.checked })}
-                                                type="checkbox"
-                                                disabled={isRunning || isStarting}
-                                            />
-                                            <span className="switch-control">
-                                                <span className="switch-track"></span>
-                                                <span className="switch-thumb"></span>
-                                            </span>
-                                            <span className="text-sm text-text-muted">跳过清算</span>
-                                        </label>
-                                        <label className="switch">
-                                            <input
-                                                checked={config.skipMcp}
-                                                onChange={(e) => onConfigChange?.({ skipMcp: e.target.checked })}
-                                                type="checkbox"
-                                                disabled={isRunning || isStarting}
-                                            />
-                                            <span className="switch-control">
-                                                <span className="switch-track"></span>
-                                                <span className="switch-thumb"></span>
-                                            </span>
-                                            <span className="text-sm text-text-muted">跳过 MCP</span>
-                                        </label>
-                                    </div>
-
-                                    {configSummary ? (
-                                        <div className="rounded-xl border border-border-light/10 bg-black/20 px-3 py-2 text-xs text-text-muted font-mono whitespace-pre-wrap break-all mb-4">
-                                            {configSummary}
-                                        </div>
-                                    ) : null}
-
-                                    {launchError ? (
-                                        <div className="form-error mb-4">{launchError}</div>
-                                    ) : null}
-
-                                    <div className="flex items-center gap-3">
-                                        <button
-                                            type="button"
-                                            className="btn btn-primary"
-                                            onClick={() => onStart?.()}
-                                            disabled={isRunning || isStarting}
-                                        >
-                                            <i className={['fas', isStarting ? 'fa-spinner fa-spin' : 'fa-play'].join(' ')}></i>
-                                            启动
-                                        </button>
-
-                                        {activeSessionId ? (
-                                            <button
-                                                type="button"
-                                                className="btn btn-secondary"
-                                                onClick={() => setShowLaunchOverlay(false)}
-                                            >
-                                                返回
-                                            </button>
-                                        ) : null}
-                                    </div>
-                                </div>
-                            </div>
-                        ) : null}
-
-                        {!displayLaunchOverlay && battlePhase !== 'duel' ? (
+                        {battlePhase !== 'duel' ? (
                             <div className="rt-bf-formation">
                                 <div className="rt-bf-formation-title">
                                     {battlePhase === 'gathering' ? 'The Gathering' : 'The Synthesis'}
@@ -1196,7 +1012,6 @@ export default function RoundtableBattlefield({
                             </div>
                         ) : null}
 
-                        {!displayLaunchOverlay ? (
                         <div className="rt-bf-feed">
                             <div
                                 ref={feedRef}
@@ -1437,7 +1252,6 @@ export default function RoundtableBattlefield({
                                 )}
                             </div>
                         </div>
-                        ) : null}
                     </div>
 
                     <aside className="rt-bf-sidebar rt-bf-sidebar-right">
