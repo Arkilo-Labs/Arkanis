@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import { existsSync } from 'fs';
+import { buildWebServiceEnv } from './webTools.js';
 import { appendFile, mkdir, readdir, readFile, stat, writeFile } from 'fs/promises';
 import { join } from 'path';
 
@@ -428,9 +429,15 @@ export function registerRoundtableRoutes({ app, io, projectRoot, activeProcesses
         const cmdArgs = [scriptPath, ...args, ...overrideArgs];
 
         try {
+            // 从 secrets.json 注入 web 服务 API keys，避免明文写入 agents.json
+            const webServiceEnv = await buildWebServiceEnv({
+                dataDir,
+                encKey: process.env.SECRETS_ENC_KEY || '',
+            }).catch(() => ({}));
+
             const child = spawn(process.execPath, cmdArgs, {
                 cwd: projectRoot,
-                env: { ...process.env, FORCE_COLOR: '1', AGENTS_ROUND_EMIT_EVENTS: '1' },
+                env: { ...process.env, ...webServiceEnv, FORCE_COLOR: '1', AGENTS_ROUND_EMIT_EVENTS: '1' },
                 stdio: ['ignore', 'pipe', 'pipe'],
             });
 

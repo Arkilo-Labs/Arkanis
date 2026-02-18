@@ -15,10 +15,26 @@
     "adversarial_debate_rounds": 1,
     "min_rr": 1.5,
     "agent_accuracy": {
-      "vision": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 },
-      "news": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 },
-      "technology": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 },
-      "risk": { "LONG": 0.5, "SHORT": 0.5, "WAIT": 0.5 }
+      "vision": {
+        "LONG": 0.5,
+        "SHORT": 0.5,
+        "WAIT": 0.5
+      },
+      "news": {
+        "LONG": 0.5,
+        "SHORT": 0.5,
+        "WAIT": 0.5
+      },
+      "technology": {
+        "LONG": 0.5,
+        "SHORT": 0.5,
+        "WAIT": 0.5
+      },
+      "risk": {
+        "LONG": 0.5,
+        "SHORT": 0.5,
+        "WAIT": 0.5
+      }
     },
     "audit_settings": {
       "enabled": true,
@@ -40,7 +56,7 @@
     "firecrawl": {
       "base_url": "http://localhost:3002",
       "timeout_ms": 30000,
-      "api_key_env": ""
+      "api_key_env": "FIRECRAWL_API_KEY"
     },
     "search": {
       "queries_max": 6,
@@ -54,6 +70,17 @@
       "concurrency": 3,
       "max_markdown_chars_per_url": 6000,
       "max_total_markdown_chars": 35000
+    },
+    "search_provider": "tavily",
+    "fetch_provider": "jina",
+    "tavily": {
+      "timeout_ms": 15000,
+      "api_key_env": "TAVILY_API_KEY"
+    },
+    "jina": {
+      "base_url": "https://r.jina.ai",
+      "timeout_ms": 30000,
+      "api_key_env": "JINA_API_KEY"
     }
   },
   "subagents": [

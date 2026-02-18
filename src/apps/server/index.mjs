@@ -22,6 +22,7 @@ import { registerPromptRoutes } from './routes/prompts.js';
 import { registerProviderRoutes } from './routes/providers.js';
 import { registerProviderSecretRoutes } from './routes/providerSecrets.js';
 import { registerProviderConfigRoutes } from './routes/providerConfig.js';
+import { registerWebToolsRoutes } from './routes/webTools.js';
 import { registerScriptRoutes } from './routes/script.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerSetupRoutes } from './routes/setup.js';
@@ -79,6 +80,7 @@ registerConfigRoutes({ app, projectRoot: PROJECT_ROOT });
 registerProviderRoutes({ app, io, projectRoot: PROJECT_ROOT });
 registerProviderSecretRoutes({ app, io, projectRoot: PROJECT_ROOT });
 registerProviderConfigRoutes({ app, io, projectRoot: PROJECT_ROOT });
+registerWebToolsRoutes({ app, io, projectRoot: PROJECT_ROOT });
 registerAuthRoutes({ app, authService });
 registerSetupRoutes({ app, authService });
 registerTelegramRoutes({

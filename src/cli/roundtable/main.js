@@ -16,13 +16,12 @@ import { screenshotPage } from '../../agents/agents-round/core/screenshots/liqui
 import { computeMacd, computeRsi } from '../../agents/agents-round/core/market/indicators.js';
 import { fetchOrderbook, summarizeOrderbook } from '../../agents/agents-round/core/market/orderbook.js';
 import { withRetries, withTimeout } from '../../agents/agents-round/core/runtime/runtime.js';
-import { SearxngClient } from '../../agents/agents-round/core/news/searxngClient.js';
-import { FirecrawlClient } from '../../agents/agents-round/core/news/firecrawlClient.js';
+import { createWebSearchClient, createWebFetchClient } from '../../core/tools/web/index.js';
 import { runNewsPipeline } from '../../agents/agents-round/core/news/newsPipeline.js';
 import { Toolbox } from '../../agents/agents-round/core/tools/toolbox.js';
 import { DecisionHistory } from '../../agents/agents-round/core/context/decisionHistory.js';
 import { closeExchangeClient } from '../../core/data/exchangeClient.js';
-import { closePools as closePgPools } from '../../core/data/pgClient.js';
+import { closeDb } from '../../core/data/sqliteClient.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -171,7 +170,7 @@ async function main() {
             'https://www.coinglass.com/zh/liquidation-levels',
         )
         .option('--skip-llm', '跳过模型调用（只产出数据和截图）')
-        .option('--skip-news', '跳过新闻收集（SearXNG + Firecrawl）')
+        .option('--skip-news', '跳过新闻收集')
         .option('--skip-liquidation', '跳过清算地图截图')
         .option('--skip-mcp', '跳过 MCP 工具调用')
         .option('--exit-timeout-ms <n>', '结束后强制退出超时(ms)，0=禁用', (v) => parseInt(v, 10), 2500)
@@ -180,8 +179,8 @@ async function main() {
         .option('--mcp-silent', '完全静默 MCP stderr（不打印任何 MCP 输出）')
         .option('--mcp-diagnose', '只做 MCP 诊断（tools/list + 试调用），不跑圆桌')
         .option('--mcp-diagnose-server <name>', 'MCP 诊断的 server 名称（默认取配置第一个）', '')
-        .option('--data-source <mode>', 'K线数据源：auto|db|exchange', 'auto')
-        .option('--db-timeout-ms <n>', 'DB 超时(ms)', (v) => parseInt(v, 10), 6000)
+        .option('--data-source <mode>', 'K线数据源：auto|cache|exchange（cache/db=本地缓存）', 'auto')
+        .option('--db-timeout-ms <n>', '缓存超时(ms)', (v) => parseInt(v, 10), 6000)
         .option('--exchange-timeout-ms <n>', '交易所超时(ms)', (v) => parseInt(v, 10), 25000)
         .option('--agent-provider-overrides <json>', 'Agent provider 覆盖 JSON，格式: {"agentName":"providerId"}', '')
         .parse(normalizeArgv(process.argv));
@@ -427,29 +426,18 @@ async function main() {
         let newsBriefing = null;
         let searxngClient = null;
         let firecrawlClient = null;
+        let searchProvider = 'searxng';
+        let fetchProvider = 'firecrawl';
         const newsToolSettings = agentsConfig.news_pipeline_settings ?? null;
         if (newsToolSettings) {
             try {
-                const searxngCfg = newsToolSettings?.searxng ?? {};
-                const firecrawlCfg = newsToolSettings?.firecrawl ?? {};
-                const firecrawlApiKeyEnv = String(firecrawlCfg.api_key_env || '').trim();
-                const firecrawlApiKey = firecrawlApiKeyEnv
-                    ? String(process.env[firecrawlApiKeyEnv] || '').trim()
-                    : '';
-
-                searxngClient = new SearxngClient({
-                    baseUrl: searxngCfg.base_url,
-                    timeoutMs: searxngCfg.timeout_ms,
-                    dockerFallbackContainer: searxngCfg.docker_fallback_container,
-                    logger,
-                });
-                firecrawlClient = new FirecrawlClient({
-                    baseUrl: firecrawlCfg.base_url,
-                    timeoutMs: firecrawlCfg.timeout_ms,
-                    apiKey: firecrawlApiKey,
-                });
+                searchProvider = newsToolSettings.search_provider ?? 'searxng';
+                fetchProvider = newsToolSettings.fetch_provider ?? 'firecrawl';
+                searxngClient = createWebSearchClient(searchProvider, newsToolSettings, logger);
+                firecrawlClient = createWebFetchClient(fetchProvider, newsToolSettings);
+                logger.info(`[工具] search=${searchProvider} fetch=${fetchProvider}`);
             } catch (e) {
-                logger.warn(`[工具初始化失败] SearXNG/Firecrawl：${e.message}`);
+                logger.warn(`[工具初始化失败] web search/fetch：${e.message}`);
                 searxngClient = null;
                 firecrawlClient = null;
             }
@@ -472,10 +460,10 @@ async function main() {
                 }
 
                 if (!searxngClient || !firecrawlClient) {
-                    throw new Error('SearXNG/Firecrawl 未就绪（请检查 news_pipeline_settings 与服务端）');
+                    throw new Error(`${searchProvider}/${fetchProvider} 未就绪（请检查 news_pipeline_settings 与服务端）`);
                 }
 
-                logger.info('新闻收集：SearXNG + Firecrawl');
+                logger.info(`新闻收集：${searchProvider} + ${fetchProvider}`);
                 newsBriefing = await runNewsPipeline({
                     collectorAgent: collector,
                     searxngClient,
@@ -541,7 +529,7 @@ async function main() {
             `- aux: ${opts.aux}`,
             `- bars: ${opts.bars}`,
             ``,
-            `# 新闻简报（SearXNG + Firecrawl）`,
+            `# 新闻简报（${searchProvider} + ${fetchProvider}）`,
             newsBriefing?.briefingMarkdown ? newsBriefing.briefingMarkdown : '（新闻收集失败或被跳过）',
             ``,
             `# 硬数据（文本）`,
@@ -644,7 +632,7 @@ async function main() {
         writeText(join(sessionOut, 'context_tail.txt'), context);
     } finally {
         await mcpClient.stopAll();
-        await closePgPools();
+        await closeDb();
         await closeExchangeClient();
         await closeUndiciDispatcher(logger);
 

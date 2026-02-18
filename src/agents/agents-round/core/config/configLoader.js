@@ -53,20 +53,48 @@ const AuditSettingsSchema = z.object({
 const NewsPipelineSettingsSchema = z.object({
     enabled: z.boolean().optional().default(true),
     collector_agent: z.string().min(1),
+
+    // --- search provider ---
+    // "searxng"（开源自部署）或 "tavily"（SaaS），默认 searxng 保证向后兼容
+    search_provider: z.enum(['searxng', 'tavily']).optional().default('searxng'),
     searxng: z
         .object({
             base_url: z.string().min(1).default('http://localhost:8080'),
             timeout_ms: z.number().int().positive().default(15000),
             docker_fallback_container: z.string().min(1).optional().default('searxng'),
         })
+        .optional()
         .default({}),
+    tavily: z
+        .object({
+            // 存放 Tavily API Key 的环境变量名
+            api_key_env: z.string().optional().default('TAVILY_API_KEY'),
+            timeout_ms: z.number().int().positive().default(15000),
+        })
+        .optional()
+        .default({}),
+
+    // --- fetch provider ---
+    // "firecrawl"（开源自部署/SaaS）或 "jina"（SaaS），默认 firecrawl 保证向后兼容
+    fetch_provider: z.enum(['firecrawl', 'jina']).optional().default('firecrawl'),
     firecrawl: z
         .object({
             base_url: z.string().min(1).default('http://localhost:3002'),
             timeout_ms: z.number().int().positive().default(30000),
             api_key_env: z.string().optional().default(''),
         })
+        .optional()
         .default({}),
+    jina: z
+        .object({
+            // 存放 Jina API Key 的环境变量名（无 key 时仍可请求，但速率受限）
+            api_key_env: z.string().optional().default('JINA_API_KEY'),
+            base_url: z.string().optional().default('https://r.jina.ai'),
+            timeout_ms: z.number().int().positive().default(30000),
+        })
+        .optional()
+        .default({}),
+
     search: z
         .object({
             queries_max: z.number().int().positive().default(4),

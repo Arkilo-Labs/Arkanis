@@ -140,8 +140,8 @@ export async function runNewsPipeline({
     logger,
 }) {
     if (!collectorAgent) throw new Error('news_pipeline 需要 collectorAgent');
-    if (!searxngClient) throw new Error('news_pipeline 需要 searxngClient');
-    if (!firecrawlClient) throw new Error('news_pipeline 需要 firecrawlClient');
+    if (!searxngClient) throw new Error('news_pipeline 需要 searchClient');
+    if (!firecrawlClient) throw new Error('news_pipeline 需要 fetchClient');
 
     const searchCfg = settings?.search ?? {};
     const fetchCfg = settings?.fetch ?? {};
@@ -197,7 +197,7 @@ export async function runNewsPipeline({
     }
     const clippedQueries = queries.slice(0, queriesMax);
 
-    logger?.info?.(`新闻管线：SearXNG 搜索（queries=${clippedQueries.length}, pages=${pagesPerQuery}）`);
+    logger?.info?.(`新闻管线：搜索（queries=${clippedQueries.length}, pages=${pagesPerQuery}）`);
     const resultsByQuery = [];
     for (const q of clippedQueries) {
         const res = await searxngClient.searchMultiPage({
@@ -233,7 +233,7 @@ export async function runNewsPipeline({
             selectionText = await collectorAgent.speak({
                 contextText: [
                     `# 任务`,
-                    `从下面的 SearXNG 结果里挑选要抓取的新闻 URL，用于后续 Firecrawl 抓取原文。`,
+                    `从下面的搜索结果里挑选要抓取的新闻 URL，用于后续抓取原文。`,
                     ``,
                     `# URL 选择优先级`,
                     `1. 权威财经媒体 > 行业垂直媒体 > 社交平台`,
@@ -246,7 +246,7 @@ export async function runNewsPipeline({
                     `- 去重：同一事件尽量选 1 个最权威/最原始来源`,
                     `- 优先选择能直接呈现信息的页面`,
                     ``,
-                    `# 输入：SearXNG 结果（共 ${resultsByQuery.flat().length} 条）`,
+                    `# 输入：搜索结果（共 ${resultsByQuery.flat().length} 条）`,
                     formatSearchResultsForModel({ queries: clippedQueries, resultsByQuery, maxItems: 120 }),
                     ``,
                     `# 输出（必须是严格 JSON）`,
@@ -283,7 +283,7 @@ export async function runNewsPipeline({
         },
     );
 
-    logger?.info?.(`新闻管线：Firecrawl 抓取（urls=${selectedUrls.length}）`);
+    logger?.info?.(`新闻管线：抓取（urls=${selectedUrls.length}）`);
     const scrapeResults = await mapWithConcurrency(selectedUrls, concurrency, async (url) => {
         try {
             const { markdown, metadata } = await firecrawlClient.scrapeToMarkdown({ url });
@@ -303,7 +303,7 @@ export async function runNewsPipeline({
     const failedDocs = scrapeResults.filter((r) => !r.ok);
     if (!okDocs.length) {
         const err = failedDocs.length ? `；失败示例：${safeTruncate(failedDocs[0].error, 160)}` : '';
-        throw new Error(`新闻管线：Firecrawl 无可用内容${err}`);
+        throw new Error(`新闻管线：抓取无可用内容${err}`);
     }
 
     const docsForModel = formatDocsForModel({ docs: okDocs, maxTotalChars: maxTotalMd });

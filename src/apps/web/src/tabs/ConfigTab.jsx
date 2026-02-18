@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { authedFetch } from '../composables/useAuth.js';
+import WebToolsCard from '../components/WebToolsCard.jsx';
 
 const groupIcons = {
     database: 'fas fa-database',
@@ -114,7 +115,7 @@ export default function ConfigTab() {
                     <div className="flex items-center gap-3 text-success">
                         <i className="fas fa-check-circle"></i>
                         <span className="text-sm font-medium">
-                            保存成功，重启后生效
+                            保存成功
                         </span>
                     </div>
                 </div>
@@ -126,6 +127,8 @@ export default function ConfigTab() {
                     </div>
                 </div>
             ) : null}
+
+            <WebToolsCard />
 
             {isLoading ? (
                 <div className="card p-8 flex items-center justify-center">
