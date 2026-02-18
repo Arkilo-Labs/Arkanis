@@ -1,6 +1,6 @@
 import { join } from 'path';
-import { ChartBuilder, ChartInput } from '../../../core/chart/index.js';
-import { withRetries, withTimeout } from './runtime.js';
+import { ChartBuilder, ChartInput } from '../../../../core/chart/index.js';
+import { withRetries, withTimeout } from '../runtime/runtime.js';
 
 export async function renderChartPng({ outputDir, symbol, timeframe, bars, waitMs }) {
     const builder = new ChartBuilder();

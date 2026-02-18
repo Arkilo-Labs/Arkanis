@@ -1,6 +1,6 @@
-import { validateRR } from './rrValidator.js';
-import { StructuredContext } from './structuredContext.js';
-import { BeliefTracker } from './beliefTracker.js';
+import { validateRR } from '../validation/rrValidator.js';
+import { StructuredContext } from '../context/structuredContext.js';
+import { BeliefTracker } from '../context/beliefTracker.js';
 
 function safeTruncate(value, maxChars) {
     const text = typeof value === 'string' ? value : String(value ?? '');
@@ -477,7 +477,7 @@ export class Roundtable {
     }
 
     async _runTools(tools) {
-        const { withRetries, withTimeout } = await import('./runtime.js');
+        const { withRetries, withTimeout } = await import('../runtime/runtime.js');
         const results = [];
         for (const tool of tools ?? []) {
             if (tool.type !== 'mcp') continue;

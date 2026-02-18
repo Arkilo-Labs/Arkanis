@@ -1,4 +1,4 @@
-import { withRetries } from './runtime.js';
+import { withRetries } from '../runtime/runtime.js';
 
 function extractJsonObject(text) {
     const raw = String(text || '').trim();

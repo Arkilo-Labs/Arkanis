@@ -1,6 +1,6 @@
 import { join } from 'path';
-import { ensureDir } from './fsUtils.js';
-import { screenshotPage } from './liquidationShot.js';
+import { ensureDir } from '../runtime/fsUtils.js';
+import { screenshotPage } from '../screenshots/liquidationShot.js';
 
 function isHttpUrl(raw) {
     try {
@@ -266,7 +266,7 @@ export class Toolbox {
 
                 if (name === 'orderbook.depth') {
                     // 动态导入 orderbook 模块
-                    const { fetchOrderbook, summarizeOrderbook } = await import('./orderbook.js');
+                    const { fetchOrderbook, summarizeOrderbook } = await import('../market/orderbook.js');
 
                     const symbol = String(args.symbol || '').trim();
                     if (!symbol) throw new Error('orderbook.depth 需要 symbol');
@@ -328,4 +328,3 @@ export class Toolbox {
         return { toolResults, imagePaths };
     }
 }
-

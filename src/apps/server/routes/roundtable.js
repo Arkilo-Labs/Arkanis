@@ -8,7 +8,7 @@ import { readProviderDefinitions } from '../../../core/services/aiProvidersStore
 import { readSecrets } from '../../../core/services/secretsStore.js';
 import { createRedactor } from '../../../core/utils/redactSecrets.js';
 import { ROUND_EVENT_TO_SOCKET_EVENT, SOCKET_EVENTS } from '../socket/events.js';
-import { loadAgentsConfig } from '../../../agents/agents-round/core/configLoader.js';
+import { loadAgentsConfig } from '../../../agents/agents-round/core/config/configLoader.js';
 import {
     readAgentProviderOverrides,
     writeAgentProviderOverrides,

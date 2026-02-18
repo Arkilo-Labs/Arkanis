@@ -2,8 +2,8 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { z } from 'zod';
 
-import { resolveDataDir } from '../../../core/utils/dataDir.js';
-import { readProviderDefinitions } from '../../../core/services/aiProvidersStore.js';
+import { resolveDataDir } from '../../../../core/utils/dataDir.js';
+import { readProviderDefinitions } from '../../../../core/services/aiProvidersStore.js';
 
 const ProviderSchema = z.object({
     type: z.enum(['openai_compatible']),

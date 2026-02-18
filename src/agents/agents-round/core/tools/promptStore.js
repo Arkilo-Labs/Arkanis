@@ -1,5 +1,5 @@
 import { join } from 'path';
-import { readText } from './fsUtils.js';
+import { readText } from '../runtime/fsUtils.js';
 
 export class PromptStore {
     constructor({ promptsDir }) {
@@ -10,4 +10,3 @@ export class PromptStore {
         return readText(join(this.promptsDir, promptFileName));
     }
 }
-
