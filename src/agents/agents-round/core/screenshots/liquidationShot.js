@@ -75,7 +75,7 @@ export async function screenshotPage({
                 page.setDefaultNavigationTimeout(60000);
 
                 await withTimeout(page.goto(url, { waitUntil: 'networkidle2' }), 70000, `页面打开(${url})`);
-                await page.waitForTimeout(waitMs);
+                await new Promise((resolve) => setTimeout(resolve, waitMs));
 
                 const outPath = join(outputDir, fileName);
 
