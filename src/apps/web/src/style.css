@@ -998,7 +998,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 2rem;
+    gap: 1.25rem;
   }
 
   .logo {
@@ -1011,11 +1011,13 @@
   }
 
   .nav-links {
-    @apply hidden md:flex items-center gap-6;
+    @apply hidden md:flex items-center gap-4;
+    flex-shrink: 0;
   }
 
   .nav-link {
     @apply rounded-lg px-2 py-1 text-sm font-medium text-text-muted transition;
+    white-space: nowrap;
   }
 
   .nav-link:hover {
