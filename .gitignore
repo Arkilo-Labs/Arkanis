@@ -38,7 +38,8 @@ notes/
 
 ai-providers.json
 secrets*.json
-data/
+# 运行时数据（只忽略根目录，避免误伤 src/**/data 代码目录）
+/data/
 
 .VSCodeCounter
 
