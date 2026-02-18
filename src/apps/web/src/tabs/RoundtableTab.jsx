@@ -233,9 +233,6 @@ export default function RoundtableTab() {
                     <div className="flex items-start justify-between gap-3 mb-4">
                         <div>
                             <h2 className="text-sm font-semibold">Sessions</h2>
-                            <div className="text-xs text-text-muted mt-1">
-                                最近会话，点击即可回放
-                            </div>
                         </div>
 
                         <button
@@ -315,9 +312,6 @@ export default function RoundtableTab() {
                     <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                             <h2 className="text-sm font-semibold">启动面板</h2>
-                            <div className="text-xs text-text-muted mt-1">
-                                右侧参数用于启动新会话（启动后自动切换到新 session）
-                            </div>
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2">

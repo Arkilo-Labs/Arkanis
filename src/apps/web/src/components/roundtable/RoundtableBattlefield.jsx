@@ -866,6 +866,29 @@ export default function RoundtableBattlefield({
                             </span>
                         </div>
 
+                        <div className="rt-bf-panel rt-bf-panel-stats">
+                            <div className="rt-bf-panel-title">
+                                <span>Stats</span>
+                                <span className="text-text-muted">
+                                    B {bullAgents.length} / S {bearAgents.length}
+                                </span>
+                            </div>
+                            <div className="rt-bf-panel-grid">
+                                <div>
+                                    <div className="rt-bf-panel-label">事件</div>
+                                    <div className="rt-bf-panel-value">
+                                        {messageItems.length}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="rt-bf-panel-label">阵营</div>
+                                    <div className="rt-bf-panel-value">
+                                        {battlePhase === 'duel' ? 'duel' : battlePhase}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="rt-bf-agent-list scrollbar">
                             {leftAgents.length ? (
                                 leftAgents.map((agent) => {
@@ -927,29 +950,6 @@ export default function RoundtableBattlefield({
                                     {isRunning ? '等待 Agent 入场...' : '暂无 Agent 数据'}
                                 </div>
                             )}
-                        </div>
-
-                        <div className="rt-bf-panel rt-bf-panel-stats">
-                            <div className="rt-bf-panel-title">
-                                <span>Stats</span>
-                                <span className="text-text-muted">
-                                    B {bullAgents.length} / S {bearAgents.length}
-                                </span>
-                            </div>
-                            <div className="rt-bf-panel-grid">
-                                <div>
-                                    <div className="rt-bf-panel-label">事件</div>
-                                    <div className="rt-bf-panel-value">
-                                        {messageItems.length}
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="rt-bf-panel-label">阵营</div>
-                                    <div className="rt-bf-panel-value">
-                                        {battlePhase === 'duel' ? 'duel' : battlePhase}
-                                    </div>
-                                </div>
-                            </div>
                         </div>
                     </aside>
 
@@ -1255,6 +1255,56 @@ export default function RoundtableBattlefield({
                             </span>
                         </div>
 
+                        <div className="rt-bf-panel rt-bf-panel-logs">
+                            <div className="rt-bf-panel-title">
+                                <span>Trace</span>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-text-muted">
+                                        {traceItems.length}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => setTerminalOpen(true)}
+                                    >
+                                        <i className="fas fa-terminal"></i>
+                                        终端
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="rt-bf-trace-list scrollbar">
+                                {traceItems.length ? (
+                                    traceItems.map((item) => (
+                                        <div
+                                            key={item.id}
+                                            className={[
+                                                'rt-bf-trace-row',
+                                                item.level === 'error'
+                                                    ? 'rt-bf-trace-error'
+                                                    : item.level === 'success'
+                                                      ? 'rt-bf-trace-success'
+                                                      : item.level === 'warn'
+                                                        ? 'rt-bf-trace-warn'
+                                                        : '',
+                                            ].join(' ')}
+                                        >
+                                            <div className="rt-bf-trace-head">
+                                                <span className="rt-bf-trace-title">{item.title}</span>
+                                                <span className="rt-bf-trace-time">
+                                                    {formatTimestamp(item.timestamp)}
+                                                </span>
+                                            </div>
+                                            <div className="rt-bf-trace-detail">{item.detail}</div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="rt-bf-empty">
+                                        {isRunning ? '等待事件...' : '暂无事件'}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
                         {battlePhase === 'duel' ? (
                             <div className="rt-bf-agent-list scrollbar">
                                 {rightAgents.length ? (
@@ -1314,56 +1364,6 @@ export default function RoundtableBattlefield({
                                 )}
                             </div>
                         ) : null}
-
-                        <div className="rt-bf-panel rt-bf-panel-logs">
-                            <div className="rt-bf-panel-title">
-                                <span>Trace</span>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-text-muted">
-                                        {traceItems.length}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        className="btn btn-secondary btn-sm"
-                                        onClick={() => setTerminalOpen(true)}
-                                    >
-                                        <i className="fas fa-terminal"></i>
-                                        终端
-                                    </button>
-                                </div>
-                            </div>
-                            <div className="rt-bf-trace-list scrollbar">
-                                {traceItems.length ? (
-                                    traceItems.map((item) => (
-                                        <div
-                                            key={item.id}
-                                            className={[
-                                                'rt-bf-trace-row',
-                                                item.level === 'error'
-                                                    ? 'rt-bf-trace-error'
-                                                    : item.level === 'success'
-                                                      ? 'rt-bf-trace-success'
-                                                      : item.level === 'warn'
-                                                        ? 'rt-bf-trace-warn'
-                                                        : '',
-                                            ].join(' ')}
-                                        >
-                                            <div className="rt-bf-trace-head">
-                                                <span className="rt-bf-trace-title">{item.title}</span>
-                                                <span className="rt-bf-trace-time">
-                                                    {formatTimestamp(item.timestamp)}
-                                                </span>
-                                            </div>
-                                            <div className="rt-bf-trace-detail">{item.detail}</div>
-                                        </div>
-                                    ))
-                                ) : (
-                                    <div className="rt-bf-empty">
-                                        {isRunning ? '等待事件...' : '暂无事件'}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
                     </aside>
                 </div>
 

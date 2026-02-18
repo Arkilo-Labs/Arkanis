@@ -142,9 +142,6 @@ export default function DecisionResultCard({
                     <div className="text-xs text-text-muted">共识</div>
                     <div className="text-sm font-semibold mt-1">{consensus}</div>
                 </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
                 <div className="rounded-xl border border-border-light/10 bg-black/20 px-3 py-3">
                     <div className="text-xs text-text-muted">入场</div>
                     <div className="font-mono text-sm mt-1">{entry}</div>
