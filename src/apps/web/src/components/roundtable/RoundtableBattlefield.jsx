@@ -842,29 +842,6 @@ export default function RoundtableBattlefield({
                             </span>
                         </div>
 
-                        <div className="rt-bf-panel rt-bf-panel-stats">
-                            <div className="rt-bf-panel-title">
-                                <span>Stats</span>
-                                <span className="text-text-muted">
-                                    B {bullAgents.length} / S {bearAgents.length}
-                                </span>
-                            </div>
-                            <div className="rt-bf-panel-grid">
-                                <div>
-                                    <div className="rt-bf-panel-label">事件</div>
-                                    <div className="rt-bf-panel-value">
-                                        {messageItems.length}
-                                    </div>
-                                </div>
-                                <div>
-                                    <div className="rt-bf-panel-label">阵营</div>
-                                    <div className="rt-bf-panel-value">
-                                        {battlePhase === 'duel' ? 'duel' : battlePhase}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
                         <div className="rt-bf-agent-list scrollbar">
                             {leftAgents.length ? (
                                 leftAgents.map((agent) => {
@@ -926,6 +903,29 @@ export default function RoundtableBattlefield({
                                     {isRunning ? '等待 Agent 入场...' : '暂无 Agent 数据'}
                                 </div>
                             )}
+                        </div>
+
+                        <div className="rt-bf-panel rt-bf-panel-stats">
+                            <div className="rt-bf-panel-title">
+                                <span>Stats</span>
+                                <span className="text-text-muted">
+                                    B {bullAgents.length} / S {bearAgents.length}
+                                </span>
+                            </div>
+                            <div className="rt-bf-panel-grid">
+                                <div>
+                                    <div className="rt-bf-panel-label">事件</div>
+                                    <div className="rt-bf-panel-value">
+                                        {messageItems.length}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="rt-bf-panel-label">阵营</div>
+                                    <div className="rt-bf-panel-value">
+                                        {battlePhase === 'duel' ? 'duel' : battlePhase}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                     </aside>
