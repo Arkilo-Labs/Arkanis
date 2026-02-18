@@ -190,7 +190,7 @@ export async function loadBars(
     const resolvedAssetClass = assetClass || detectAssetClass(symbol);
     const isYahoo = ['stock', 'forex', 'commodity', 'index'].includes(resolvedAssetClass);
 
-    // Yahoo 数据源不走 DB
+    // Yahoo 数据源不走缓存
     if (isYahoo) {
         return withRetries(
             async ({ attempt }) => {
@@ -208,16 +208,17 @@ export async function loadBars(
         );
     }
 
-    // Crypto: 尝试 DB -> 交易所
-    const preferMode = String(prefer || 'auto').toLowerCase();
-    const tryDb = preferMode === 'auto' || preferMode === 'db';
+    // Crypto: 优先缓存 -> 交易所
+    const preferModeRaw = String(prefer || 'auto').toLowerCase();
+    const preferMode = preferModeRaw === 'db' ? 'cache' : preferModeRaw;
+    const tryCache = preferMode === 'auto' || preferMode === 'cache';
     const tryEx = preferMode === 'auto' || preferMode === 'exchange';
 
-    if (tryDb) {
+    if (tryCache) {
         try {
             const bars = await withRetries(
                 async ({ attempt }) => {
-                    if (attempt > 1) logger?.warn(`数据库读取重试：${symbol} ${timeframe} 第 ${attempt} 次`);
+                    if (attempt > 1) logger?.warn(`缓存读取重试：${symbol} ${timeframe} 第 ${attempt} 次`);
                     return loadFromDb(
                         { symbol, timeframe, barsCount, endTime },
                         { timeoutMs: dbTimeoutMs, exchangeId, marketType, exchangeFallbacks },
@@ -226,17 +227,17 @@ export async function loadBars(
                 {
                     retries: 1,
                     baseDelayMs: 900,
-                    onRetry: ({ delay, error }) => logger?.warn(`数据库读取失败：${error.message}，${delay}ms 后重试`),
+                    onRetry: ({ delay, error }) => logger?.warn(`缓存读取失败：${error.message}，${delay}ms 后重试`),
                 },
             );
             return bars;
         } catch (e) {
-            logger?.warn(`数据库不可用，降级到交易所：${e.message}`);
+            logger?.warn(`缓存不可用，降级到交易所：${e.message}`);
         }
     }
 
     if (!tryEx) {
-        throw new Error('数据源被配置为仅 DB，但 DB 不可用');
+        throw new Error('数据源被配置为仅缓存，但缓存不可用');
     }
 
     return withRetries(
