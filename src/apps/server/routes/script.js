@@ -58,7 +58,7 @@ export function registerScriptRoutes({ app, io, projectRoot, activeProcesses }) 
         const scriptPath = resolveScriptPath({ projectRoot, script });
         const cmdArgs = [scriptPath, ...args];
 
-        console.log(`Spawning: node ${cmdArgs.join(' ')}`);
+        console.log(`Spawning script: ${script}`);
 
         try {
             const child = spawn(process.execPath, cmdArgs, {

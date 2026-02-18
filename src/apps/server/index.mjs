@@ -38,11 +38,17 @@ const PROJECT_ROOT = join(__dirname, '..', '..', '..');
 
 dotenvConfig({ path: join(PROJECT_ROOT, '.env') });
 
+function resolveCorsOrigin() {
+    const raw = (process.env.SOCKET_CORS_ORIGINS || '').trim();
+    if (!raw || raw === '*') return '*';
+    return raw.split(',').map((s) => s.trim()).filter(Boolean);
+}
+
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
-        origin: '*',
+        origin: resolveCorsOrigin(),
         methods: ['GET', 'POST'],
     },
 });
