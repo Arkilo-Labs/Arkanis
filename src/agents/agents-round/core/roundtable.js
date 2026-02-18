@@ -41,8 +41,8 @@ export class Roundtable {
         return providerId.trim();
     }
 
-    _buildAgentSpeakEvent({ phase, turn, agent, text, audited, filtered }) {
-        return {
+    _buildAgentSpeakEvent({ phase, turn, agent, text, audited, filtered, target = null, targetTurn = null, relation = null }) {
+        const payload = {
             phase,
             turn,
             name: agent.name,
@@ -52,6 +52,13 @@ export class Roundtable {
             audited: Boolean(audited),
             filtered: Boolean(filtered),
         };
+
+        const normalizedTarget = typeof target === 'string' ? target.trim() : '';
+        if (normalizedTarget) payload.target = normalizedTarget;
+        if (targetTurn !== null && targetTurn !== undefined) payload.targetTurn = targetTurn;
+        if (relation) payload.relation = relation;
+
+        return payload;
     }
 
     _validateRR(leaderJson) {
@@ -687,14 +694,14 @@ export class Roundtable {
         const bearTeam = [];
         const neutralTeam = [];
 
-        for (const { agent, result } of openingResults) {
+        for (const { agent, result, turn } of openingResults) {
             const stance = this._classifyAgentStance(result.text);
             if (stance === 'BULL') {
-                bullTeam.push({ agent, stance, text: result.text });
+                bullTeam.push({ agent, stance, text: result.text, openingTurn: turn });
             } else if (stance === 'BEAR') {
-                bearTeam.push({ agent, stance, text: result.text });
+                bearTeam.push({ agent, stance, text: result.text, openingTurn: turn });
             } else {
-                neutralTeam.push({ agent, stance, text: result.text });
+                neutralTeam.push({ agent, stance, text: result.text, openingTurn: turn });
             }
         }
 
@@ -736,10 +743,11 @@ export class Roundtable {
         ].join('\n');
     }
 
-    async _runAdversarialDebate({ openingResults, chairAgent, imagePaths, llmTimeoutMs, llmRetries, maxDebateRounds = 2 }) {
+    async _runAdversarialDebate({ openingResults, chairAgent: _chairAgent, imagePaths, llmTimeoutMs, llmRetries, maxDebateRounds = 2, startingTurn = 0 }) {
         const { bullTeam, bearTeam, neutralTeam } = this._buildAdversarialTeams(openingResults);
         const debateTranscript = [];
         let debateContext = '';
+        let turn = Number(startingTurn) || 0;
 
         // 如果没有明显的对立阵营，跳过对抗性辩论
         if (bullTeam.length === 0 || bearTeam.length === 0) {
@@ -762,47 +770,116 @@ export class Roundtable {
             });
 
             this.logger.info(`交叉质询：${bullExaminer.agent.name} -> ${bearTarget.agent.name}`);
+            turn += 1;
+            const bullExamTurn = turn;
             const { text: bullExamText } = await this._speakWithToolLoop({
-                turn: 100 + round * 4,
+                turn: bullExamTurn,
                 agent: bullExaminer.agent,
                 contextText: bullExamPrompt,
                 imagePaths,
                 callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
             });
 
+            const bullExamAudit = await this._auditTurn({
+                turn: bullExamTurn,
+                agent: bullExaminer.agent,
+                text: bullExamText,
+            });
+            const { filteredText: bullExamFiltered, isFiltered: bullExamIsFiltered } = this._applyAudit(
+                bullExamText,
+                bullExamAudit,
+            );
+
             debateTranscript.push({
                 name: bullExaminer.agent.name,
                 role: bullExaminer.agent.role,
-                text: bullExamText,
+                text: bullExamFiltered,
+                audited: Boolean(bullExamAudit),
+                filtered: bullExamIsFiltered,
                 phase: 'cross_examination',
+                turn: bullExamTurn,
                 target: bearTarget.agent.name,
+                targetTurn: bearTarget.openingTurn ?? null,
+                relation: 'attack',
             });
-            debateContext += `\n\n【${bullExaminer.agent.name} 质询 ${bearTarget.agent.name}】\n${bullExamText}\n`;
+            this._emitEvent(
+                'agent-speak',
+                this._buildAgentSpeakEvent({
+                    phase: 'cross_examination',
+                    turn: bullExamTurn,
+                    agent: bullExaminer.agent,
+                    text: bullExamFiltered,
+                    audited: bullExamAudit,
+                    filtered: bullExamIsFiltered,
+                    target: bearTarget.agent.name,
+                    targetTurn: bearTarget.openingTurn ?? null,
+                    relation: 'attack',
+                }),
+            );
+            if (!bullExamIsFiltered) {
+                debateContext += `\n\n【${bullExaminer.agent.name} 质询 ${bearTarget.agent.name}】\n${bullExamFiltered}\n`;
+                this._extractStructuredInfo(bullExamFiltered, bullExaminer.agent.name, { turn: bullExamTurn });
+            }
 
             // Bear 反驳
             const bearRebuttalPrompt = this._buildRebuttalPrompt({
                 defender: bearTarget.agent,
                 attackerName: bullExaminer.agent.name,
-                attackText: bullExamText,
+                attackText: bullExamFiltered,
                 originalText: bearTarget.text,
             });
 
             this.logger.info(`反驳：${bearTarget.agent.name}`);
+            turn += 1;
+            const bearRebuttalTurn = turn;
             const { text: bearRebuttalText } = await this._speakWithToolLoop({
-                turn: 100 + round * 4 + 1,
+                turn: bearRebuttalTurn,
                 agent: bearTarget.agent,
                 contextText: bearRebuttalPrompt,
                 imagePaths,
                 callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
             });
 
+            const bearRebutAudit = await this._auditTurn({
+                turn: bearRebuttalTurn,
+                agent: bearTarget.agent,
+                text: bearRebuttalText,
+            });
+            const { filteredText: bearRebutFiltered, isFiltered: bearRebutIsFiltered } = this._applyAudit(
+                bearRebuttalText,
+                bearRebutAudit,
+            );
+
             debateTranscript.push({
                 name: bearTarget.agent.name,
                 role: bearTarget.agent.role,
-                text: bearRebuttalText,
+                text: bearRebutFiltered,
+                audited: Boolean(bearRebutAudit),
+                filtered: bearRebutIsFiltered,
                 phase: 'rebuttal',
+                turn: bearRebuttalTurn,
+                target: bullExaminer.agent.name,
+                targetTurn: bullExamTurn,
+                relation: 'attack',
             });
-            debateContext += `\n\n【${bearTarget.agent.name} 反驳】\n${bearRebuttalText}\n`;
+            this._emitEvent(
+                'agent-speak',
+                this._buildAgentSpeakEvent({
+                    phase: 'rebuttal',
+                    turn: bearRebuttalTurn,
+                    agent: bearTarget.agent,
+                    text: bearRebutFiltered,
+                    audited: bearRebutAudit,
+                    filtered: bearRebutIsFiltered,
+                    target: bullExaminer.agent.name,
+                    targetTurn: bullExamTurn,
+                    relation: 'attack',
+                }),
+            );
+            if (!bearRebutIsFiltered) {
+                debateContext += `\n\n【${bearTarget.agent.name} 反驳】\n${bearRebutFiltered}\n`;
+                this._extractStructuredInfo(bearRebutFiltered, bearTarget.agent.name, { turn: bearRebuttalTurn });
+            }
 
             // Bear 质询 Bull
             const bearExaminer = bearTeam[round % bearTeam.length];
@@ -816,47 +893,116 @@ export class Roundtable {
             });
 
             this.logger.info(`交叉质询：${bearExaminer.agent.name} -> ${bullTarget.agent.name}`);
+            turn += 1;
+            const bearExamTurn = turn;
             const { text: bearExamText } = await this._speakWithToolLoop({
-                turn: 100 + round * 4 + 2,
+                turn: bearExamTurn,
                 agent: bearExaminer.agent,
                 contextText: bearExamPrompt,
                 imagePaths,
                 callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
             });
 
+            const bearExamAudit = await this._auditTurn({
+                turn: bearExamTurn,
+                agent: bearExaminer.agent,
+                text: bearExamText,
+            });
+            const { filteredText: bearExamFiltered, isFiltered: bearExamIsFiltered } = this._applyAudit(
+                bearExamText,
+                bearExamAudit,
+            );
+
             debateTranscript.push({
                 name: bearExaminer.agent.name,
                 role: bearExaminer.agent.role,
-                text: bearExamText,
+                text: bearExamFiltered,
+                audited: Boolean(bearExamAudit),
+                filtered: bearExamIsFiltered,
                 phase: 'cross_examination',
+                turn: bearExamTurn,
                 target: bullTarget.agent.name,
+                targetTurn: bullTarget.openingTurn ?? null,
+                relation: 'attack',
             });
-            debateContext += `\n\n【${bearExaminer.agent.name} 质询 ${bullTarget.agent.name}】\n${bearExamText}\n`;
+            this._emitEvent(
+                'agent-speak',
+                this._buildAgentSpeakEvent({
+                    phase: 'cross_examination',
+                    turn: bearExamTurn,
+                    agent: bearExaminer.agent,
+                    text: bearExamFiltered,
+                    audited: bearExamAudit,
+                    filtered: bearExamIsFiltered,
+                    target: bullTarget.agent.name,
+                    targetTurn: bullTarget.openingTurn ?? null,
+                    relation: 'attack',
+                }),
+            );
+            if (!bearExamIsFiltered) {
+                debateContext += `\n\n【${bearExaminer.agent.name} 质询 ${bullTarget.agent.name}】\n${bearExamFiltered}\n`;
+                this._extractStructuredInfo(bearExamFiltered, bearExaminer.agent.name, { turn: bearExamTurn });
+            }
 
             // Bull 反驳
             const bullRebuttalPrompt = this._buildRebuttalPrompt({
                 defender: bullTarget.agent,
                 attackerName: bearExaminer.agent.name,
-                attackText: bearExamText,
+                attackText: bearExamFiltered,
                 originalText: bullTarget.text,
             });
 
             this.logger.info(`反驳：${bullTarget.agent.name}`);
+            turn += 1;
+            const bullRebuttalTurn = turn;
             const { text: bullRebuttalText } = await this._speakWithToolLoop({
-                turn: 100 + round * 4 + 3,
+                turn: bullRebuttalTurn,
                 agent: bullTarget.agent,
                 contextText: bullRebuttalPrompt,
                 imagePaths,
                 callOptions: { retries: llmRetries, timeoutMs: llmTimeoutMs },
             });
 
+            const bullRebutAudit = await this._auditTurn({
+                turn: bullRebuttalTurn,
+                agent: bullTarget.agent,
+                text: bullRebuttalText,
+            });
+            const { filteredText: bullRebutFiltered, isFiltered: bullRebutIsFiltered } = this._applyAudit(
+                bullRebuttalText,
+                bullRebutAudit,
+            );
+
             debateTranscript.push({
                 name: bullTarget.agent.name,
                 role: bullTarget.agent.role,
-                text: bullRebuttalText,
+                text: bullRebutFiltered,
+                audited: Boolean(bullRebutAudit),
+                filtered: bullRebutIsFiltered,
                 phase: 'rebuttal',
+                turn: bullRebuttalTurn,
+                target: bearExaminer.agent.name,
+                targetTurn: bearExamTurn,
+                relation: 'attack',
             });
-            debateContext += `\n\n【${bullTarget.agent.name} 反驳】\n${bullRebuttalText}\n`;
+            this._emitEvent(
+                'agent-speak',
+                this._buildAgentSpeakEvent({
+                    phase: 'rebuttal',
+                    turn: bullRebuttalTurn,
+                    agent: bullTarget.agent,
+                    text: bullRebutFiltered,
+                    audited: bullRebutAudit,
+                    filtered: bullRebutIsFiltered,
+                    target: bearExaminer.agent.name,
+                    targetTurn: bearExamTurn,
+                    relation: 'attack',
+                }),
+            );
+            if (!bullRebutIsFiltered) {
+                debateContext += `\n\n【${bullTarget.agent.name} 反驳】\n${bullRebutFiltered}\n`;
+                this._extractStructuredInfo(bullRebutFiltered, bullTarget.agent.name, { turn: bullRebuttalTurn });
+            }
         }
 
         return { transcript: debateTranscript, context: debateContext, skipped: false };
@@ -918,6 +1064,7 @@ export class Roundtable {
                     llmTimeoutMs,
                     llmRetries,
                     maxDebateRounds: this.settings.adversarial_debate_rounds ?? 1,
+                    startingTurn: turn,
                 });
                 if (!debateResult.skipped) {
                     transcript.push(...debateResult.transcript);
