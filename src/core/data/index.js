@@ -3,16 +3,6 @@
  */
 
 export { Bar, RawBar } from './models.js';
-export {
-    closePools,
-    closePool,
-    queryMarket,
-    queryCore,
-    query,
-    withMarketConnection,
-    withCoreConnection,
-    withConnection,
-} from './pgClient.js';
 export { getDb, closeDb, queryKv, upsertKv } from './sqliteClient.js';
 export { KlinesRepository, TIMEFRAME_MINUTES } from './klinesRepository.js';
 export {

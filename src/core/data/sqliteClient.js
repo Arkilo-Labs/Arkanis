@@ -1,10 +1,10 @@
 /**
  * SQLite 客户端单例
- * 提供 app_kv 持久化存储，替代 PostgreSQL
+ * 提供 app_kv 持久化存储（SQLite）
  */
 
 import Database from 'better-sqlite3';
-import { mkdirSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 import { dirname, isAbsolute, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -22,16 +22,17 @@ let _db = null;
  * 4. 未设置 DB_PATH          → ARKANIS_DATA_DIR/arkanis.db（或 projectRoot/data/arkanis.db）
  */
 function resolveDbPath() {
-    const envPath = process.env.DB_PATH;
+    const envPath = String(process.env.DB_PATH || '').trim();
 
     if (envPath) {
         if (envPath === ':memory:') return ':memory:';
         return isAbsolute(envPath) ? envPath : resolve(PROJECT_ROOT, envPath);
     }
 
-    const dataDir = process.env.ARKANIS_DATA_DIR
-        ? resolve(process.env.ARKANIS_DATA_DIR)
-        : resolve(PROJECT_ROOT, 'data');
+    const rawDataDir = String(process.env.ARKANIS_DATA_DIR || '').trim();
+    const dataDir = rawDataDir
+        ? (isAbsolute(rawDataDir) ? rawDataDir : resolve(PROJECT_ROOT, rawDataDir))
+        : (existsSync('/data') ? '/data' : resolve(PROJECT_ROOT, 'data'));
 
     return resolve(dataDir, 'arkanis.db');
 }
@@ -100,6 +101,9 @@ export function queryKv(key) {
 export function upsertKv(key, value) {
     if (!key) throw new Error('upsertKv: key 不能为空');
     const serialized = JSON.stringify(value);
+    if (serialized === undefined) {
+        throw new Error('upsertKv: value 无法序列化为 JSON（请避免 undefined/function/symbol）');
+    }
     getDb()
         .prepare(`
             INSERT INTO app_kv (key, value, updated_at)

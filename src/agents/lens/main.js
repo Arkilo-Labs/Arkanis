@@ -16,7 +16,7 @@ import { join } from 'path';
 import { config, defaultConfig } from '../../core/config/index.js';
 import {
     KlinesRepository,
-    closePool,
+    closeDb,
     TIMEFRAME_MINUTES,
     aggregateBarsToHigherTimeframe,
     formatMinutesAsTimeframe,
@@ -537,7 +537,7 @@ async function main() {
         logger.error(e.stack);
         return 1;
     } finally {
-        await closePool();
+        await closeDb();
     }
 }
 
