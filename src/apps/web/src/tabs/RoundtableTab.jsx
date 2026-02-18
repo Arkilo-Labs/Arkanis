@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import AgentCard from '../components/roundtable/AgentCard.jsx';
 import DecisionResultCard from '../components/roundtable/DecisionResultCard.jsx';
-import TranscriptPanel from '../components/roundtable/TranscriptPanel.jsx';
-import LogTerminal from '../components/LogTerminal.jsx';
+import RoundtableBattlefield from '../components/roundtable/RoundtableBattlefield.jsx';
 import { authedFetch } from '../composables/useAuth.js';
 import { useRoundtable } from '../composables/useRoundtable.js';
 import { useSocket } from '../composables/useSocket.js';
@@ -41,7 +39,6 @@ export default function RoundtableTab() {
     });
     const [error, setError] = useState('');
     const [isStarting, setIsStarting] = useState(false);
-    const [isPanelOpen, setIsPanelOpen] = useState(false);
 
     const roundtable = useRoundtable();
     const timeframes = useMemo(() => ['5m', '15m', '30m', '1h', '4h', '1d'], []);
@@ -105,48 +102,19 @@ export default function RoundtableTab() {
             .join('  ');
     }, [config]);
 
-    const agentCards = useMemo(() => {
-        const byName = new Map();
-
-        for (const entry of transcriptEntries) {
-            const name = String(entry?.name || '').trim();
-            if (!name) continue;
-
-            const current = byName.get(name);
-            const payload = {
-                name,
-                role: String(entry?.role || '').trim(),
-                provider: String(entry?.provider || '').trim(),
-                speakCount: (current?.speakCount || 0) + 1,
-                lastTurn: entry?.turn ?? null,
-                lastPhase: String(entry?.phase || '').trim(),
-                lastTimestamp: entry.timestamp,
-                firstTimestamp: current?.firstTimestamp ?? entry.timestamp,
-            };
-
-            if (!payload.role && current?.role) payload.role = current.role;
-            if (!payload.provider && current?.provider) payload.provider = current.provider;
-            byName.set(name, payload);
-        }
-
-        const latest = transcriptEntries.length
-            ? transcriptEntries[transcriptEntries.length - 1]
-            : null;
-        const latestName = String(latest?.name || '').trim();
-
-        return Array.from(byName.values())
-            .sort((left, right) => left.firstTimestamp - right.firstTimestamp)
-            .map((item) => {
-                let status = 'waiting';
-                if (!isRunning && item.speakCount > 0) {
-                    status = 'done';
-                } else if (isRunning && latestName && latestName === item.name) {
-                    status = 'speaking';
-                }
-
-                return { ...item, status };
-            });
-    }, [isRunning, transcriptEntries]);
+    const counts = useMemo(() => {
+        return {
+            speaks: roundtable.agentSpeaks.length,
+            tools: roundtable.toolCalls.length,
+            beliefs: roundtable.beliefUpdates.length,
+            decisions: roundtable.decisions.length,
+        };
+    }, [
+        roundtable.agentSpeaks.length,
+        roundtable.toolCalls.length,
+        roundtable.beliefUpdates.length,
+        roundtable.decisions.length,
+    ]);
 
     const startRoundtable = useCallback(async () => {
         if (isRunning) {
@@ -197,7 +165,6 @@ export default function RoundtableTab() {
 
             await roundtable.loadSessions().catch(() => null);
             await roundtable.selectSession(payload.sessionId, { replace: true });
-            setIsPanelOpen(false);
         } catch (caught) {
             setError(caught?.message || String(caught));
         } finally {
@@ -235,71 +202,45 @@ export default function RoundtableTab() {
 
     return (
         <div className="space-y-6">
-            <section className="card card-hover p-6">
-                <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
-                    <div>
-                        <div className="text-xs tracking-wide text-text-muted">Trade Roundtable</div>
-                        <h1 className="text-2xl md:text-3xl font-bold mt-2">圆桌</h1>
-                        <div className="text-xs text-text-muted mt-2 flex flex-wrap gap-x-4 gap-y-1">
-                            <span>
-                                Session: <span className="font-mono">{activeSessionId || '--'}</span>
-                            </span>
-                            <span>
-                                PID: <span className="font-mono">{activePid || '--'}</span>
-                            </span>
-                            <span>
-                                Seq: <span className="font-mono">{roundtable.lastSeq}</span>
-                            </span>
-                        </div>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                        <span className={['badge', isConnected ? 'badge-success' : 'badge-error'].join(' ')}>
-                            <i className="fas fa-signal"></i>
-                            {isConnected ? 'Socket 已连接' : 'Socket 未连接'}
-                        </span>
-
-                        <span className={['badge', statusMeta.className].join(' ')}>
-                            <i className={['fas', statusMeta.icon].join(' ')}></i>
-                            {statusMeta.label}
-                        </span>
-
-                        {roundtable.isReplaying ? (
-                            <span className="badge badge-muted">
-                                <i className="fas fa-rotate fa-spin"></i>
-                                回放中
-                            </span>
-                        ) : null}
-                    </div>
+            <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                    <div className="text-xs tracking-wide text-text-muted">Trade Roundtable</div>
+                    <h1 className="text-2xl md:text-3xl font-bold mt-2">圆桌</h1>
                 </div>
 
-                <div className="mt-5 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto] gap-3 items-end">
-                    <div>
-                        <label className="form-label">会话选择</label>
-                        <select
-                            className="form-input font-mono"
-                            value={activeSessionId || ''}
-                            onChange={(e) => {
-                                const id = e.target.value;
-                                if (!id) return;
-                                void roundtable.selectSession(id, { replace: true }).catch((caught) => {
-                                    setError(caught?.message || String(caught));
-                                });
-                            }}
-                        >
-                            {!roundtable.sessions.length ? <option value="">暂无会话</option> : null}
-                            {roundtable.sessions.map((item) => (
-                                <option key={item.id} value={item.id}>
-                                    {item.id} · {item.status || 'incomplete'}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className={['badge', isConnected ? 'badge-success' : 'badge-error'].join(' ')}>
+                        <i className="fas fa-signal"></i>
+                        {isConnected ? 'Socket 已连接' : 'Socket 未连接'}
+                    </span>
 
-                    <div className="flex flex-wrap gap-2">
+                    <span className={['badge', statusMeta.className].join(' ')}>
+                        <i className={['fas', statusMeta.icon].join(' ')}></i>
+                        {statusMeta.label}
+                    </span>
+
+                    {roundtable.isReplaying ? (
+                        <span className="badge badge-muted">
+                            <i className="fas fa-rotate fa-spin"></i>
+                            回放中
+                        </span>
+                    ) : null}
+                </div>
+            </div>
+
+            <section className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-6">
+                <div className="card card-hover p-5">
+                    <div className="flex items-start justify-between gap-3 mb-4">
+                        <div>
+                            <h2 className="text-sm font-semibold">Sessions</h2>
+                            <div className="text-xs text-text-muted mt-1">
+                                最近会话，点击即可回放
+                            </div>
+                        </div>
+
                         <button
                             type="button"
-                            className="btn btn-secondary"
+                            className="btn btn-secondary btn-sm"
                             onClick={() => {
                                 void refreshSessions().catch((caught) => {
                                     setError(caught?.message || String(caught));
@@ -309,204 +250,262 @@ export default function RoundtableTab() {
                             <i className="fas fa-rotate-right"></i>
                             刷新
                         </button>
+                    </div>
 
-                        <button
-                            type="button"
-                            className="btn btn-secondary"
-                            onClick={() => setIsPanelOpen((prev) => !prev)}
-                        >
-                            <i className={['fas', isPanelOpen ? 'fa-chevron-up' : 'fa-sliders'].join(' ')}></i>
-                            {isPanelOpen ? '收起启动面板' : '展开启动面板'}
-                        </button>
+                    <div className="max-h-[420px] overflow-y-auto pr-1 space-y-2 scrollbar">
+                        {roundtable.sessions.length ? (
+                            roundtable.sessions.map((item) => {
+                                const meta =
+                                    SESSION_STATUS_META[item?.status] ||
+                                    SESSION_STATUS_META.incomplete;
+                                const selected = item.id && item.id === activeSessionId;
+                                const seqValue =
+                                    item?.lastSeq == null ? '--' : String(item.lastSeq);
+                                const pidValue =
+                                    item?.pid == null ? '--' : String(item.pid);
 
-                        <button
-                            type="button"
-                            className="btn btn-primary"
-                            onClick={startRoundtable}
-                            disabled={isRunning || isStarting}
-                        >
-                            <i className={['fas', isStarting ? 'fa-spinner fa-spin' : 'fa-play'].join(' ')}></i>
-                            启动
-                        </button>
+                                return (
+                                    <button
+                                        key={item.id}
+                                        type="button"
+                                        className={[
+                                            'w-full rounded-2xl border px-4 py-3 text-left transition',
+                                            selected
+                                                ? 'border-accent/40 bg-accent/10'
+                                                : 'border-border-light/10 bg-black/15 hover:border-white/15 hover:bg-white/5',
+                                        ].join(' ')}
+                                        onClick={() => {
+                                            if (!item.id) return;
+                                            void roundtable.selectSession(item.id, { replace: true }).catch((caught) => {
+                                                setError(caught?.message || String(caught));
+                                            });
+                                        }}
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <div className="font-mono text-xs truncate">
+                                                    {item.id}
+                                                </div>
+                                                <div className="text-xs text-text-muted mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                                                    <span>pid {pidValue}</span>
+                                                    <span>seq {seqValue}</span>
+                                                </div>
+                                            </div>
+                                            <span className={['badge', meta.className].join(' ')}>
+                                                <i className={['fas', meta.icon].join(' ')}></i>
+                                                {meta.label}
+                                            </span>
+                                        </div>
+                                    </button>
+                                );
+                            })
+                        ) : (
+                            <div className="text-sm text-text-muted italic rounded-xl border border-dashed border-border-light/10 px-4 py-6 text-center">
+                                暂无会话
+                            </div>
+                        )}
+                    </div>
 
-                        <button
-                            type="button"
-                            className="btn btn-danger"
-                            onClick={stopRoundtable}
-                            disabled={!isRunning || !activePid}
-                        >
-                            <i className="fas fa-stop"></i>
-                            终止
-                        </button>
+                    <div className="mt-4 rounded-xl border border-border-light/10 bg-black/20 px-4 py-3 text-xs text-text-muted font-mono whitespace-pre-wrap break-all">
+                        session={activeSessionId || '--'} pid={activePid || '--'} seq={roundtable.lastSeq}
                     </div>
                 </div>
 
-                {!isPanelOpen ? (
+                <div className="card card-hover p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                            <h2 className="text-sm font-semibold">启动面板</h2>
+                            <div className="text-xs text-text-muted mt-1">
+                                右侧参数用于启动新会话（启动后自动切换到新 session）
+                            </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                className="btn btn-primary"
+                                onClick={startRoundtable}
+                                disabled={isRunning || isStarting}
+                            >
+                                <i className={['fas', isStarting ? 'fa-spinner fa-spin' : 'fa-play'].join(' ')}></i>
+                                启动
+                            </button>
+
+                            <button
+                                type="button"
+                                className="btn btn-danger"
+                                onClick={stopRoundtable}
+                                disabled={!isRunning || !activePid}
+                            >
+                                <i className="fas fa-stop"></i>
+                                终止
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-1 lg:grid-cols-4 gap-3">
+                        <div>
+                            <label className="form-label">交易对</label>
+                            <input
+                                value={config.symbol}
+                                onChange={(e) =>
+                                    setConfig((prev) => ({
+                                        ...prev,
+                                        symbol: e.target.value,
+                                    }))
+                                }
+                                type="text"
+                                className="form-input font-mono"
+                                placeholder="BTCUSDT"
+                                disabled={isRunning || isStarting}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="form-label">Bars</label>
+                            <input
+                                value={config.bars}
+                                onChange={(e) =>
+                                    setConfig((prev) => ({
+                                        ...prev,
+                                        bars: Number(e.target.value || 0),
+                                    }))
+                                }
+                                type="number"
+                                min="50"
+                                max="5000"
+                                className="form-input font-mono"
+                                disabled={isRunning || isStarting}
+                            />
+                        </div>
+
+                        <div>
+                            <label className="form-label">Primary</label>
+                            <select
+                                value={config.primary}
+                                onChange={(e) =>
+                                    setConfig((prev) => ({
+                                        ...prev,
+                                        primary: e.target.value,
+                                    }))
+                                }
+                                className="form-input font-mono"
+                                disabled={isRunning || isStarting}
+                            >
+                                {timeframes.map((tf) => (
+                                    <option key={tf} value={tf}>
+                                        {tf}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label className="form-label">Aux</label>
+                            <select
+                                value={config.aux}
+                                onChange={(e) =>
+                                    setConfig((prev) => ({
+                                        ...prev,
+                                        aux: e.target.value,
+                                    }))
+                                }
+                                className="form-input font-mono"
+                                disabled={isRunning || isStarting}
+                            >
+                                {timeframes.map((tf) => (
+                                    <option key={tf} value={tf}>
+                                        {tf}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mt-4">
+                        <label className="switch">
+                            <input
+                                checked={config.skipNews}
+                                onChange={(e) =>
+                                    setConfig((prev) => ({
+                                        ...prev,
+                                        skipNews: e.target.checked,
+                                    }))
+                                }
+                                type="checkbox"
+                                disabled={isRunning || isStarting}
+                            />
+                            <span className="switch-control">
+                                <span className="switch-track"></span>
+                                <span className="switch-thumb"></span>
+                            </span>
+                            <span className="text-sm text-text-muted">跳过新闻</span>
+                        </label>
+
+                        <label className="switch">
+                            <input
+                                checked={config.skipLlm}
+                                onChange={(e) =>
+                                    setConfig((prev) => ({
+                                        ...prev,
+                                        skipLlm: e.target.checked,
+                                    }))
+                                }
+                                type="checkbox"
+                                disabled={isRunning || isStarting}
+                            />
+                            <span className="switch-control">
+                                <span className="switch-track"></span>
+                                <span className="switch-thumb"></span>
+                            </span>
+                            <span className="text-sm text-text-muted">跳过模型</span>
+                        </label>
+
+                        <label className="switch">
+                            <input
+                                checked={config.skipLiquidation}
+                                onChange={(e) =>
+                                    setConfig((prev) => ({
+                                        ...prev,
+                                        skipLiquidation: e.target.checked,
+                                    }))
+                                }
+                                type="checkbox"
+                                disabled={isRunning || isStarting}
+                            />
+                            <span className="switch-control">
+                                <span className="switch-track"></span>
+                                <span className="switch-thumb"></span>
+                            </span>
+                            <span className="text-sm text-text-muted">跳过清算</span>
+                        </label>
+
+                        <label className="switch">
+                            <input
+                                checked={config.skipMcp}
+                                onChange={(e) =>
+                                    setConfig((prev) => ({
+                                        ...prev,
+                                        skipMcp: e.target.checked,
+                                    }))
+                                }
+                                type="checkbox"
+                                disabled={isRunning || isStarting}
+                            />
+                            <span className="switch-control">
+                                <span className="switch-track"></span>
+                                <span className="switch-thumb"></span>
+                            </span>
+                            <span className="text-sm text-text-muted">跳过 MCP</span>
+                        </label>
+                    </div>
+
                     <div className="mt-4 rounded-xl border border-border-light/10 bg-black/20 px-4 py-3 text-xs text-text-muted font-mono whitespace-pre-wrap break-all">
                         {configSummary}
                     </div>
-                ) : (
-                    <div className="mt-5 card p-5">
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            <div>
-                                <label className="form-label">交易对 Symbol</label>
-                                <input
-                                    value={config.symbol}
-                                    onChange={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            symbol: e.target.value,
-                                        }))
-                                    }
-                                    type="text"
-                                    className="form-input font-mono"
-                                    placeholder="BTCUSDT"
-                                    disabled={isRunning || isStarting}
-                                />
-                            </div>
 
-                            <div>
-                                <label className="form-label">K 线数量 Bars</label>
-                                <input
-                                    value={config.bars}
-                                    onChange={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            bars: Number(e.target.value || 0),
-                                        }))
-                                    }
-                                    type="number"
-                                    min="50"
-                                    max="5000"
-                                    className="form-input font-mono"
-                                    disabled={isRunning || isStarting}
-                                />
-                            </div>
-
-                            <div>
-                                <label className="form-label">主周期 Primary</label>
-                                <select
-                                    value={config.primary}
-                                    onChange={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            primary: e.target.value,
-                                        }))
-                                    }
-                                    className="form-input font-mono"
-                                    disabled={isRunning || isStarting}
-                                >
-                                    {timeframes.map((tf) => (
-                                        <option key={tf} value={tf}>
-                                            {tf}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="form-label">辅助周期 Aux</label>
-                                <select
-                                    value={config.aux}
-                                    onChange={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            aux: e.target.value,
-                                        }))
-                                    }
-                                    className="form-input font-mono"
-                                    disabled={isRunning || isStarting}
-                                >
-                                    {timeframes.map((tf) => (
-                                        <option key={tf} value={tf}>
-                                            {tf}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-                            <label className="switch">
-                                <input
-                                    checked={config.skipNews}
-                                    onChange={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            skipNews: e.target.checked,
-                                        }))
-                                    }
-                                    type="checkbox"
-                                    disabled={isRunning || isStarting}
-                                />
-                                <span className="switch-control">
-                                    <span className="switch-track"></span>
-                                    <span className="switch-thumb"></span>
-                                </span>
-                                <span className="text-sm text-text-muted">跳过新闻</span>
-                            </label>
-
-                            <label className="switch">
-                                <input
-                                    checked={config.skipLlm}
-                                    onChange={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            skipLlm: e.target.checked,
-                                        }))
-                                    }
-                                    type="checkbox"
-                                    disabled={isRunning || isStarting}
-                                />
-                                <span className="switch-control">
-                                    <span className="switch-track"></span>
-                                    <span className="switch-thumb"></span>
-                                </span>
-                                <span className="text-sm text-text-muted">跳过模型调用</span>
-                            </label>
-
-                            <label className="switch">
-                                <input
-                                    checked={config.skipLiquidation}
-                                    onChange={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            skipLiquidation: e.target.checked,
-                                        }))
-                                    }
-                                    type="checkbox"
-                                    disabled={isRunning || isStarting}
-                                />
-                                <span className="switch-control">
-                                    <span className="switch-track"></span>
-                                    <span className="switch-thumb"></span>
-                                </span>
-                                <span className="text-sm text-text-muted">跳过清算截图</span>
-                            </label>
-
-                            <label className="switch">
-                                <input
-                                    checked={config.skipMcp}
-                                    onChange={(e) =>
-                                        setConfig((prev) => ({
-                                            ...prev,
-                                            skipMcp: e.target.checked,
-                                        }))
-                                    }
-                                    type="checkbox"
-                                    disabled={isRunning || isStarting}
-                                />
-                                <span className="switch-control">
-                                    <span className="switch-track"></span>
-                                    <span className="switch-thumb"></span>
-                                </span>
-                                <span className="text-sm text-text-muted">跳过 MCP</span>
-                            </label>
-                        </div>
-                    </div>
-                )}
-
-                {error ? <div className="form-error mt-4">{error}</div> : null}
+                    {error ? <div className="form-error mt-4">{error}</div> : null}
+                </div>
             </section>
 
             <DecisionResultCard
@@ -516,66 +515,18 @@ export default function RoundtableTab() {
                 isRunning={isRunning}
             />
 
-            <TranscriptPanel entries={transcriptEntries} isRunning={isRunning} />
-
-            <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                <div className="card card-hover p-6 xl:col-span-1">
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-sm font-semibold">Agent 状态</h2>
-                        <span className="text-xs text-text-muted">Compact</span>
-                    </div>
-
-                    {agentCards.length ? (
-                        <div className="space-y-3">
-                            {agentCards.map((agent) => (
-                                <AgentCard
-                                    key={agent.name}
-                                    name={agent.name}
-                                    role={agent.role}
-                                    provider={agent.provider}
-                                    status={agent.status}
-                                    speakCount={agent.speakCount}
-                                    lastTurn={agent.lastTurn}
-                                    lastPhase={agent.lastPhase}
-                                    lastTimestamp={agent.lastTimestamp}
-                                />
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="text-sm text-text-muted italic rounded-xl border border-dashed border-border-light/10 px-4 py-6 text-center">
-                            当前会话尚无发言
-                        </div>
-                    )}
-                </div>
-
-                <div className="card card-hover p-6 xl:col-span-2">
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-sm font-semibold">事件与日志</h2>
-                        <span className="text-xs text-text-muted">Diagnostics</span>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 mb-4">
-                        <span className="badge badge-muted">
-                            <i className="fas fa-user"></i>
-                            发言 {roundtable.agentSpeaks.length}
-                        </span>
-                        <span className="badge badge-muted">
-                            <i className="fas fa-wrench"></i>
-                            工具 {roundtable.toolCalls.length}
-                        </span>
-                        <span className="badge badge-muted">
-                            <i className="fas fa-chart-line"></i>
-                            信念 {roundtable.beliefUpdates.length}
-                        </span>
-                        <span className="badge badge-muted">
-                            <i className="fas fa-gavel"></i>
-                            决策 {roundtable.decisions.length}
-                        </span>
-                    </div>
-
-                    <LogTerminal logs={roundtable.logs} className="h-[300px]" />
-                </div>
-            </section>
+            <RoundtableBattlefield
+                entries={transcriptEntries}
+                beliefUpdates={roundtable.beliefUpdates}
+                toolCalls={roundtable.toolCalls}
+                decisions={roundtable.decisions}
+                processExit={roundtable.processExit}
+                logs={roundtable.logs}
+                isRunning={isRunning}
+                finalDecision={finalDecision}
+                draftDecision={draftDecision}
+                counts={counts}
+            />
         </div>
     );
 }

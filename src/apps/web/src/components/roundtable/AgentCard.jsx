@@ -23,6 +23,8 @@ const PHASE_LABEL = Object.freeze({
     finalize: '收敛',
     summary: '总结',
     history: '历史',
+    cross_examination: '质询',
+    rebuttal: '反驳',
 });
 
 function formatLastTime(timestamp) {
