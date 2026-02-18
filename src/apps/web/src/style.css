@@ -470,7 +470,12 @@
   }
 
   .rt-bf-arena-name {
-    @apply text-sm font-semibold truncate;
+    @apply text-sm font-semibold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    overflow: hidden;
   }
 
   .rt-bf-arena-role {
@@ -478,8 +483,30 @@
     margin-top: 0.15rem;
   }
 
-  .rt-bf-halo {
-    box-shadow: 0 0 0 10px rgb(255 255 255 / 0.035), 0 0 18px rgb(255 255 255 / 0.06);
+  .rt-bf-arena-dir {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1rem;
+    font-size: 0.6rem;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  .rt-bf-arena-dir-dot {
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .rt-bf-dir-long {
+    @apply text-success;
+  }
+
+  .rt-bf-dir-short {
+    @apply text-error;
+  }
+
+  .rt-bf-dir-none {
+    @apply text-text-muted;
   }
 
   .rt-bf-feed {

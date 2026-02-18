@@ -955,6 +955,15 @@ export default function RoundtableBattlefield({
                                                   ? 'rt-bf-camp-bear'
                                                   : 'rt-bf-camp-neutral';
 
+                                        const dirLabel =
+                                            agent.camp === 'BULL' ? 'long' : agent.camp === 'BEAR' ? 'short' : 'none';
+                                        const dirClass =
+                                            agent.camp === 'BULL'
+                                                ? 'rt-bf-dir-long'
+                                                : agent.camp === 'BEAR'
+                                                  ? 'rt-bf-dir-short'
+                                                  : 'rt-bf-dir-none';
+
                                         return (
                                             <div
                                                 key={agent.name}
@@ -967,11 +976,16 @@ export default function RoundtableBattlefield({
                                                     'rt-bf-arena-node',
                                                     campClass,
                                                     isLeader ? 'rt-bf-arena-leader' : '',
-                                                    battlePhase === 'gathering' ? 'rt-bf-halo' : '',
                                                 ].join(' ')}
                                                 style={style}
                                             >
-                                                <div className="rt-bf-arena-name">{agent.name}</div>
+                                                <div className="rt-bf-arena-name">
+                                                    <span className="truncate">{agent.name}</span>
+                                                    <span className={['rt-bf-arena-dir', dirClass].join(' ')}>
+                                                        <span className="rt-bf-arena-dir-dot">●</span>
+                                                        {dirLabel}
+                                                    </span>
+                                                </div>
                                                 <div className="rt-bf-arena-role">{agent.role || '未设置角色'}</div>
                                             </div>
                                         );
