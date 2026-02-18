@@ -46,7 +46,7 @@ pnpm roundtable -- --symbol BTCUSDT --bars 250 --skip-news
 pnpm roundtable -- --symbol BTCUSDT --exchange okx --market-type swap --exchange-fallbacks binance,bybit
 ```
 
-如果你本机没有 PostgreSQL（或连接慢），建议直接走交易所数据源：
+如果你想跳过本地缓存（强制直连交易所，不写入缓存），可以使用：
 
 ```powershell
 pnpm roundtable -- --symbol BTCUSDT --bars 250 --data-source exchange

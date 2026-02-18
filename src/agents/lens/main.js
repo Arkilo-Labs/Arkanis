@@ -2,7 +2,7 @@
 /**
  * Lens 交易决策主脚本
  *
- * 从 PostgreSQL 获取 K 线数据，渲染图表，调用 Lens API 分析，生成带标注的决策图表。
+ * 从交易所 / Yahoo Finance 获取 K 线数据（带本地缓存），渲染图表，调用 Lens API 分析，生成带标注的决策图表。
  *
  * 用法:
  *   node src/agents/lens/main.js --symbol BTCUSDT --timeframe 5m --bars 200
