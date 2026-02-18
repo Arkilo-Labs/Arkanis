@@ -53,57 +53,10 @@ function getEnvBool(key, defaultValue = false) {
 }
 
 /**
- * 数据库配置
+ * 数据库配置（SQLite）
  */
-function buildPostgresDsn({ host, port, user, password, database }) {
-    const u = encodeURIComponent(String(user ?? ''));
-    const p = encodeURIComponent(String(password ?? ''));
-    const db = encodeURIComponent(String(database ?? ''));
-    return `postgresql://${u}:${p}@${host}:${port}/${db}`;
-}
-
 export const databaseConfig = {
-    host: getEnv('DB_HOST', 'localhost'),
-    port: getEnvInt('DB_PORT', 5432),
-    user: getEnv('DB_USER', 'postgres'),
-    password: getEnv('DB_PASSWORD', 'skeet'),
-
-    adminDatabase: getEnv('DB_ADMIN_DATABASE', 'postgres'),
-    coreDatabase: getEnv('DB_CORE_DATABASE', 'arkanis_core'),
-    marketDatabase: getEnv('DB_MARKET_DATABASE', getEnv('DB_DATABASE', 'arkanis_market_data')),
-
-    minPoolSize: getEnvInt('DB_POOL_MIN', 2),
-    maxPoolSize: getEnvInt('DB_POOL_MAX', 10),
-
-    get adminDsn() {
-        return buildPostgresDsn({
-            host: this.host,
-            port: this.port,
-            user: this.user,
-            password: this.password,
-            database: this.adminDatabase,
-        });
-    },
-
-    get coreDsn() {
-        return buildPostgresDsn({
-            host: this.host,
-            port: this.port,
-            user: this.user,
-            password: this.password,
-            database: this.coreDatabase,
-        });
-    },
-
-    get marketDsn() {
-        return buildPostgresDsn({
-            host: this.host,
-            port: this.port,
-            user: this.user,
-            password: this.password,
-            database: this.marketDatabase,
-        });
-    },
+    dbPath: getEnv('DB_PATH', './data/arkanis.db'),
 };
 
 /**

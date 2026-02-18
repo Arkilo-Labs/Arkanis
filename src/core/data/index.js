@@ -4,11 +4,8 @@
 
 export { Bar, RawBar } from './models.js';
 export {
-    createPool,
-    getMarketPool,
-    getCorePool,
-    closePool,
     closePools,
+    closePool,
     queryMarket,
     queryCore,
     query,
@@ -16,6 +13,7 @@ export {
     withCoreConnection,
     withConnection,
 } from './pgClient.js';
+export { getDb, closeDb, queryKv, upsertKv } from './sqliteClient.js';
 export { KlinesRepository, TIMEFRAME_MINUTES } from './klinesRepository.js';
 export {
     aggregateBarsByFactor,

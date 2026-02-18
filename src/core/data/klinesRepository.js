@@ -1,15 +1,13 @@
 /**
- * K 线数据仓储
- * 当本地数据不足时，自动从交易所获取并存储
+ * K 线数据仓储（内存实现）
+ * 按 symbol+timeframe 分别缓存，直接以请求周期粒度从交易所拉取，无重采样
  */
 
 import { marketDataConfig } from '../config/index.js';
-import { Bar, RawBar } from './models.js';
-import { queryMarket, withMarketConnection } from './pgClient.js';
-import { getExchangeClient } from './exchangeClient.js';
+import { Bar } from './models.js';
+import { getExchangeClient, TIMEFRAME_TO_INTERVAL } from './exchangeClient.js';
 import logger from '../utils/logger.js';
 
-// 时间周期到分钟数的映射
 export const TIMEFRAME_MINUTES = {
     '1m': 1,
     '3m': 3,
@@ -25,22 +23,23 @@ export const TIMEFRAME_MINUTES = {
     '1d': 1440,
 };
 
+// 每个 symbol+timeframe 最多缓存的 K 线条数
+const MAX_WINDOW = 2000;
+
 /**
- * K 线数据仓储
+ * K 线内存仓储
  */
 export class KlinesRepository {
     /**
      * @param {Object} options
-     * @param {string} [options.tableName] 数据表名
-     * @param {boolean} [options.autoFill] 是否自动从交易所补全数据
-     * @param {string} [options.assetClass] 资产类别（预留：crypto/stock/fx）
-     * @param {string} [options.exchangeId] 交易所（ccxt exchangeId）
-     * @param {string} [options.marketType] 市场类型（spot/future/swap，兼容 futures）
-     * @param {string} [options.venue] 交易场所/挂牌地（预留）
-     * @param {string|string[]} [options.exchangeFallbacks] 失败切换交易所（逗号分隔或数组）
+     * @param {boolean} [options.autoFill]
+     * @param {string} [options.assetClass]
+     * @param {string} [options.exchangeId]
+     * @param {string} [options.marketType]
+     * @param {string} [options.venue]
+     * @param {string|string[]} [options.exchangeFallbacks]
      */
     constructor({
-        tableName = null,
         autoFill = true,
         assetClass = null,
         exchangeId = null,
@@ -50,8 +49,6 @@ export class KlinesRepository {
     } = {}) {
         this.cfg = marketDataConfig;
         this.autoFill = autoFill;
-        this.instrumentsTable = this.cfg.instrumentsTable;
-        this.klines1mTable = tableName || this.cfg.klines1mTable;
         this.assetClass = String(assetClass ?? this.cfg.assetClass ?? 'crypto').trim().toLowerCase();
         this.exchange = String(exchangeId ?? this.cfg.exchange ?? 'binance').trim().toLowerCase();
         this.marketType = String(marketType ?? this.cfg.marketType ?? 'futures').trim().toLowerCase();
@@ -62,17 +59,25 @@ export class KlinesRepository {
                   .split(',')
                   .map((s) => s.trim())
                   .filter(Boolean);
-        this.instrumentIdCache = new Map();
+
+        // Map<"exchange:market:SYMBOL:timeframe", Bar[]>
+        this._cache = new Map();
+        // 避免同一 key 并发重复拉取
+        this._pending = new Map();
+    }
+
+    _cacheKey(symbol, timeframe) {
+        return `${this.exchange}:${this.marketType}:${String(symbol).trim().toUpperCase()}:${timeframe}`;
     }
 
     /**
      * 获取 K 线数据
      * @param {Object} params
-     * @param {string} params.symbol 交易对
-     * @param {string} params.timeframe 时间周期
-     * @param {Date} [params.endTime] 结束时间
-     * @param {number} [params.limit] K 线数量
-     * @param {boolean} [params.forceUpdate] 强制更新最新数据
+     * @param {string} params.symbol
+     * @param {string} params.timeframe
+     * @param {Date} [params.endTime]
+     * @param {number} [params.limit]
+     * @param {boolean} [params.forceUpdate]
      * @returns {Promise<Bar[]>}
      */
     async getBars({ symbol, timeframe, endTime = null, limit = 200, forceUpdate = false }) {
@@ -81,44 +86,32 @@ export class KlinesRepository {
         }
 
         const tfMinutes = TIMEFRAME_MINUTES[timeframe];
-
-        // 统一按 UTC 处理
         const actualEndTime = endTime ? new Date(endTime) : new Date();
         const requiredStart = new Date(actualEndTime.getTime() - limit * tfMinutes * 60 * 1000);
+        const key = this._cacheKey(symbol, timeframe);
 
-        // 如果启用forceUpdate且没有指定endTime，强制拉取最新数据
         if (forceUpdate && !endTime && this.autoFill) {
-            const now = new Date();
-            const updateStartTime = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 最近24小时
-            
-            logger.info(`强制从交易所更新 ${symbol} 最近24小时数据...`);
-            await this._fillFromExchange(symbol, timeframe, updateStartTime, now);
+            await this._ensureFilled(symbol, timeframe, requiredStart, actualEndTime);
         }
 
-        // 使用时间范围查询
-        let rawBars = await this._fetchRawBarsByRange(symbol, requiredStart, actualEndTime);
-        let resampled = rawBars.length ? this._resample(rawBars, tfMinutes) : [];
+        let cached = this._getCached(key, requiredStart, actualEndTime);
 
-        // 检查是否数据不足
-        if (resampled.length < limit && this.autoFill) {
-            logger.info(`${symbol} ${timeframe} 数据不足: ${resampled.length}/${limit}，尝试从交易所补全`);
-
-            await this._fillFromExchange(symbol, timeframe, requiredStart, actualEndTime);
-
-            rawBars = await this._fetchRawBarsByRange(symbol, requiredStart, actualEndTime);
-            resampled = rawBars.length ? this._resample(rawBars, tfMinutes) : [];
+        if (cached.length < limit && this.autoFill) {
+            logger.info(`${symbol} ${timeframe} 数据不足: ${cached.length}/${limit}，尝试从交易所补全`);
+            await this._ensureFilled(symbol, timeframe, requiredStart, actualEndTime);
+            cached = this._getCached(key, requiredStart, actualEndTime);
         }
 
-        return resampled.length > limit ? resampled.slice(-limit) : resampled;
+        return cached.length > limit ? cached.slice(-limit) : cached;
     }
 
     /**
      * 按时间范围获取 K 线数据
      * @param {Object} params
-     * @param {string} params.symbol 交易对
-     * @param {string} params.timeframe 时间周期
-     * @param {Date} params.startTime 开始时间
-     * @param {Date} params.endTime 结束时间
+     * @param {string} params.symbol
+     * @param {string} params.timeframe
+     * @param {Date} params.startTime
+     * @param {Date} params.endTime
      * @returns {Promise<Bar[]>}
      */
     async getBarsByRange({ symbol, timeframe, startTime, endTime }) {
@@ -126,28 +119,74 @@ export class KlinesRepository {
             throw new Error(`不支持的 timeframe: ${timeframe}`);
         }
 
-        const tfMinutes = TIMEFRAME_MINUTES[timeframe];
+        const key = this._cacheKey(symbol, timeframe);
+        let cached = this._getCached(key, startTime, endTime);
 
-        let rawBars = await this._fetchRawBarsByRange(symbol, startTime, endTime);
-
-        if (!rawBars.length && this.autoFill) {
+        if (!cached.length && this.autoFill) {
             logger.info(`${symbol} ${timeframe} 时间范围内无数据，尝试从交易所补全`);
-            await this._fillFromExchange(symbol, timeframe, startTime, endTime);
-            rawBars = await this._fetchRawBarsByRange(symbol, startTime, endTime);
+            await this._ensureFilled(symbol, timeframe, startTime, endTime);
+            cached = this._getCached(key, startTime, endTime);
         }
 
-        if (!rawBars.length) {
-            return [];
-        }
-
-        return this._resample(rawBars, tfMinutes);
+        return cached;
     }
 
     /**
-     * 从交易所获取数据并存入数据库
+     * 返回当前缓存中的 symbol 列表
+     * @returns {string[]}
+     */
+    getAvailableSymbols() {
+        const prefix = `${this.exchange}:${this.marketType}:`;
+        const symbols = new Set();
+        for (const key of this._cache.keys()) {
+            if (key.startsWith(prefix)) {
+                const rest = key.slice(prefix.length);
+                // 格式：SYMBOL:timeframe，取最后一个冒号之前的部分
+                const lastColon = rest.lastIndexOf(':');
+                symbols.add(lastColon > 0 ? rest.slice(0, lastColon) : rest);
+            }
+        }
+        return Array.from(symbols);
+    }
+
+    /**
+     * 从缓存中按时间范围过滤
      * @private
      */
-    async _fillFromExchange(symbol, timeframe, startTime, endTime) {
+    _getCached(key, startTime, endTime) {
+        const bars = this._cache.get(key) ?? [];
+        const startMs = startTime instanceof Date ? startTime.getTime() : Number(startTime);
+        const endMs = endTime instanceof Date ? endTime.getTime() : Number(endTime);
+        return bars.filter((b) => {
+            const ts = b.ts instanceof Date ? b.ts.getTime() : Number(b.ts);
+            return ts >= startMs && ts <= endMs;
+        });
+    }
+
+    /**
+     * 确保数据存在，没有则从交易所拉取
+     * @private
+     */
+    async _ensureFilled(symbol, timeframe, startTime, endTime) {
+        const key = this._cacheKey(symbol, timeframe);
+        if (this._pending.has(key)) {
+            await this._pending.get(key);
+            return;
+        }
+        const task = this._fetchFromExchange(symbol, timeframe, startTime, endTime);
+        this._pending.set(key, task);
+        try {
+            await task;
+        } finally {
+            this._pending.delete(key);
+        }
+    }
+
+    /**
+     * 从交易所按原始 timeframe 拉取并写入缓存
+     * @private
+     */
+    async _fetchFromExchange(symbol, timeframe, startTime, endTime) {
         try {
             const client = getExchangeClient({
                 assetClass: this.assetClass,
@@ -156,232 +195,53 @@ export class KlinesRepository {
                 fallbackExchangeIds: this.exchangeFallbacks,
                 logger,
             });
-            const startMs = startTime.getTime();
-            const endMs = endTime.getTime();
 
-            // 使用 1m 数据存储
+            const interval = TIMEFRAME_TO_INTERVAL[timeframe] ?? '1m';
+
             const { bars, sourceExchangeId } = await client.fetchKlinesWithMeta({
                 symbol,
-                interval: '1m',
-                startMs,
-                endMs,
+                interval,
+                startMs: startTime.getTime(),
+                endMs: endTime.getTime(),
             });
 
             if (bars.length) {
-                await this._saveBarsToDb(symbol, bars, { source: sourceExchangeId || this.exchange });
-                logger.info(`成功从交易所补全 ${symbol} ${bars.length} 条 1m K 线`);
+                this._mergeIntoCache(symbol, timeframe, bars);
+                logger.info(`从 ${sourceExchangeId || this.exchange} 拉取 ${symbol} ${timeframe} ${bars.length} 条 K 线`);
             }
         } catch (error) {
-            logger.error(`从交易所补全数据失败: ${error.message}`);
+            logger.error(`从交易所拉取数据失败 (${symbol} ${timeframe}): ${error.message}`);
         }
     }
 
     /**
-     * 批量保存 K 线到数据库
+     * 将新数据合并到缓存，去重并保持滑动窗口大小
      * @private
+     * @param {string} symbol
+     * @param {string} timeframe
+     * @param {Array} bars - 来自交易所的 RawBar-like 对象（含 tsMs, open, high, low, close, volume）
      */
-    async _saveBarsToDb(symbol, bars, { source = null } = {}) {
-        if (!bars.length) return;
+    _mergeIntoCache(symbol, timeframe, bars) {
+        const key = this._cacheKey(symbol, timeframe);
+        const existing = this._cache.get(key) ?? [];
 
-        const intervalMs = 60 * 1000; // 1分钟
-        const instrumentId = await this._getOrCreateInstrumentId(symbol);
-        const dataSource = String(source || this.exchange || 'unknown').trim().toLowerCase();
+        const byTs = new Map(existing.map((b) => [b.ts.getTime(), b]));
 
-        // 使用事务批量插入
-        await withMarketConnection(async (client) => {
-            const chunkSize = 500;
-            for (let i = 0; i < bars.length; i += chunkSize) {
-                const chunk = bars.slice(i, i + chunkSize);
-
-                const values = [];
-                const params = [];
-
-                for (const bar of chunk) {
-                    const baseIndex = params.length;
-                    params.push(
-                        instrumentId,
-                        bar.tsMs,
-                        bar.tsMs + intervalMs - 1,
-                        bar.open,
-                        bar.high,
-                        bar.low,
-                        bar.close,
-                        bar.volume,
-                        dataSource
-                    );
-                    values.push(
-                        `($${baseIndex + 1}, $${baseIndex + 2}, $${baseIndex + 3}, $${baseIndex + 4}, $${baseIndex + 5}, $${baseIndex + 6}, $${baseIndex + 7}, $${baseIndex + 8}, $${baseIndex + 9})`
-                    );
-                }
-
-                const sql = `
-          INSERT INTO ${this.klines1mTable}
-            (instrument_id, open_time_ms, close_time_ms, open, high, low, close, volume, source)
-          VALUES ${values.join(',')}
-          ON CONFLICT (instrument_id, open_time_ms) DO NOTHING
-        `;
-
-                await client.query(sql, params);
-            }
-        });
-    }
-
-    /**
-     * 按时间范围获取原始 K 线数据
-     * @private
-     */
-    async _fetchRawBarsByRange(symbol, startTime, endTime) {
-        const startTsMs = startTime.getTime();
-        const endTsMs = endTime.getTime();
-        const instrumentId = await this._getOrCreateInstrumentId(symbol);
-
-        const sql = `
-      SELECT open_time_ms, open, high, low, close, volume
-      FROM ${this.klines1mTable}
-      WHERE instrument_id = $1
-        AND open_time_ms >= $2
-        AND open_time_ms <= $3
-      ORDER BY open_time_ms ASC
-    `;
-
-        const result = await queryMarket(sql, [instrumentId, startTsMs, endTsMs]);
-
-        return result.rows.map(
-            (row) =>
-                new RawBar({
-                    tsMs: parseInt(row.open_time_ms, 10),
-                    open: parseFloat(row.open),
-                    high: parseFloat(row.high),
-                    low: parseFloat(row.low),
-                    close: parseFloat(row.close),
-                    volume: parseFloat(row.volume),
-                })
-        );
-    }
-
-    /**
-     * 将分钟级原始数据重采样为指定周期
-     * @private
-     * @param {RawBar[]} rawBars 原始 K 线数据
-     * @param {number} tfMinutes 目标时间周期 (分钟)
-     * @returns {Bar[]}
-     */
-    _resample(rawBars, tfMinutes) {
-        if (!rawBars.length) return [];
-
-        // 1分钟数据直接返回
-        if (tfMinutes === 1) {
-            return rawBars.map((bar) => bar.toBar());
+        for (const bar of bars) {
+            const ts = bar.tsMs ?? (bar.ts instanceof Date ? bar.ts.getTime() : Number(bar.ts));
+            if (!Number.isFinite(ts)) continue;
+            byTs.set(ts, new Bar({
+                ts: new Date(ts),
+                open: bar.open,
+                high: bar.high,
+                low: bar.low,
+                close: bar.close,
+                volume: bar.volume,
+            }));
         }
 
-        const tfMs = tfMinutes * 60 * 1000;
-
-        // 按时间周期分组
-        const groups = new Map();
-        for (const bar of rawBars) {
-            // 对齐到时间周期的起始点
-            const bucket = Math.floor(bar.tsMs / tfMs) * tfMs;
-            if (!groups.has(bucket)) {
-                groups.set(bucket, []);
-            }
-            groups.get(bucket).push(bar);
-        }
-
-        // 聚合每个分组
-        const result = [];
-        const sortedBuckets = Array.from(groups.keys()).sort((a, b) => a - b);
-
-        for (const bucketTs of sortedBuckets) {
-            const barsInBucket = groups.get(bucketTs);
-
-            // OHLCV 聚合
-            const aggBar = new Bar({
-                ts: new Date(bucketTs),
-                open: barsInBucket[0].open,
-                high: Math.max(...barsInBucket.map((b) => b.high)),
-                low: Math.min(...barsInBucket.map((b) => b.low)),
-                close: barsInBucket[barsInBucket.length - 1].close,
-                volume: barsInBucket.reduce((sum, b) => sum + b.volume, 0),
-            });
-            result.push(aggBar);
-        }
-
-        return result;
-    }
-
-    /**
-     * 获取数据库中可用的交易对列表
-     * @param {number} [limit] 返回数量限制
-     * @returns {Promise<string[]>}
-     */
-    async getAvailableSymbols(limit = 100) {
-        const sql = `
-      SELECT i.symbol, COUNT(k.*) as cnt
-      FROM ${this.instrumentsTable} i
-      JOIN ${this.klines1mTable} k ON k.instrument_id = i.id
-      WHERE i.exchange = $2 AND i.market = $3
-      GROUP BY i.symbol
-      ORDER BY cnt DESC
-      LIMIT $1
-    `;
-
-        const result = await queryMarket(sql, [limit, this.exchange, this.marketType]);
-        return result.rows.map((row) => row.symbol);
-    }
-
-    async _getOrCreateInstrumentId(symbol) {
-        const normalizedSymbol = String(symbol || '').trim().toUpperCase();
-        if (!normalizedSymbol) {
-            throw new Error('symbol 不能为空');
-        }
-
-        const cacheKey = `${this.exchange}:${this.marketType}:${normalizedSymbol}`;
-        if (this.instrumentIdCache.has(cacheKey)) {
-            return this.instrumentIdCache.get(cacheKey);
-        }
-
-        const upsertNew = async () => {
-            const sql = `
-      INSERT INTO ${this.instrumentsTable} (asset_class, exchange, market, symbol, venue, updated_at)
-      VALUES ($1, $2, $3, $4, $5, now())
-      ON CONFLICT (exchange, market, symbol)
-      DO UPDATE SET updated_at = now()
-      RETURNING id
-    `;
-            return queryMarket(sql, [
-                this.assetClass,
-                this.exchange,
-                this.marketType,
-                normalizedSymbol,
-                this.venue || null,
-            ]);
-        };
-
-        const upsertOld = async () => {
-            const sql = `
-      INSERT INTO ${this.instrumentsTable} (exchange, market, symbol, updated_at)
-      VALUES ($1, $2, $3, now())
-      ON CONFLICT (exchange, market, symbol)
-      DO UPDATE SET updated_at = now()
-      RETURNING id
-    `;
-            return queryMarket(sql, [this.exchange, this.marketType, normalizedSymbol]);
-        };
-
-        let res;
-        try {
-            res = await upsertNew();
-        } catch (e) {
-            const msg = String(e?.message || '');
-            if (!msg.includes('column') && !msg.includes('asset_class') && !msg.includes('venue')) {
-                throw e;
-            }
-            res = await upsertOld();
-        }
-
-        const id = Number.parseInt(res.rows[0].id, 10);
-        this.instrumentIdCache.set(cacheKey, id);
-        return id;
+        const sorted = Array.from(byTs.values()).sort((a, b) => a.ts.getTime() - b.ts.getTime());
+        this._cache.set(key, sorted.length > MAX_WINDOW ? sorted.slice(-MAX_WINDOW) : sorted);
     }
 }
 

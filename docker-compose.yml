@@ -1,21 +1,27 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: arkanis-postgres
+  arkanis:
+    build: .
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-skeet}
-      POSTGRES_DB: ${DB_ADMIN_DATABASE:-postgres}
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "${BIND_IP:-0.0.0.0}:${ARKANIS_PORT:-8082}:3000"
     volumes:
-      - arkanis_postgres_data:/var/lib/postgresql/data
+      - arkanis_data:/data
+      - arkanis_outputs:/app/outputs
+    env_file:
+      - .env
+    environment:
+      ARKANIS_DATA_DIR: /data
+      CHART_PUPPETEER_NO_SANDBOX: "true"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
+      test:
+        - CMD-SHELL
+        - >
+          node -e "require('http').get('http://localhost:3000/api/auth/me',
+          function(r){process.exit(r.statusCode<500?0:1)}).on('error',function(){process.exit(1)})"
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 18
 
 volumes:
-  arkanis_postgres_data:
+  arkanis_data:
+  arkanis_outputs:
