@@ -410,47 +410,8 @@ export default function RoundtableBattlefield({
             specs.push(...heuristic.slice(-10));
         }
 
-        const bullNames = bullAgents.map((a) => a.name);
-        const bearNames = bearAgents.map((a) => a.name);
-
-        if (battlePhase === 'duel') {
-            for (let i = 0; i < bullNames.length - 1; i += 1) {
-                specs.push({
-                    id: `support:bull:${bullNames[i]}=>${bullNames[i + 1]}`,
-                    type: 'SUPPORT',
-                    intensity: 0.45,
-                    sourceKey: `agent:${bullNames[i]}`,
-                    targetKey: `agent:${bullNames[i + 1]}`,
-                });
-            }
-
-            for (let i = 0; i < bearNames.length - 1; i += 1) {
-                specs.push({
-                    id: `support:bear:${bearNames[i]}=>${bearNames[i + 1]}`,
-                    type: 'SUPPORT',
-                    intensity: 0.45,
-                    sourceKey: `agent:${bearNames[i]}`,
-                    targetKey: `agent:${bearNames[i + 1]}`,
-                });
-            }
-        }
-
-        if (battlePhase === 'synthesis' && leaderName) {
-            const leader = String(leaderName).trim();
-            for (const agent of agentStates) {
-                if (!agent?.name || agent.name === leader) continue;
-                specs.push({
-                    id: `support:leader:${leader}=>${agent.name}`,
-                    type: 'SUPPORT',
-                    intensity: 0.35,
-                    sourceKey: `agent:${leader}`,
-                    targetKey: `agent:${agent.name}`,
-                });
-            }
-        }
-
         return specs.slice(-32);
-    }, [agentStates, battlePhase, bearAgents, bullAgents, leaderName, messageItems]);
+    }, [battlePhase, messageItems]);
 
     const recomputeVector = useCallback(() => {
         const container = battlefieldRef.current;
