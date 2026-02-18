@@ -12,7 +12,7 @@ export default function LogTerminal({ logs = [], className = '' }) {
         <div
             ref={containerRef}
             className={[
-                'terminal p-4 overflow-y-auto h-full min-h-[inherit] scrollbar text-left',
+                'terminal p-4 overflow-y-auto scrollbar text-left',
                 className,
             ].join(' ')}
         >

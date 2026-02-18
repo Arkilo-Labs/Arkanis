@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import LogTerminal from '../LogTerminal.jsx';
 import MarkdownView, { renderInlineMarkdown } from './MarkdownView.jsx';
@@ -159,6 +160,7 @@ export default function RoundtableBattlefield({
     const arenaRefs = useRef(new Map());
     const vectorRecalcRaf = useRef(0);
     const prevAttackIdsRef = useRef(new Set());
+    const traceListRef = useRef(null);
 
     const [autoScroll, setAutoScroll] = useState(true);
     const [expanded, setExpanded] = useState({});
@@ -731,6 +733,12 @@ export default function RoundtableBattlefield({
         return items.slice(-90);
     }, [beliefUpdates, decisions, logs, processExit, toolCalls]);
 
+    useEffect(() => {
+        const el = traceListRef.current;
+        if (!el) return;
+        el.scrollTop = el.scrollHeight;
+    }, [traceItems.length]);
+
     const leftAgents = battlePhase === 'duel' ? bullAgents : agentStates;
     const rightAgents = battlePhase === 'duel' ? bearAgents : [];
 
@@ -1269,7 +1277,7 @@ export default function RoundtableBattlefield({
                                     </button>
                                 </div>
                             </div>
-                            <div className="rt-bf-trace-list scrollbar">
+                            <div ref={traceListRef} className="rt-bf-trace-list scrollbar">
                                 {traceItems.length ? (
                                     traceItems.map((item) => (
                                         <div
@@ -1394,36 +1402,45 @@ export default function RoundtableBattlefield({
                     </aside>
                 </div>
 
-                {terminalOpen ? (
-                    <div
-                        className="modal-overlay"
-                        onClick={(e) => {
-                            if (e.target !== e.currentTarget) return;
-                            setTerminalOpen(false);
-                        }}
-                    >
-                        <div className="modal-card p-6 w-full max-w-6xl">
-                            <div className="flex items-start justify-between gap-3 mb-4">
-                                <div>
-                                    <div className="text-xs tracking-wide text-text-muted">Terminal</div>
-                                    <div className="text-lg font-semibold mt-1">进程输出</div>
-                                    <div className="text-xs text-text-muted mt-1">
-                                        仅用于排错，建议优先看 Trace（工具调用/决策/错误）
-                                    </div>
-                                </div>
-                                <button
-                                    type="button"
-                                    className="btn btn-secondary btn-sm"
-                                    onClick={() => setTerminalOpen(false)}
-                                >
-                                    <i className="fas fa-xmark"></i>
-                                    关闭
-                                </button>
-                            </div>
-                            <LogTerminal logs={Array.isArray(logs) ? logs.slice(-420) : []} className="h-[70vh]" />
-                        </div>
-                    </div>
-                ) : null}
+                {terminalOpen
+                    ? createPortal(
+                          <div
+                              className="modal-overlay"
+                              onClick={(e) => {
+                                  if (e.target !== e.currentTarget) return;
+                                  setTerminalOpen(false);
+                              }}
+                          >
+                              <div
+                                  className="card p-6 w-full max-w-6xl flex flex-col"
+                                  style={{ maxHeight: '90vh' }}
+                              >
+                                  <div className="flex items-start justify-between gap-3 mb-4 flex-shrink-0">
+                                      <div>
+                                          <div className="text-xs tracking-wide text-text-muted">Terminal</div>
+                                          <div className="text-lg font-semibold mt-1">进程输出</div>
+                                          <div className="text-xs text-text-muted mt-1">
+                                              仅用于排错，建议优先看 Trace（工具调用/决策/错误）
+                                          </div>
+                                      </div>
+                                      <button
+                                          type="button"
+                                          className="btn btn-secondary btn-sm flex-shrink-0"
+                                          onClick={() => setTerminalOpen(false)}
+                                      >
+                                          <i className="fas fa-xmark"></i>
+                                          关闭
+                                      </button>
+                                  </div>
+                                  <LogTerminal
+                                      logs={Array.isArray(logs) ? logs.slice(-420) : []}
+                                      className="flex-1 min-h-0"
+                                  />
+                              </div>
+                          </div>,
+                          document.body,
+                      )
+                    : null}
 
                 {finalDecision && !hideFinalOverlay ? (
                     <div className="rt-bf-final">

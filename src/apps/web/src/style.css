@@ -807,6 +807,12 @@
     }
   }
 
+  @media (max-width: 768px) {
+    .rt-battlefield {
+      min-height: min(480px, 70vh);
+    }
+  }
+
   @keyframes rtImpact {
     0% {
       transform: translate3d(0, 0, 0);
@@ -1006,7 +1012,7 @@
   }
 
   .logo img {
-    width: 24px;
+    width: auto;
     height: 24px;
   }
 
@@ -1175,7 +1181,6 @@
   .switch input:checked + .switch-control .switch-track {
     background: rgb(var(--color-accent) / 0.18);
     border-color: rgb(var(--color-accent) / 0.6);
-    box-shadow: 0 0 20px rgb(var(--color-accent) / 0.2);
   }
 
   .switch input:checked + .switch-control .switch-thumb {

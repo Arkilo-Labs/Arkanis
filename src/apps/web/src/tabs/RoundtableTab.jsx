@@ -6,6 +6,28 @@ import { authedFetch } from '../composables/useAuth.js';
 import { useRoundtable } from '../composables/useRoundtable.js';
 import { useSocket } from '../composables/useSocket.js';
 
+const CONFIG_STORAGE_KEY = 'arkanis:roundtable:config';
+
+function loadStoredConfig() {
+    try {
+        const raw = localStorage.getItem(CONFIG_STORAGE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+function saveConfig(config) {
+    try {
+        localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
+    } catch {
+        // localStorage 不可用时静默忽略
+    }
+}
+
 function makeSessionId(symbol) {
     const now = new Date();
     const mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -55,15 +77,18 @@ const SESSION_STATUS_META = Object.freeze({
 export default function RoundtableTab() {
     const { socket, isConnected } = useSocket();
 
-    const [config, setConfig] = useState({
-        symbol: 'BTCUSDT',
-        bars: 250,
-        primary: '15m',
-        aux: '1h',
-        skipNews: false,
-        skipLlm: false,
-        skipLiquidation: false,
-        skipMcp: false,
+    const [config, setConfig] = useState(() => {
+        const stored = loadStoredConfig();
+        return {
+            symbol: stored?.symbol ?? 'BTCUSDT',
+            bars: stored?.bars ?? 250,
+            primary: stored?.primary ?? '15m',
+            aux: stored?.aux ?? '1h',
+            skipNews: stored?.skipNews ?? false,
+            skipLlm: stored?.skipLlm ?? false,
+            skipLiquidation: stored?.skipLiquidation ?? false,
+            skipMcp: stored?.skipMcp ?? false,
+        };
     });
     const [error, setError] = useState('');
     const [isStarting, setIsStarting] = useState(false);
@@ -143,7 +168,11 @@ export default function RoundtableTab() {
     }, [config]);
 
     const handleConfigChange = useCallback((updates) => {
-        setConfig((prev) => ({ ...prev, ...updates }));
+        setConfig((prev) => {
+            const next = { ...prev, ...updates };
+            saveConfig(next);
+            return next;
+        });
     }, []);
 
     const handleSelectSession = useCallback((id) => {
@@ -211,6 +240,7 @@ export default function RoundtableTab() {
 
     const stopRoundtable = useCallback(() => {
         if (!activePid) return;
+        if (!window.confirm('确认终止当前运行中的圆桌？此操作不可撤销。')) return;
         socket.emit('kill-process', activePid);
     }, [activePid, socket]);
 
@@ -250,6 +280,16 @@ export default function RoundtableTab() {
                         <i className="fas fa-signal"></i>
                         {isConnected ? 'Socket 已连接' : 'Socket 未连接'}
                     </span>
+                    {!isConnected ? (
+                        <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => socket.connect()}
+                        >
+                            <i className="fas fa-rotate-right"></i>
+                            重连
+                        </button>
+                    ) : null}
 
                     <span className={['badge', statusMeta.className].join(' ')}>
                         <i className={['fas', statusMeta.icon].join(' ')}></i>
@@ -266,7 +306,7 @@ export default function RoundtableTab() {
             </div>
 
             <section className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)] gap-4">
-                <div className="card p-4 flex flex-col">
+                <div className="card p-4 flex flex-col max-h-[600px]">
                     <div className="flex items-center justify-between gap-2 mb-3">
                         <h2 className="text-sm font-semibold">Sessions</h2>
                         <div className="flex items-center gap-1.5">
@@ -474,6 +514,32 @@ export default function RoundtableTab() {
                                 </button>
                             ) : null}
                         </div>
+                    </div>
+                ) : !activeSessionId && !roundtable.sessions.length ? (
+                    <div className="card p-6 flex flex-col justify-center">
+                        <div className="text-xs tracking-wide text-text-muted mb-4">Getting Started</div>
+                        <div className="space-y-3 text-sm text-text-muted">
+                            <div className="flex items-start gap-3">
+                                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold">1</span>
+                                <span>确保后端已启动：<span className="font-mono text-text">pnpm dev:server</span></span>
+                            </div>
+                            <div className="flex items-start gap-3">
+                                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold">2</span>
+                                <span>在「AI Providers」页面配置至少一个模型</span>
+                            </div>
+                            <div className="flex items-start gap-3">
+                                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-xs font-bold">3</span>
+                                <span>点击左侧「新建」，设置交易对和参数后启动圆桌</span>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            className="btn btn-primary mt-6 w-fit"
+                            onClick={() => setShowLaunchOverlay(true)}
+                        >
+                            <i className="fas fa-plus"></i>
+                            新建会话
+                        </button>
                     </div>
                 ) : (
                     <DecisionResultCard
