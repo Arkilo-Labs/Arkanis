@@ -93,13 +93,10 @@ export default function ProviderCard({ provider, usedRoles = [], onUpdate, onDel
                                     {provider.modelName}
                                 </div>
                                 {usedRoles.length ? (
-                                    <div className="flex flex-wrap gap-2 mt-3">
-                                        {usedRoles.map((r) => (
-                                            <span key={r} className="badge badge-muted">
-                                                {r}
-                                            </span>
-                                        ))}
-                                    </div>
+                                    <span className="badge badge-muted mt-2 inline-flex">
+                                        <i className="fas fa-plug text-[9px]"></i>
+                                        {usedRoles.length} 个角色
+                                    </span>
                                 ) : null}
                             </div>
                         </div>

@@ -613,6 +613,18 @@ export default function AIProvidersTab() {
     );
     const lensRoleKeys = useMemo(() => Object.keys(lensConfig.roles || {}), [lensConfig.roles]);
 
+    // 合并保存：RT + Lens 改动都在一次操作里提交
+    const saveAll = useCallback(async () => {
+        setSavingRt(true);
+        setSavingLens(true);
+        try {
+            await Promise.all([saveRtOverrides(), saveLensConfig()]);
+        } finally {
+            setSavingRt(false);
+            setSavingLens(false);
+        }
+    }, [saveLensConfig, saveRtOverrides]);
+
     return (
         <div className="space-y-6">
             {/* 顶部标题 + 添加按钮 */}
@@ -688,121 +700,23 @@ export default function AIProvidersTab() {
 
             {/* 角色映射（页面下方，低频操作） */}
             {(rtMainAgents.length > 0 || rtSubagents.length > 0 || lensRoleKeys.length > 0) ? (
-                <div className="space-y-4">
-                    <div>
-                        <div className="text-xs tracking-wide text-text-muted">Role Mapping</div>
-                        <h2 className="text-xl font-bold mt-1">角色映射</h2>
-                        <p className="text-sm text-text-muted mt-1">为具体角色指定 Provider，留空则使用 agents.json 默认值</p>
-                    </div>
-
-                    {/* Roundtable 映射 */}
-                    {(rtMainAgents.length > 0 || rtSubagents.length > 0) ? (
-                        <div className="card p-6 space-y-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <div className="text-xs tracking-wide text-text-muted">Roundtable</div>
-                                    <h3 className="text-base font-semibold mt-0.5">圆桌 Agents</h3>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        type="button"
-                                        className="btn btn-secondary btn-sm"
-                                        onClick={() => {
-                                            const reset = {};
-                                            for (const a of rtAgentData.agents) reset[a.name] = null;
-                                            setRtDraft(reset);
-                                        }}
-                                    >
-                                        重置全部
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="btn btn-primary btn-sm"
-                                        onClick={saveRtOverrides}
-                                        disabled={savingRt}
-                                    >
-                                        <i className={savingRt ? 'fas fa-spinner fa-spin' : 'fas fa-save'}></i>
-                                        保存
-                                    </button>
-                                </div>
-                            </div>
-
-                            {rtMainAgents.length > 0 ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                                    {rtMainAgents.map((a) => (
-                                        <AgentRoleCard
-                                            key={a.name}
-                                            agent={a}
-                                            draft={rtDraft[a.name]}
-                                            providerList={providerList}
-                                            onChange={(pid) => setRtDraft((prev) => ({ ...prev, [a.name]: pid || null }))}
-                                        />
-                                    ))}
-                                </div>
-                            ) : null}
-
-                            {rtSubagents.length > 0 ? (
-                                <div>
-                                    <div className="text-xs text-text-muted mb-2">Subagents</div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                                        {rtSubagents.map((a) => (
-                                            <AgentRoleCard
-                                                key={a.name}
-                                                agent={a}
-                                                draft={rtDraft[a.name]}
-                                                providerList={providerList}
-                                                onChange={(pid) => setRtDraft((prev) => ({ ...prev, [a.name]: pid || null }))}
-                                            />
-                                        ))}
-                                    </div>
-                                </div>
-                            ) : null}
-                        </div>
-                    ) : null}
-
-                    {/* Lens 映射 */}
-                    {lensRoleKeys.length > 0 ? (
-                        <div className="card p-6 space-y-4">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <div className="text-xs tracking-wide text-text-muted">Lens</div>
-                                    <h3 className="text-base font-semibold mt-0.5">Lens 角色</h3>
-                                </div>
-                                <button
-                                    type="button"
-                                    className="btn btn-primary btn-sm"
-                                    onClick={saveLensConfig}
-                                    disabled={savingLens}
-                                >
-                                    <i className={savingLens ? 'fas fa-spinner fa-spin' : 'fas fa-save'}></i>
-                                    保存
-                                </button>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                {lensRoleKeys.map((role) => (
-                                    <div key={role}>
-                                        <label className="form-label">
-                                            {LENS_ROLE_LABELS[role] || role}
-                                        </label>
-                                        <select
-                                            value={lensDraft[role] || ''}
-                                            onChange={(e) => setLensDraft((prev) => ({ ...prev, [role]: e.target.value || null }))}
-                                            className="form-input font-mono"
-                                        >
-                                            <option value="">(未设置)</option>
-                                            {providerList.map((p) => (
-                                                <option key={p.id} value={p.id}>
-                                                    {p.name} ({p.id})
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ) : null}
-                </div>
+                <RoleMappingPanel
+                    rtMainAgents={rtMainAgents}
+                    rtSubagents={rtSubagents}
+                    lensRoleKeys={lensRoleKeys}
+                    rtDraft={rtDraft}
+                    lensDraft={lensDraft}
+                    providerList={providerList}
+                    onRtChange={(name, pid) => setRtDraft((prev) => ({ ...prev, [name]: pid }))}
+                    onLensChange={(role, pid) => setLensDraft((prev) => ({ ...prev, [role]: pid }))}
+                    onResetRt={() => {
+                        const reset = {};
+                        for (const a of rtAgentData.agents) reset[a.name] = null;
+                        setRtDraft(reset);
+                    }}
+                    onSave={saveAll}
+                    saving={savingRt || savingLens}
+                />
             ) : null}
 
             {/* 添加 Provider 弹窗 */}
@@ -829,39 +743,266 @@ export default function AIProvidersTab() {
     );
 }
 
-// 单个 Agent 角色映射卡片
-function AgentRoleCard({ agent, draft, providerList, onChange }) {
-    const currentValue = draft !== undefined ? (draft ?? '') : (agent.overrideProviderRef ?? '');
-    const isOverridden = Boolean(draft !== undefined ? draft : agent.overrideProviderRef);
+// 左右双栏角色映射面板
+function RoleMappingPanel({
+    rtMainAgents,
+    rtSubagents,
+    lensRoleKeys,
+    rtDraft,
+    lensDraft,
+    providerList,
+    onRtChange,
+    onLensChange,
+    onResetRt,
+    onSave,
+    saving,
+}) {
+    const [selectedKey, setSelectedKey] = useState(null);
+    // selectedKey: { type: 'rt'|'lens', name: string, defaultRef?: string } | null
+
+    const providerById = useMemo(() => {
+        const map = {};
+        for (const p of providerList) map[p.id] = p;
+        return map;
+    }, [providerList]);
+
+    // 拿到某角色的当前草稿值和对应的 provider 对象
+    function getAssignment(roleKey) {
+        if (roleKey.type === 'rt') {
+            const pid = rtDraft[roleKey.name] !== undefined
+                ? rtDraft[roleKey.name]
+                : null;
+            const effectivePid = pid ?? roleKey.defaultRef;
+            return { pid, effectivePid, provider: providerById[effectivePid] || null };
+        }
+        const pid = lensDraft[roleKey.name] ?? null;
+        return { pid, effectivePid: pid, provider: providerById[pid] || null };
+    }
+
+    // 右侧点击 provider 时更新草稿
+    function assignProvider(pid) {
+        if (!selectedKey) return;
+        if (selectedKey.type === 'rt') {
+            // null 表示清除覆盖（恢复默认）
+            onRtChange(selectedKey.name, pid === '' ? null : pid);
+        } else {
+            onLensChange(selectedKey.name, pid === '' ? null : pid);
+        }
+    }
+
+    // 当前右侧选中的 pid（草稿）
+    const rightCurrentPid = useMemo(() => {
+        if (!selectedKey) return '';
+        if (selectedKey.type === 'rt') {
+            const v = rtDraft[selectedKey.name];
+            return v === undefined ? '' : (v ?? '');
+        }
+        return lensDraft[selectedKey.name] ?? '';
+    }, [lensDraft, rtDraft, selectedKey]);
+
+    // 构建左侧角色项列表
+    const allRoles = useMemo(() => {
+        const items = [];
+        if (rtMainAgents.length) {
+            items.push({ type: 'section', label: 'Roundtable' });
+            for (const a of rtMainAgents) {
+                items.push({ type: 'rt', name: a.name, role: a.role, defaultRef: a.defaultProviderRef });
+            }
+        }
+        if (rtSubagents.length) {
+            items.push({ type: 'section', label: 'Subagents' });
+            for (const a of rtSubagents) {
+                items.push({ type: 'rt', name: a.name, role: a.role, defaultRef: a.defaultProviderRef });
+            }
+        }
+        if (lensRoleKeys.length) {
+            items.push({ type: 'section', label: 'Lens' });
+            for (const k of lensRoleKeys) {
+                items.push({ type: 'lens', name: k, role: LENS_ROLE_LABELS[k] || k });
+            }
+        }
+        return items;
+    }, [lensRoleKeys, rtMainAgents, rtSubagents]);
+
+    const selKey = selectedKey ? `${selectedKey.type}:${selectedKey.name}` : '';
 
     return (
-        <div className={[
-            'rounded-xl border p-3 space-y-2',
-            isOverridden ? 'border-accent/25 bg-accent/5' : 'border-border-light/10 bg-black/15',
-        ].join(' ')}>
-            <div className="flex items-center justify-between gap-2 min-w-0">
-                <div className="min-w-0">
-                    <div className="text-sm font-semibold truncate">{agent.name}</div>
-                    <div className="text-xs text-text-muted truncate">{agent.role}</div>
+        <div className="space-y-2">
+            <div className="flex items-end justify-between">
+                <div>
+                    <div className="text-xs tracking-wide text-text-muted">Role Mapping</div>
+                    <h2 className="text-xl font-bold mt-1">角色映射</h2>
+                    <p className="text-sm text-text-muted mt-0.5">左侧选角色，右侧指定 Provider</p>
                 </div>
-                {isOverridden ? (
-                    <span className="badge badge-accent flex-shrink-0 text-[10px]">已覆盖</span>
-                ) : (
-                    <span className="badge badge-muted flex-shrink-0 text-[10px]">默认</span>
-                )}
+                <div className="flex gap-2">
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={onResetRt}>
+                        重置 Roundtable
+                    </button>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={onSave} disabled={saving}>
+                        <i className={saving ? 'fas fa-spinner fa-spin' : 'fas fa-save'}></i>
+                        保存更改
+                    </button>
+                </div>
             </div>
-            <select
-                value={currentValue}
-                onChange={(e) => onChange(e.target.value)}
-                className="form-input font-mono text-xs"
-            >
-                <option value="">默认（{agent.defaultProviderRef}）</option>
-                {providerList.map((p) => (
-                    <option key={p.id} value={p.id}>
-                        {p.name} ({p.id})
-                    </option>
-                ))}
-            </select>
+
+            <div className="card overflow-hidden">
+                <div className="grid grid-cols-[220px_1fr] divide-x divide-border-light/10" style={{ minHeight: '360px' }}>
+                    {/* 左栏：角色列表 */}
+                    <div className="overflow-y-auto scrollbar">
+                        {allRoles.map((item, idx) => {
+                            if (item.type === 'section') {
+                                return (
+                                    <div key={`sec-${idx}`} className="px-3 py-2 text-[10px] tracking-widest text-text-muted bg-black/20 border-b border-border-light/8 uppercase font-semibold">
+                                        {item.label}
+                                    </div>
+                                );
+                            }
+                            const itemKey = `${item.type}:${item.name}`;
+                            const isSelected = selKey === itemKey;
+                            const { provider: assignedProvider } = getAssignment(item);
+                            const isOverridden = item.type === 'rt'
+                                ? Boolean(rtDraft[item.name])
+                                : Boolean(lensDraft[item.name]);
+
+                            return (
+                                <button
+                                    key={itemKey}
+                                    type="button"
+                                    onClick={() => setSelectedKey({ type: item.type, name: item.name, defaultRef: item.defaultRef })}
+                                    className={[
+                                        'w-full text-left px-3 py-2.5 border-b border-border-light/8 transition-colors',
+                                        isSelected ? 'bg-accent/10 border-l-2 border-l-accent' : 'hover:bg-white/4',
+                                    ].join(' ')}
+                                >
+                                    <div className="flex items-start justify-between gap-1.5 min-w-0">
+                                        <div className="min-w-0 flex-1">
+                                            <div className="text-sm font-semibold truncate">{item.name}</div>
+                                            <div className="text-[11px] text-text-muted truncate">{item.role}</div>
+                                        </div>
+                                        {isOverridden ? (
+                                            <span className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5 flex-shrink-0"></span>
+                                        ) : null}
+                                    </div>
+                                    {assignedProvider ? (
+                                        <div className="text-[11px] text-accent mt-1 truncate">
+                                            {assignedProvider.name}
+                                        </div>
+                                    ) : (
+                                        <div className="text-[11px] text-text-muted/50 mt-1">
+                                            {item.type === 'rt' ? `默认: ${item.defaultRef}` : '未设置'}
+                                        </div>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* 右栏：provider 选择器 */}
+                    <div className="overflow-y-auto scrollbar">
+                        {selectedKey ? (
+                            <div>
+                                <div className="px-4 py-3 border-b border-border-light/10 bg-black/10">
+                                    <div className="text-xs text-text-muted">为以下角色选择 Provider</div>
+                                    <div className="text-sm font-semibold mt-0.5">{selectedKey.name}</div>
+                                    <div className="text-xs text-text-muted mt-0.5">
+                                        {providerList.length} 个可用 Provider
+                                        {selectedKey.type === 'rt' && selectedKey.defaultRef ? (
+                                            <span className="ml-2 text-text-muted/60">· 默认: {selectedKey.defaultRef}</span>
+                                        ) : null}
+                                    </div>
+                                </div>
+
+                                <div className="divide-y divide-border-light/8">
+                                    {/* 恢复默认选项（仅 RT） */}
+                                    {selectedKey.type === 'rt' ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => assignProvider('')}
+                                            className={[
+                                                'w-full text-left px-4 py-3 flex items-center gap-3 transition-colors',
+                                                rightCurrentPid === '' ? 'bg-white/5' : 'hover:bg-white/3',
+                                            ].join(' ')}
+                                        >
+                                            <span className={[
+                                                'w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center',
+                                                rightCurrentPid === '' ? 'border-accent' : 'border-border-light/30',
+                                            ].join(' ')}>
+                                                {rightCurrentPid === '' ? <span className="w-2 h-2 rounded-full bg-accent"></span> : null}
+                                            </span>
+                                            <div className="min-w-0">
+                                                <div className="text-sm font-medium">使用默认</div>
+                                                <div className="text-xs text-text-muted font-mono truncate">{selectedKey.defaultRef}</div>
+                                            </div>
+                                        </button>
+                                    ) : null}
+
+                                    {/* Lens 清空选项 */}
+                                    {selectedKey.type === 'lens' ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => assignProvider('')}
+                                            className={[
+                                                'w-full text-left px-4 py-3 flex items-center gap-3 transition-colors',
+                                                rightCurrentPid === '' ? 'bg-white/5' : 'hover:bg-white/3',
+                                            ].join(' ')}
+                                        >
+                                            <span className={[
+                                                'w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center',
+                                                rightCurrentPid === '' ? 'border-accent' : 'border-border-light/30',
+                                            ].join(' ')}>
+                                                {rightCurrentPid === '' ? <span className="w-2 h-2 rounded-full bg-accent"></span> : null}
+                                            </span>
+                                            <div className="min-w-0">
+                                                <div className="text-sm font-medium text-text-muted">不使用（未设置）</div>
+                                            </div>
+                                        </button>
+                                    ) : null}
+
+                                    {/* Provider 列表 */}
+                                    {providerList.map((p) => {
+                                        const isActive = rightCurrentPid === p.id;
+                                        return (
+                                            <button
+                                                key={p.id}
+                                                type="button"
+                                                onClick={() => assignProvider(p.id)}
+                                                className={[
+                                                    'w-full text-left px-4 py-3 flex items-center gap-3 transition-colors',
+                                                    isActive ? 'bg-accent/8' : 'hover:bg-white/3',
+                                                ].join(' ')}
+                                            >
+                                                <span className={[
+                                                    'w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center',
+                                                    isActive ? 'border-accent' : 'border-border-light/30',
+                                                ].join(' ')}>
+                                                    {isActive ? <span className="w-2 h-2 rounded-full bg-accent"></span> : null}
+                                                </span>
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="text-sm font-semibold truncate flex items-center gap-2">
+                                                        {p.name}
+                                                        {p.hasKey ? (
+                                                            <span className="badge badge-success text-[9px]">已配置</span>
+                                                        ) : (
+                                                            <span className="badge badge-error text-[9px]">未配置</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs text-text-muted font-mono truncate">{p.modelName}</div>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center h-full text-center px-6" style={{ minHeight: '300px' }}>
+                                <i className="fas fa-arrow-left text-2xl text-text-muted/30 mb-3"></i>
+                                <div className="text-sm text-text-muted">从左侧选择角色</div>
+                                <div className="text-xs text-text-muted/50 mt-1">选择后在此指定使用哪个 Provider</div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }
