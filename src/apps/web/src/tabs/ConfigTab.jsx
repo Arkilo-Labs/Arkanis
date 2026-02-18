@@ -24,6 +24,7 @@ const inputTypes = {
 export default function ConfigTab() {
     const [config, setConfig] = useState({});
     const [schema, setSchema] = useState({});
+    const [webToolsSettings, setWebToolsSettings] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [saveStatus, setSaveStatus] = useState(null);
@@ -40,9 +41,10 @@ export default function ConfigTab() {
     const loadConfig = useCallback(async () => {
         setIsLoading(true);
         try {
-            const [resConfig, resPrompts] = await Promise.all([
+            const [resConfig, resPrompts, resWebTools] = await Promise.all([
                 authedFetch('/api/config'),
                 authedFetch('/api/prompts'),
+                authedFetch('/api/web-tools/settings'),
             ]);
 
             const data = await resConfig.json();
@@ -53,6 +55,13 @@ export default function ConfigTab() {
             const prompts = await resPrompts.json();
             if (Array.isArray(prompts)) {
                 setSelectOptions((prev) => ({ ...prev, PROMPT_NAME: prompts }));
+            }
+
+            const webTools = await resWebTools.json().catch(() => null);
+            if (webTools?.settings && typeof webTools.settings === 'object') {
+                setWebToolsSettings(webTools.settings);
+            } else {
+                setWebToolsSettings(null);
             }
         } catch (e) {
             console.error(e);
@@ -72,6 +81,17 @@ export default function ConfigTab() {
             });
             const data = await res.json();
             if (data.error) throw new Error(data.error);
+
+            if (webToolsSettings && typeof webToolsSettings === 'object') {
+                const resWebTools = await authedFetch('/api/web-tools/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ settings: webToolsSettings }),
+                });
+                const webTools = await resWebTools.json();
+                if (webTools?.error) throw new Error(webTools.error);
+            }
+
             setSaveStatus('success');
             window.setTimeout(() => setSaveStatus(null), 3000);
         } catch {
@@ -79,7 +99,7 @@ export default function ConfigTab() {
         } finally {
             setIsSaving(false);
         }
-    }, [config]);
+    }, [config, webToolsSettings]);
 
     useEffect(() => {
         loadConfig();
@@ -128,7 +148,7 @@ export default function ConfigTab() {
                 </div>
             ) : null}
 
-            <WebToolsCard />
+            <WebToolsCard settings={webToolsSettings} onSettingsChange={setWebToolsSettings} isSaving={isSaving} />
 
             {isLoading ? (
                 <div className="card p-8 flex items-center justify-center">

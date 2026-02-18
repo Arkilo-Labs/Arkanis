@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { authedFetch } from '../composables/useAuth.js';
 
 const SEARCH_PROVIDERS = [
@@ -94,76 +94,49 @@ function KeyRow({ service, label, hasKey, onSet, onDelete, saving }) {
     );
 }
 
-function ProviderTab({ providers, selected, onChange }) {
+function ProviderSelect({ providers, selected, onChange, disabled }) {
     return (
-        <div className="flex gap-1 p-1 bg-bg-deep/50 rounded-lg w-fit">
+        <select
+            value={selected}
+            onChange={(e) => onChange(e.target.value)}
+            className="form-input font-mono text-sm"
+            disabled={disabled}
+        >
             {providers.map((p) => (
-                <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => onChange(p.id)}
-                    className={[
-                        'px-3 py-1.5 rounded-md text-xs font-medium transition-all',
-                        selected === p.id
-                            ? 'bg-accent text-white shadow-sm'
-                            : 'text-text-muted hover:text-text',
-                    ].join(' ')}
-                >
+                <option key={p.id} value={p.id}>
                     {p.label}
-                    <span className="ml-1 opacity-60 text-[10px]">{p.desc}</span>
-                </button>
+                </option>
             ))}
-        </div>
+        </select>
     );
 }
 
-export default function WebToolsCard() {
-    const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+export default function WebToolsCard({ settings, onSettingsChange, isSaving = false }) {
     const [keyStatus, setKeyStatus] = useState({ tavily: { hasKey: false }, jina: { hasKey: false }, firecrawl: { hasKey: false } });
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
+    const [keysLoading, setKeysLoading] = useState(true);
     const [keySaving, setKeySaving] = useState('');
-    const [status, setStatus] = useState(null); // 'success' | 'error' | null
 
-    const load = useCallback(async () => {
-        setLoading(true);
+    const resolvedSettings = useMemo(() => {
+        if (settings && typeof settings === 'object') return settings;
+        return null;
+    }, [settings]);
+
+    const isLoading = !resolvedSettings || keysLoading;
+
+    const loadKeys = useCallback(async () => {
+        setKeysLoading(true);
         try {
-            const [resSettings, resKeys] = await Promise.all([
-                authedFetch('/api/web-tools/settings'),
-                authedFetch('/api/web-tools/keys/status'),
-            ]);
-            const settingsData = await resSettings.json();
+            const resKeys = await authedFetch('/api/web-tools/keys/status');
             const keysData = await resKeys.json();
-            if (settingsData.settings) setSettings(settingsData.settings);
             if (keysData.status) setKeyStatus(keysData.status);
         } catch (e) {
-            console.error('[WebToolsCard] 加载失败', e);
+            console.error('[WebToolsCard] Key 状态加载失败', e);
         } finally {
-            setLoading(false);
+            setKeysLoading(false);
         }
     }, []);
 
-    useEffect(() => { load(); }, [load]);
-
-    const save = useCallback(async () => {
-        setSaving(true);
-        setStatus(null);
-        try {
-            const res = await authedFetch('/api/web-tools/settings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ settings }),
-            });
-            const data = await res.json();
-            if (data.error) throw new Error(data.error);
-            setStatus('success');
-            window.setTimeout(() => setStatus(null), 3000);
-        } catch {
-            setStatus('error');
-        } finally {
-            setSaving(false);
-        }
-    }, [settings]);
+    useEffect(() => { loadKeys(); }, [loadKeys]);
 
     const setKey = useCallback(async (service, apiKey) => {
         setKeySaving(service);
@@ -198,200 +171,198 @@ export default function WebToolsCard() {
     }, []);
 
     function patchSettings(path, value) {
-        setSettings((prev) => {
+        if (!onSettingsChange) return;
+        onSettingsChange((prev) => {
+            const base = prev ?? resolvedSettings ?? DEFAULT_SETTINGS;
+            if (!base || typeof base !== 'object') return base;
+
             if (path.includes('.')) {
                 const [top, key] = path.split('.');
-                return { ...prev, [top]: { ...prev[top], [key]: value } };
+                return { ...base, [top]: { ...(base[top] || {}), [key]: value } };
             }
-            return { ...prev, [path]: value };
+            return { ...base, [path]: value };
         });
     }
 
     return (
-        <div className="card p-6">
-            <div className="flex items-center justify-between gap-4 mb-6 pb-4 border-b border-border-light/10">
-                <div className="flex items-center gap-2">
-                    <i className="fas fa-globe"></i>
-                    <span className="text-sm font-semibold">Web 工具</span>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="card p-6">
+                <div className="flex items-center justify-between gap-4 mb-6 pb-4 border-b border-border-light/10">
+                    <div className="flex items-center gap-2">
+                        <i className="fas fa-search"></i>
+                        <span className="text-sm font-semibold">搜索</span>
+                    </div>
+                    <span className="text-xs text-text-muted">随「保存配置」生效</span>
                 </div>
-                <span className="text-xs text-text-muted">search &amp; fetch providers</span>
+
+                {isLoading ? (
+                    <div className="flex items-center gap-3 text-text-muted py-4">
+                        <i className="fas fa-spinner fa-spin"></i>
+                        <span className="text-sm">加载中...</span>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        <div>
+                            <label className="form-label">Provider</label>
+                            <ProviderSelect
+                                providers={SEARCH_PROVIDERS}
+                                selected={resolvedSettings.search_provider}
+                                onChange={(v) => patchSettings('search_provider', v)}
+                                disabled={isSaving}
+                            />
+                        </div>
+
+                        {resolvedSettings.search_provider === 'searxng' ? (
+                            <div className="space-y-3 pt-1">
+                                <div>
+                                    <label className="form-label">Base URL</label>
+                                    <input
+                                        className="form-input font-mono text-sm"
+                                        value={resolvedSettings.searxng?.base_url ?? ''}
+                                        onChange={(e) => patchSettings('searxng.base_url', e.target.value)}
+                                        placeholder="http://localhost:8080"
+                                        disabled={isSaving}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="form-label">Docker Fallback Container</label>
+                                    <input
+                                        className="form-input font-mono text-sm"
+                                        value={resolvedSettings.searxng?.docker_fallback_container ?? ''}
+                                        onChange={(e) => patchSettings('searxng.docker_fallback_container', e.target.value)}
+                                        placeholder="searxng"
+                                        disabled={isSaving}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="form-label">Timeout (ms)</label>
+                                    <input
+                                        type="number"
+                                        className="form-input font-mono text-sm"
+                                        value={resolvedSettings.searxng?.timeout_ms ?? 15000}
+                                        onChange={(e) => patchSettings('searxng.timeout_ms', Number(e.target.value))}
+                                        disabled={isSaving}
+                                    />
+                                </div>
+                            </div>
+                        ) : resolvedSettings.search_provider === 'tavily' ? (
+                            <div className="space-y-3 pt-1">
+                                <KeyRow
+                                    service="tavily"
+                                    label="Tavily"
+                                    hasKey={keyStatus.tavily?.hasKey}
+                                    onSet={setKey}
+                                    onDelete={deleteKey}
+                                    saving={keySaving === 'tavily'}
+                                />
+                                <div>
+                                    <label className="form-label">Timeout (ms)</label>
+                                    <input
+                                        type="number"
+                                        className="form-input font-mono text-sm"
+                                        value={resolvedSettings.tavily?.timeout_ms ?? 15000}
+                                        onChange={(e) => patchSettings('tavily.timeout_ms', Number(e.target.value))}
+                                        disabled={isSaving}
+                                    />
+                                </div>
+                            </div>
+                        ) : null}
+                    </div>
+                )}
             </div>
 
-            {loading ? (
-                <div className="flex items-center gap-3 text-text-muted py-4">
-                    <i className="fas fa-spinner fa-spin"></i>
-                    <span className="text-sm">加载中...</span>
+            <div className="card p-6">
+                <div className="flex items-center justify-between gap-4 mb-6 pb-4 border-b border-border-light/10">
+                    <div className="flex items-center gap-2">
+                        <i className="fas fa-download"></i>
+                        <span className="text-sm font-semibold">抓取</span>
+                    </div>
+                    <span className="text-xs text-text-muted">随「保存配置」生效</span>
                 </div>
-            ) : (
-                <>
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        {/* Search Provider */}
-                        <div className="space-y-4">
-                            <div className="text-xs font-semibold text-text-muted uppercase tracking-wide">
-                                搜索 (Web Search)
-                            </div>
-                            <ProviderTab
-                                providers={SEARCH_PROVIDERS}
-                                selected={settings.search_provider}
-                                onChange={(v) => patchSettings('search_provider', v)}
-                            />
 
-                            {settings.search_provider === 'searxng' && (
-                                <div className="space-y-3 pt-1">
-                                    <div>
-                                        <label className="form-label">Base URL</label>
-                                        <input
-                                            className="form-input font-mono text-sm"
-                                            value={settings.searxng?.base_url ?? ''}
-                                            onChange={(e) => patchSettings('searxng.base_url', e.target.value)}
-                                            placeholder="http://localhost:8080"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="form-label">Docker Fallback Container</label>
-                                        <input
-                                            className="form-input font-mono text-sm"
-                                            value={settings.searxng?.docker_fallback_container ?? ''}
-                                            onChange={(e) => patchSettings('searxng.docker_fallback_container', e.target.value)}
-                                            placeholder="searxng"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="form-label">Timeout (ms)</label>
-                                        <input
-                                            type="number"
-                                            className="form-input font-mono text-sm"
-                                            value={settings.searxng?.timeout_ms ?? 15000}
-                                            onChange={(e) => patchSettings('searxng.timeout_ms', Number(e.target.value))}
-                                        />
-                                    </div>
-                                </div>
-                            )}
-
-                            {settings.search_provider === 'tavily' && (
-                                <div className="space-y-3 pt-1">
-                                    <KeyRow
-                                        service="tavily"
-                                        label="Tavily"
-                                        hasKey={keyStatus.tavily?.hasKey}
-                                        onSet={setKey}
-                                        onDelete={deleteKey}
-                                        saving={keySaving === 'tavily'}
-                                    />
-                                    <div>
-                                        <label className="form-label">Timeout (ms)</label>
-                                        <input
-                                            type="number"
-                                            className="form-input font-mono text-sm"
-                                            value={settings.tavily?.timeout_ms ?? 15000}
-                                            onChange={(e) => patchSettings('tavily.timeout_ms', Number(e.target.value))}
-                                        />
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Fetch Provider */}
-                        <div className="space-y-4">
-                            <div className="text-xs font-semibold text-text-muted uppercase tracking-wide">
-                                抓取 (Web Fetch)
-                            </div>
-                            <ProviderTab
+                {isLoading ? (
+                    <div className="flex items-center gap-3 text-text-muted py-4">
+                        <i className="fas fa-spinner fa-spin"></i>
+                        <span className="text-sm">加载中...</span>
+                    </div>
+                ) : (
+                    <div className="space-y-4">
+                        <div>
+                            <label className="form-label">Provider</label>
+                            <ProviderSelect
                                 providers={FETCH_PROVIDERS}
-                                selected={settings.fetch_provider}
+                                selected={resolvedSettings.fetch_provider}
                                 onChange={(v) => patchSettings('fetch_provider', v)}
+                                disabled={isSaving}
                             />
-
-                            {settings.fetch_provider === 'firecrawl' && (
-                                <div className="space-y-3 pt-1">
-                                    <div>
-                                        <label className="form-label">Base URL</label>
-                                        <input
-                                            className="form-input font-mono text-sm"
-                                            value={settings.firecrawl?.base_url ?? ''}
-                                            onChange={(e) => patchSettings('firecrawl.base_url', e.target.value)}
-                                            placeholder="http://localhost:3002"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="form-label">Timeout (ms)</label>
-                                        <input
-                                            type="number"
-                                            className="form-input font-mono text-sm"
-                                            value={settings.firecrawl?.timeout_ms ?? 30000}
-                                            onChange={(e) => patchSettings('firecrawl.timeout_ms', Number(e.target.value))}
-                                        />
-                                    </div>
-                                    <KeyRow
-                                        service="firecrawl"
-                                        label="Firecrawl"
-                                        hasKey={keyStatus.firecrawl?.hasKey}
-                                        onSet={setKey}
-                                        onDelete={deleteKey}
-                                        saving={keySaving === 'firecrawl'}
-                                    />
-                                </div>
-                            )}
-
-                            {settings.fetch_provider === 'jina' && (
-                                <div className="space-y-3 pt-1">
-                                    <KeyRow
-                                        service="jina"
-                                        label="Jina"
-                                        hasKey={keyStatus.jina?.hasKey}
-                                        onSet={setKey}
-                                        onDelete={deleteKey}
-                                        saving={keySaving === 'jina'}
-                                    />
-                                    <div>
-                                        <label className="form-label">Base URL</label>
-                                        <input
-                                            className="form-input font-mono text-sm"
-                                            value={settings.jina?.base_url ?? ''}
-                                            onChange={(e) => patchSettings('jina.base_url', e.target.value)}
-                                            placeholder="https://r.jina.ai"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="form-label">Timeout (ms)</label>
-                                        <input
-                                            type="number"
-                                            className="form-input font-mono text-sm"
-                                            value={settings.jina?.timeout_ms ?? 30000}
-                                            onChange={(e) => patchSettings('jina.timeout_ms', Number(e.target.value))}
-                                        />
-                                    </div>
-                                </div>
-                            )}
                         </div>
-                    </div>
 
-                    <div className="mt-6 pt-4 border-t border-border-light/10 flex items-center justify-between gap-4">
-                        {status === 'success' ? (
-                            <span className="text-xs text-success flex items-center gap-1.5">
-                                <i className="fas fa-check-circle"></i>已保存
-                            </span>
-                        ) : status === 'error' ? (
-                            <span className="text-xs text-error flex items-center gap-1.5">
-                                <i className="fas fa-exclamation-circle"></i>保存失败
-                            </span>
-                        ) : (
-                            <span className="text-xs text-text-muted">
-                                修改 Provider 或 URL 后点击保存
-                            </span>
-                        )}
-                        <button
-                            type="button"
-                            className="btn btn-primary btn-sm"
-                            onClick={save}
-                            disabled={saving}
-                        >
-                            <i className={saving ? 'fas fa-spinner fa-spin' : 'fas fa-save'}></i>
-                            保存
-                        </button>
+                        {resolvedSettings.fetch_provider === 'firecrawl' ? (
+                            <div className="space-y-3 pt-1">
+                                <div>
+                                    <label className="form-label">Base URL</label>
+                                    <input
+                                        className="form-input font-mono text-sm"
+                                        value={resolvedSettings.firecrawl?.base_url ?? ''}
+                                        onChange={(e) => patchSettings('firecrawl.base_url', e.target.value)}
+                                        placeholder="http://localhost:3002"
+                                        disabled={isSaving}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="form-label">Timeout (ms)</label>
+                                    <input
+                                        type="number"
+                                        className="form-input font-mono text-sm"
+                                        value={resolvedSettings.firecrawl?.timeout_ms ?? 30000}
+                                        onChange={(e) => patchSettings('firecrawl.timeout_ms', Number(e.target.value))}
+                                        disabled={isSaving}
+                                    />
+                                </div>
+                                <KeyRow
+                                    service="firecrawl"
+                                    label="Firecrawl"
+                                    hasKey={keyStatus.firecrawl?.hasKey}
+                                    onSet={setKey}
+                                    onDelete={deleteKey}
+                                    saving={keySaving === 'firecrawl'}
+                                />
+                            </div>
+                        ) : resolvedSettings.fetch_provider === 'jina' ? (
+                            <div className="space-y-3 pt-1">
+                                <KeyRow
+                                    service="jina"
+                                    label="Jina"
+                                    hasKey={keyStatus.jina?.hasKey}
+                                    onSet={setKey}
+                                    onDelete={deleteKey}
+                                    saving={keySaving === 'jina'}
+                                />
+                                <div>
+                                    <label className="form-label">Base URL</label>
+                                    <input
+                                        className="form-input font-mono text-sm"
+                                        value={resolvedSettings.jina?.base_url ?? ''}
+                                        onChange={(e) => patchSettings('jina.base_url', e.target.value)}
+                                        placeholder="https://r.jina.ai"
+                                        disabled={isSaving}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="form-label">Timeout (ms)</label>
+                                    <input
+                                        type="number"
+                                        className="form-input font-mono text-sm"
+                                        value={resolvedSettings.jina?.timeout_ms ?? 30000}
+                                        onChange={(e) => patchSettings('jina.timeout_ms', Number(e.target.value))}
+                                        disabled={isSaving}
+                                    />
+                                </div>
+                            </div>
+                        ) : null}
                     </div>
-                </>
-            )}
+                )}
+            </div>
         </div>
     );
 }
