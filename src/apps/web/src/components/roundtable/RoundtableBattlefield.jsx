@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import LogTerminal from '../LogTerminal.jsx';
-import MarkdownView from './MarkdownView.jsx';
+import MarkdownView, { renderInlineMarkdown } from './MarkdownView.jsx';
 import { summarizeTranscriptEntry } from './summaryRules.js';
 import { campFromDirection, computeLatestBeliefs, inferBattlePhase, pickWinnerSideFromDecision } from './battlefieldModel.js';
 
@@ -1075,9 +1075,11 @@ export default function RoundtableBattlefield({
                                                                     {item.summary.highlights.length ? (
                                                                         <div className="rt-bf-bubble-highlights">
                                                                             {item.summary.highlights.map((line) => (
-                                                                                <div key={line} className="rt-bf-bubble-line">
-                                                                                    {line}
-                                                                                </div>
+                                                                                <div
+                                                                                    key={line}
+                                                                                    className="rt-bf-bubble-line"
+                                                                                    dangerouslySetInnerHTML={{ __html: renderInlineMarkdown(line) }}
+                                                                                />
                                                                             ))}
                                                                         </div>
                                                                     ) : (
@@ -1146,9 +1148,11 @@ export default function RoundtableBattlefield({
                                                                     {item.summary.highlights.length ? (
                                                                         <div className="rt-bf-bubble-highlights">
                                                                             {item.summary.highlights.map((line) => (
-                                                                                <div key={line} className="rt-bf-bubble-line">
-                                                                                    {line}
-                                                                                </div>
+                                                                                <div
+                                                                                    key={line}
+                                                                                    className="rt-bf-bubble-line"
+                                                                                    dangerouslySetInnerHTML={{ __html: renderInlineMarkdown(line) }}
+                                                                                />
                                                                             ))}
                                                                         </div>
                                                                     ) : (
@@ -1209,9 +1213,11 @@ export default function RoundtableBattlefield({
                                                                 {item.summary.highlights.length ? (
                                                                     <div className="rt-bf-bubble-highlights">
                                                                         {item.summary.highlights.map((line) => (
-                                                                            <div key={line} className="rt-bf-bubble-line">
-                                                                                {line}
-                                                                            </div>
+                                                                            <div
+                                                                                key={line}
+                                                                                className="rt-bf-bubble-line"
+                                                                                dangerouslySetInnerHTML={{ __html: renderInlineMarkdown(line) }}
+                                                                            />
                                                                         ))}
                                                                     </div>
                                                                 ) : (

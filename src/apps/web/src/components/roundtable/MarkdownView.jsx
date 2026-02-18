@@ -15,7 +15,7 @@ function sanitizeHref(rawHref) {
     return href.replace(/"/g, '%22');
 }
 
-function renderInlineMarkdown(text) {
+export function renderInlineMarkdown(text) {
     let escaped = escapeHtml(text);
 
     escaped = escaped.replace(
