@@ -604,12 +604,19 @@ export default function RoundtableBattlefield({
                     .slice(0, 4)
                     .join(', ');
 
+                // 提取有 url 的结果（firecrawl.scrape / browser.screenshot）
+                const sources = results
+                    .filter((r) => r?.ok !== false && typeof r?.url === 'string' && r.url.startsWith('http'))
+                    .map((r) => ({ tool: String(r.tool || ''), url: String(r.url) }))
+                    .slice(0, 6);
+
                 push({
                     id: `tool:${ev.seq ?? when}:result`,
                     timestamp: when,
                     level: results.some((r) => r?.ok === false) ? 'error' : 'success',
                     title: `${agent || 'agent'} ${turn} 工具结果`,
                     detail: summary || '无摘要',
+                    sources: sources.length ? sources : null,
                 });
                 continue;
             }
@@ -1271,6 +1278,36 @@ export default function RoundtableBattlefield({
                                                 </span>
                                             </div>
                                             <div className="rt-bf-trace-detail">{item.detail}</div>
+                                            {item.sources && item.sources.length ? (
+                                                <div className="rt-bf-source-list">
+                                                    {item.sources.map((src) => {
+                                                        let domain = '';
+                                                        try {
+                                                            domain = new URL(src.url).hostname.replace(/^www\./, '');
+                                                        } catch {
+                                                            domain = src.url.slice(0, 24);
+                                                        }
+                                                        return (
+                                                            <a
+                                                                key={src.url}
+                                                                href={src.url}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="rt-bf-source-chip"
+                                                                title={src.url}
+                                                            >
+                                                                <img
+                                                                    src={`https://www.google.com/s2/favicons?domain=${domain}&sz=32`}
+                                                                    alt=""
+                                                                    className="rt-bf-source-favicon"
+                                                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                                                />
+                                                                <span className="rt-bf-source-domain">{domain}</span>
+                                                            </a>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : null}
                                         </div>
                                     ))
                                 ) : (

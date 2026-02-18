@@ -368,6 +368,48 @@
     @apply mt-1 text-xs text-text-muted whitespace-pre-wrap break-words leading-relaxed;
   }
 
+  .rt-bf-source-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.5rem;
+  }
+
+  .rt-bf-source-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 9999px;
+    border: 1px solid rgb(255 255 255 / 0.1);
+    background: rgb(0 0 0 / 0.25);
+    padding: 0.15rem 0.5rem 0.15rem 0.25rem;
+    font-size: 0.68rem;
+    color: rgb(var(--color-text-muted));
+    text-decoration: none;
+    transition: border-color 150ms, background 150ms;
+    max-width: 140px;
+  }
+
+  .rt-bf-source-chip:hover {
+    border-color: rgb(255 255 255 / 0.25);
+    background: rgb(255 255 255 / 0.08);
+    color: rgb(var(--color-text));
+  }
+
+  .rt-bf-source-favicon {
+    width: 14px;
+    height: 14px;
+    border-radius: 9999px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .rt-bf-source-domain {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .rt-bf-trace-error {
     border-color: rgb(var(--color-error) / 0.35);
     background: rgb(var(--color-error) / 0.08);
