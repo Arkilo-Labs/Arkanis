@@ -6,8 +6,36 @@ import { authedFetch } from '../composables/useAuth.js';
 import { useRoundtable } from '../composables/useRoundtable.js';
 import { useSocket } from '../composables/useSocket.js';
 
-function newSessionId() {
-    return `rt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+function makeSessionId(symbol) {
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const hh = String(now.getHours()).padStart(2, '0');
+    const min = String(now.getMinutes()).padStart(2, '0');
+    const rand = Math.random().toString(36).slice(2, 5);
+    const sym = String(symbol || 'XX').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+    return `rt-${sym}-${mm}${dd}-${hh}${min}-${rand}`;
+}
+
+// 从 session ID 或 createdAt 提取可读标签
+function parseSessionLabel(id, createdAt) {
+    if (createdAt) {
+        const d = new Date(createdAt);
+        if (!Number.isNaN(d.getTime())) {
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            const hh = String(d.getHours()).padStart(2, '0');
+            const min = String(d.getMinutes()).padStart(2, '0');
+            // 尝试从 ID 提取 symbol
+            const m = String(id || '').match(/^rt-([A-Z0-9]+)-/);
+            const sym = m ? m[1] : '';
+            return sym ? `${sym} ${mm}/${dd} ${hh}:${min}` : `${mm}/${dd} ${hh}:${min}`;
+        }
+    }
+    // 回退：解析新格式 ID
+    const m = String(id || '').match(/^rt-([A-Z0-9]+)-(\d{2})(\d{2})-(\d{2})(\d{2})/);
+    if (m) return `${m[1]} ${m[2]}/${m[3]} ${m[4]}:${m[5]}`;
+    return id || '--';
 }
 
 function normalizeTimestamp(value) {
@@ -39,7 +67,6 @@ export default function RoundtableTab() {
     });
     const [error, setError] = useState('');
     const [isStarting, setIsStarting] = useState(false);
-    const [newSessionTick, setNewSessionTick] = useState(0);
 
     const roundtable = useRoundtable();
     const timeframes = useMemo(() => ['5m', '15m', '30m', '1h', '4h', '1d'], []);
@@ -47,6 +74,13 @@ export default function RoundtableTab() {
     const isRunning = roundtable.isSessionRunning;
     const activeSessionId = roundtable.selectedSessionId;
     const activePid = roundtable.sessionMeta?.pid || null;
+
+    const [showLaunchOverlay, setShowLaunchOverlay] = useState(() => !activeSessionId);
+
+    // 选中 session 后自动收起启动表单
+    useEffect(() => {
+        if (activeSessionId) setShowLaunchOverlay(false);
+    }, [activeSessionId]);
 
     const statusMeta =
         SESSION_STATUS_META[roundtable.sessionMeta?.status] ||
@@ -95,6 +129,19 @@ export default function RoundtableTab() {
         roundtable.decisions.length,
     ]);
 
+    const configSummary = useMemo(() => {
+        return [
+            `symbol=${config.symbol}`,
+            `bars=${config.bars}`,
+            `primary=${config.primary}`,
+            `aux=${config.aux}`,
+            config.skipNews ? 'skipNews=1' : null,
+            config.skipLlm ? 'skipLlm=1' : null,
+            config.skipLiquidation ? 'skipLiquidation=1' : null,
+            config.skipMcp ? 'skipMcp=1' : null,
+        ].filter(Boolean).join('  ');
+    }, [config]);
+
     const handleConfigChange = useCallback((updates) => {
         setConfig((prev) => ({ ...prev, ...updates }));
     }, []);
@@ -121,7 +168,7 @@ export default function RoundtableTab() {
         setError('');
         setIsStarting(true);
 
-        const nextSessionId = newSessionId();
+        const nextSessionId = makeSessionId(config.symbol);
 
         try {
             const response = await authedFetch('/api/roundtable/run', {
@@ -234,18 +281,30 @@ export default function RoundtableTab() {
                             >
                                 <i className="fas fa-rotate-right"></i>
                             </button>
-                            <button
-                                type="button"
-                                className="btn btn-secondary btn-sm"
-                                disabled={isRunning}
-                                onClick={() => {
-                                    setError('');
-                                    setNewSessionTick((prev) => prev + 1);
-                                }}
-                            >
-                                <i className="fas fa-plus"></i>
-                                新建
-                            </button>
+                            {isRunning ? (
+                                <button
+                                    type="button"
+                                    className="btn btn-sm"
+                                    style={{ borderColor: 'rgb(239 68 68 / 0.5)', color: 'rgb(239 68 68)' }}
+                                    onClick={stopRoundtable}
+                                    disabled={!activePid}
+                                >
+                                    <i className="fas fa-stop"></i>
+                                    停止
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => {
+                                        setError('');
+                                        setShowLaunchOverlay(true);
+                                    }}
+                                >
+                                    <i className="fas fa-plus"></i>
+                                    新建
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -256,15 +315,13 @@ export default function RoundtableTab() {
                                     SESSION_STATUS_META[item?.status] ||
                                     SESSION_STATUS_META.incomplete;
                                 const selected = item.id && item.id === activeSessionId;
-                                const seqValue =
-                                    item?.lastSeq == null ? '--' : String(item.lastSeq);
-                                const pidValue =
-                                    item?.pid == null ? '--' : String(item.pid);
+                                const label = parseSessionLabel(item.id, item.createdAt);
 
                                 return (
                                     <button
                                         key={item.id}
                                         type="button"
+                                        title={item.id}
                                         className={[
                                             'w-full rounded-xl border px-3 py-2 text-left transition',
                                             selected
@@ -273,20 +330,15 @@ export default function RoundtableTab() {
                                         ].join(' ')}
                                         onClick={() => {
                                             if (!item.id) return;
+                                            setShowLaunchOverlay(false);
                                             void roundtable.selectSession(item.id, { replace: true }).catch((caught) => {
                                                 setError(caught?.message || String(caught));
                                             });
                                         }}
                                     >
-                                        <div className="flex items-start justify-between gap-2">
-                                            <div className="min-w-0">
-                                                <div className="font-mono text-xs truncate">{item.id}</div>
-                                                <div className="text-[11px] text-text-muted mt-0.5 flex gap-x-2">
-                                                    <span>pid {pidValue}</span>
-                                                    <span>seq {seqValue}</span>
-                                                </div>
-                                            </div>
-                                            <span className={['badge', meta.className].join(' ')}>
+                                        <div className="flex items-center justify-between gap-2">
+                                            <span className="text-xs font-semibold truncate min-w-0">{label}</span>
+                                            <span className={['badge flex-shrink-0', meta.className].join(' ')}>
                                                 <i className={['fas', meta.icon].join(' ')}></i>
                                                 {meta.label}
                                             </span>
@@ -301,18 +353,136 @@ export default function RoundtableTab() {
                         )}
                     </div>
 
-                    <div className="mt-3 text-[11px] text-text-muted font-mono break-all leading-relaxed border-t border-border-light/8 pt-2">
-                        {activeSessionId || '--'}<br />
-                        pid={activePid || '--'} seq={roundtable.lastSeq}
-                    </div>
+                    {activeSessionId ? (
+                        <div className="mt-3 text-[11px] text-text-muted font-mono leading-relaxed border-t border-border-light/8 pt-2 space-y-0.5">
+                            <div className="truncate text-text">{activeSessionId}</div>
+                            <div className="flex gap-x-3">
+                                <span>pid={activePid || '--'}</span>
+                                <span>seq={roundtable.lastSeq}</span>
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
 
-                <DecisionResultCard
-                    finalDecision={finalDecision}
-                    draftDecision={draftDecision}
-                    processExit={roundtable.processExit}
-                    isRunning={isRunning}
-                />
+                {showLaunchOverlay && !isRunning ? (
+                    <div className="card p-5 flex flex-col">
+                        <div className="text-sm font-semibold mb-4">启动新会话</div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                            <div>
+                                <label className="form-label">交易对</label>
+                                <input
+                                    value={config.symbol}
+                                    onChange={(e) => handleConfigChange({ symbol: e.target.value })}
+                                    type="text"
+                                    className="form-input font-mono"
+                                    placeholder="BTCUSDT"
+                                    disabled={isStarting}
+                                />
+                            </div>
+                            <div>
+                                <label className="form-label">Bars</label>
+                                <input
+                                    value={config.bars}
+                                    onChange={(e) => handleConfigChange({ bars: Number(e.target.value || 0) })}
+                                    type="number"
+                                    min="50"
+                                    max="5000"
+                                    className="form-input font-mono"
+                                    disabled={isStarting}
+                                />
+                            </div>
+                            <div>
+                                <label className="form-label">Primary</label>
+                                <select
+                                    value={config.primary}
+                                    onChange={(e) => handleConfigChange({ primary: e.target.value })}
+                                    className="form-input font-mono"
+                                    disabled={isStarting}
+                                >
+                                    {timeframes.map((tf) => (
+                                        <option key={tf} value={tf}>{tf}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="form-label">Aux</label>
+                                <select
+                                    value={config.aux}
+                                    onChange={(e) => handleConfigChange({ aux: e.target.value })}
+                                    className="form-input font-mono"
+                                    disabled={isStarting}
+                                >
+                                    {timeframes.map((tf) => (
+                                        <option key={tf} value={tf}>{tf}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                            <label className="switch">
+                                <input checked={config.skipNews} onChange={(e) => handleConfigChange({ skipNews: e.target.checked })} type="checkbox" disabled={isStarting} />
+                                <span className="switch-control"><span className="switch-track"></span><span className="switch-thumb"></span></span>
+                                <span className="text-sm text-text-muted">跳过新闻</span>
+                            </label>
+                            <label className="switch">
+                                <input checked={config.skipLlm} onChange={(e) => handleConfigChange({ skipLlm: e.target.checked })} type="checkbox" disabled={isStarting} />
+                                <span className="switch-control"><span className="switch-track"></span><span className="switch-thumb"></span></span>
+                                <span className="text-sm text-text-muted">跳过模型</span>
+                            </label>
+                            <label className="switch">
+                                <input checked={config.skipLiquidation} onChange={(e) => handleConfigChange({ skipLiquidation: e.target.checked })} type="checkbox" disabled={isStarting} />
+                                <span className="switch-control"><span className="switch-track"></span><span className="switch-thumb"></span></span>
+                                <span className="text-sm text-text-muted">跳过清算</span>
+                            </label>
+                            <label className="switch">
+                                <input checked={config.skipMcp} onChange={(e) => handleConfigChange({ skipMcp: e.target.checked })} type="checkbox" disabled={isStarting} />
+                                <span className="switch-control"><span className="switch-track"></span><span className="switch-thumb"></span></span>
+                                <span className="text-sm text-text-muted">跳过 MCP</span>
+                            </label>
+                        </div>
+
+                        {configSummary ? (
+                            <div className="rounded-xl border border-border-light/10 bg-black/20 px-3 py-2 text-xs text-text-muted font-mono whitespace-pre-wrap break-all mb-4">
+                                {configSummary}
+                            </div>
+                        ) : null}
+
+                        {error ? (
+                            <div className="form-error mb-4">{error}</div>
+                        ) : null}
+
+                        <div className="flex items-center gap-3 mt-auto">
+                            <button
+                                type="button"
+                                className="btn btn-primary"
+                                onClick={startRoundtable}
+                                disabled={isStarting}
+                            >
+                                <i className={['fas', isStarting ? 'fa-spinner fa-spin' : 'fa-play'].join(' ')}></i>
+                                启动
+                            </button>
+                            {activeSessionId ? (
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={() => setShowLaunchOverlay(false)}
+                                    disabled={isStarting}
+                                >
+                                    返回
+                                </button>
+                            ) : null}
+                        </div>
+                    </div>
+                ) : (
+                    <DecisionResultCard
+                        finalDecision={finalDecision}
+                        draftDecision={draftDecision}
+                        processExit={roundtable.processExit}
+                        isRunning={isRunning}
+                    />
+                )}
             </section>
 
             <RoundtableBattlefield
@@ -326,16 +496,6 @@ export default function RoundtableTab() {
                 finalDecision={finalDecision}
                 draftDecision={draftDecision}
                 counts={counts}
-                activeSessionId={activeSessionId}
-                newSessionTick={newSessionTick}
-                config={config}
-                onConfigChange={handleConfigChange}
-                isStarting={isStarting}
-                onStart={startRoundtable}
-                onStop={stopRoundtable}
-                activePid={activePid}
-                launchError={error}
-                timeframes={timeframes}
             />
         </div>
     );
