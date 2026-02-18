@@ -5,6 +5,7 @@
       "id": "openai_gpt41mini",
       "name": "OpenAI GPT-4.1 mini",
       "type": "openai_compatible",
+      "protocol": "chat_completions",
       "baseUrl": "https://api.openai.com",
       "modelName": "gpt-4.1-mini",
       "apiKeyEnv": "OPENAI_API_KEY",

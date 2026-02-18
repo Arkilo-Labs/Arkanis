@@ -7,6 +7,7 @@ import { readProviderDefinitions } from '../../../core/services/aiProvidersStore
 
 const ProviderSchema = z.object({
     type: z.enum(['openai_compatible']),
+    protocol: z.enum(['chat_completions', 'responses', 'anthropic']),
     base_url: z.string().min(1),
     api_key_env: z.string().optional().default(''),
     model: z.string().min(1),
@@ -139,6 +140,7 @@ export async function loadProvidersConfig(configDir) {
                 p.id,
                 {
                     type: 'openai_compatible',
+                    protocol: p.protocol,
                     base_url: p.baseUrl,
                     api_key_env: p.apiKeyEnv || '',
                     model: p.modelName,

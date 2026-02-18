@@ -19,6 +19,16 @@ function normalizeBaseUrl(raw) {
     return base.replace(/\/+$/, '');
 }
 
+const VALID_PROTOCOLS = ['chat_completions', 'responses', 'anthropic'];
+
+function normalizeProtocol(value) {
+    const v = String(value || '').trim();
+    if (!v || !VALID_PROTOCOLS.includes(v)) {
+        throw new Error(`字段 protocol 为必填项，必须是 ${VALID_PROTOCOLS.join(' / ')}`);
+    }
+    return v;
+}
+
 function normalizeThinkingMode(value) {
     const v = String(value || '').trim();
     if (!v) return 'disabled';
@@ -52,6 +62,7 @@ function normalizeProvider(provider, { requireId = true } = {}) {
         throw new Error('字段 apiKeyEnv 必须是环境变量名（例如 OPENAI_API_KEY）');
     }
 
+    const protocol = normalizeProtocol(provider.protocol);
     const supportsVision = Boolean(provider.supportsVision);
     const thinkingMode = normalizeThinkingMode(provider.thinkingMode);
 
@@ -72,6 +83,7 @@ function normalizeProvider(provider, { requireId = true } = {}) {
         id,
         name,
         type,
+        protocol,
         baseUrl,
         modelName,
         apiKeyEnv: apiKeyEnvTrimmed,

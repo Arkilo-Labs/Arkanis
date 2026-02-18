@@ -1,11 +1,11 @@
 import { join } from 'path';
-import { createProvider } from './providerRegistry.js';
+import { createLlmClient } from '../../../core/llm/llmClientFactory.js';
 import { Agent } from './agent.js';
 
 function buildProviderMap(providersConfig) {
     const providers = new Map();
     for (const [id, cfg] of Object.entries(providersConfig.providers)) {
-        providers.set(id, createProvider(id, cfg));
+        providers.set(id, createLlmClient(id, cfg));
     }
     return providers;
 }
