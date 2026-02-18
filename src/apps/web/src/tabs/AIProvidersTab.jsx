@@ -16,11 +16,18 @@ const thinkingModeOptions = [
     { value: 'none', label: 'None' },
 ];
 
+const protocolOptions = [
+    { value: 'chat_completions', label: 'Chat Completions' },
+    { value: 'responses', label: 'Responses' },
+    { value: 'anthropic', label: 'Anthropic' },
+];
+
 function defaultNewProvider() {
     return {
         id: '',
         name: '',
         type: 'openai_compatible',
+        protocol: '',
         baseUrl: '',
         modelName: '',
         apiKey: '',
@@ -180,6 +187,10 @@ function AddProviderModal({ onClose, onCreate }) {
             setError('名称、Base URL、模型名称为必填项');
             return;
         }
+        if (!form.protocol) {
+            setError('API 协议为必填项');
+            return;
+        }
         setError('');
         setCreating(true);
         try {
@@ -243,6 +254,21 @@ function AddProviderModal({ onClose, onCreate }) {
                             required
                         />
                         <p className="text-xs text-text-muted mt-1">不要带 /v1，系统自动拼接</p>
+                    </div>
+
+                    <div>
+                        <label className="form-label">API 协议 *</label>
+                        <select
+                            value={form.protocol}
+                            onChange={(e) => update({ protocol: e.target.value })}
+                            className="form-input font-mono"
+                            required
+                        >
+                            <option value="" disabled>请选择协议</option>
+                            {protocolOptions.map((o) => (
+                                <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                        </select>
                     </div>
 
                     <div>

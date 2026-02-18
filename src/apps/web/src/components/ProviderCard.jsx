@@ -6,6 +6,12 @@ const thinkingModeOptions = [
     { value: 'none', label: 'None' },
 ];
 
+const protocolOptions = [
+    { value: 'chat_completions', label: 'Chat Completions' },
+    { value: 'responses', label: 'Responses' },
+    { value: 'anthropic', label: 'Anthropic' },
+];
+
 function getKeyBadge(provider) {
     if (!provider?.hasKey) {
         return { className: 'badge badge-error', label: '未配置' };
@@ -22,7 +28,7 @@ export default function ProviderCard({ provider, usedRoles = [], onUpdate, onDel
     const [editForm, setEditForm] = useState({ ...provider });
 
     useEffect(() => {
-        setEditForm({ ...provider, thinkingMode: provider.thinkingMode || 'none' });
+        setEditForm({ ...provider, thinkingMode: provider.thinkingMode || 'none', protocol: provider.protocol || '' });
     }, [provider]);
 
     const keyBadge = useMemo(() => getKeyBadge(provider), [provider]);
@@ -30,23 +36,23 @@ export default function ProviderCard({ provider, usedRoles = [], onUpdate, onDel
     function openDetailModal() {
         setShowDetailModal(true);
         setIsEditing(false);
-        setEditForm({ ...provider, thinkingMode: provider.thinkingMode || 'none' });
+        setEditForm({ ...provider, thinkingMode: provider.thinkingMode || 'none', protocol: provider.protocol || '' });
     }
 
     function closeDetailModal() {
         setShowDetailModal(false);
         setIsEditing(false);
-        setEditForm({ ...provider, thinkingMode: provider.thinkingMode || 'none' });
+        setEditForm({ ...provider, thinkingMode: provider.thinkingMode || 'none', protocol: provider.protocol || '' });
     }
 
     function startEdit() {
         setIsEditing(true);
-        setEditForm({ ...provider, thinkingMode: provider.thinkingMode || 'none' });
+        setEditForm({ ...provider, thinkingMode: provider.thinkingMode || 'none', protocol: provider.protocol || '' });
     }
 
     function cancelEdit() {
         setIsEditing(false);
-        setEditForm({ ...provider, thinkingMode: provider.thinkingMode || 'none' });
+        setEditForm({ ...provider, thinkingMode: provider.thinkingMode || 'none', protocol: provider.protocol || '' });
     }
 
     function saveEdit() {
@@ -117,6 +123,10 @@ export default function ProviderCard({ provider, usedRoles = [], onUpdate, onDel
                                     <span className="font-mono">
                                         {provider.apiKeyEnv ? provider.apiKeyEnv : 'secrets'}
                                     </span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <i className="fas fa-plug w-4"></i>
+                                    <span className="font-mono">{provider.protocol || '—'}</span>
                                 </div>
                                 <div className="flex items-center gap-1.5">
                                     <i className="fas fa-layer-group w-4"></i>
@@ -213,6 +223,13 @@ export default function ProviderCard({ provider, usedRoles = [], onUpdate, onDel
                                         <label className="form-label">Temperature</label>
                                         <div className="rounded-xl bg-white/5 border border-border-light/10 p-3 text-sm text-white/80">
                                             {provider.temperature ?? 'N/A'}
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="form-label">API 协议</label>
+                                        <div className="rounded-xl bg-white/5 border border-border-light/10 p-3 font-mono text-sm text-white/80">
+                                            {provider.protocol || '—'}
                                         </div>
                                     </div>
 
@@ -324,6 +341,28 @@ export default function ProviderCard({ provider, usedRoles = [], onUpdate, onDel
                                             className="form-input font-mono"
                                             placeholder="OPENAI_API_KEY"
                                         />
+                                    </div>
+
+                                    <div>
+                                        <label className="form-label">API 协议 *</label>
+                                        <select
+                                            value={editForm.protocol || ''}
+                                            onChange={(e) =>
+                                                setEditForm((prev) => ({
+                                                    ...prev,
+                                                    protocol: e.target.value,
+                                                }))
+                                            }
+                                            className="form-input font-mono"
+                                            required
+                                        >
+                                            <option value="" disabled>请选择协议</option>
+                                            {protocolOptions.map((opt) => (
+                                                <option key={opt.value} value={opt.value}>
+                                                    {opt.label}
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
 
                                     <div>
