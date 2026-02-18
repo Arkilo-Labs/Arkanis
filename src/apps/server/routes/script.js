@@ -51,7 +51,7 @@ export function registerScriptRoutes({ app, io, projectRoot, activeProcesses }) 
         const script = String(req.body?.script || '').trim();
         const args = parseArgs(req.body?.args);
 
-        if (!['main', 'backtest'].includes(script)) {
+        if (script !== 'main') {
             return res.status(400).json({ error: 'Invalid script name' });
         }
 
