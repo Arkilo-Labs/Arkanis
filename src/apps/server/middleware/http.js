@@ -21,7 +21,7 @@ export function registerSpaFallback({ app, projectRoot }) {
     const indexPath = join(projectRoot, 'src', 'apps', 'web', 'dist', 'index.html');
     if (!existsSync(indexPath)) return;
 
-    app.get('*', (_req, res) => {
+    app.get('/{*path}', (_req, res) => {
         res.sendFile(indexPath);
     });
 }

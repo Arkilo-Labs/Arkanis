@@ -204,7 +204,16 @@ export function useRoundtable({ initialSessionId = '' } = {}) {
 
             const remoteEvents = Array.isArray(payload?.events) ? payload.events : [];
             const remoteMeta = normalizeSessionMeta(payload?.session, targetSessionId);
-            if (remoteMeta) setSessionMeta(remoteMeta);
+            if (remoteMeta) {
+                setSessionMeta((prev) => {
+                    // 不允许从终态回退到 running（防止 kill 后 API 响应滞后覆盖正确状态）
+                    const TERMINAL = new Set(['killed', 'completed', 'failed']);
+                    if (prev && TERMINAL.has(prev.status) && remoteMeta.status === 'running') {
+                        return prev;
+                    }
+                    return remoteMeta;
+                });
+            }
 
             setEventState((prev) => {
                 let next = replace ? createRoundtableEventState() : prev;
@@ -354,6 +363,18 @@ export function useRoundtable({ initialSessionId = '' } = {}) {
                     killRequested: msg?.killRequested,
                 },
             });
+            // 立即从 socket 事件同步 sessionMeta，不依赖后续 API 轮询
+            const incomingId = normalizeSessionId(msg?.sessionId);
+            if (incomingId && incomingId === selectedSessionRef.current) {
+                const killRequested = Boolean(msg?.killRequested);
+                const rawCode = msg?.code;
+                const exitCode = Number.isFinite(Number(rawCode)) ? Number(rawCode) : null;
+                const newStatus = killRequested ? 'killed' : exitCode === 0 ? 'completed' : 'failed';
+                setSessionMeta((prev) =>
+                    prev ? { ...prev, status: newStatus, exitCode } : prev,
+                );
+                void loadSessions().catch(() => null);
+            }
         }
 
         function onAgentSpeak(msg) {
