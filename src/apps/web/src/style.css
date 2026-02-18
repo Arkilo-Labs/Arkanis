@@ -207,8 +207,10 @@
       radial-gradient(circle at 80% 20%, rgb(var(--color-error) / 0.07), transparent 48%),
       linear-gradient(to right, rgb(255 255 255 / 0.06) 1px, transparent 1px),
       linear-gradient(to bottom, rgb(255 255 255 / 0.06) 1px, transparent 1px);
-    background-size: 100% 100%, 100% 100%, 36px 36px, 36px 36px;
-    background-position: center, center, center, center;
+    /* 固定尺寸避免容器高度变化时渐变位置偏移 */
+    background-size: 1400px 900px, 1000px 700px, 36px 36px, 36px 36px;
+    background-repeat: no-repeat, no-repeat, repeat, repeat;
+    background-position: top left, top right, center, center;
     opacity: 0.95;
   }
 
@@ -687,6 +689,9 @@
       radial-gradient(circle at 78% 20%, rgb(var(--color-error) / 0.04), transparent 52%),
       linear-gradient(to right, rgb(255 255 255 / 0.06) 1px, transparent 1px),
       linear-gradient(to bottom, rgb(255 255 255 / 0.06) 1px, transparent 1px);
+    background-size: 1400px 900px, 1000px 700px, 36px 36px, 36px 36px;
+    background-repeat: no-repeat, no-repeat, repeat, repeat;
+    background-position: top left, top right, center, center;
   }
 
   .rt-bf-win-right .rt-bf-background {
@@ -695,6 +700,9 @@
       radial-gradient(circle at 22% 20%, rgb(34 211 238 / 0.04), transparent 52%),
       linear-gradient(to right, rgb(255 255 255 / 0.06) 1px, transparent 1px),
       linear-gradient(to bottom, rgb(255 255 255 / 0.06) 1px, transparent 1px);
+    background-size: 1400px 900px, 1000px 700px, 36px 36px, 36px 36px;
+    background-repeat: no-repeat, no-repeat, repeat, repeat;
+    background-position: top right, top left, center, center;
   }
 
   .rt-bf-win-left .rt-bf-sidebar-right,
