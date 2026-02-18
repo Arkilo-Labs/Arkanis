@@ -13,16 +13,25 @@ export async function closePool() {
     await closeDb();
 }
 
-// 以下函数在迁移后不再被调用，保留签名以防第三方或未来使用
-export async function createPool() {}
-export async function getMarketPool() { return null; }
-export async function getCorePool() { return null; }
-export async function queryMarket() { return { rows: [] }; }
-export async function queryCore() { return { rows: [] }; }
-export async function query() { return { rows: [] }; }
-export async function withMarketConnection(callback) { return callback(null); }
-export async function withCoreConnection(callback) { return callback(null); }
-export async function withConnection(callback) { return callback(null); }
+/**
+ * 以下函数在迁移后不再有效，显式 throw 防止误用后静默错误
+ * 若有新的持久化需求，请直接使用 sqliteClient 或 KlinesRepository
+ */
+function _removed(name) {
+    throw new Error(
+        `[pgClient] ${name}() 已废弃：数据层已迁移至 SQLite + 内存缓存，请使用 sqliteClient 或 KlinesRepository`,
+    );
+}
+
+export async function createPool()             { _removed('createPool'); }
+export async function getMarketPool()          { _removed('getMarketPool'); }
+export async function getCorePool()            { _removed('getCorePool'); }
+export async function queryMarket()            { _removed('queryMarket'); }
+export async function queryCore()              { _removed('queryCore'); }
+export async function query()                  { _removed('query'); }
+export async function withMarketConnection()   { _removed('withMarketConnection'); }
+export async function withCoreConnection()     { _removed('withCoreConnection'); }
+export async function withConnection()         { _removed('withConnection'); }
 
 export default {
     closePools,

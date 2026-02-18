@@ -5,20 +5,35 @@
 
 import Database from 'better-sqlite3';
 import { mkdirSync } from 'fs';
-import { dirname, resolve } from 'path';
+import { dirname, isAbsolute, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const PROJECT_ROOT = resolve(dirname(__filename), '..', '..', '..');
 
 /** @type {Database.Database|null} */
 let _db = null;
 
+/**
+ * 解析 DB 路径规则（优先级从高到低）：
+ * 1. DB_PATH=:memory:        → 原样保留，使用内存数据库
+ * 2. DB_PATH=/absolute/path  → 绝对路径，直接使用
+ * 3. DB_PATH=./rel/path      → 相对路径，按项目根解析（非 cwd）
+ * 4. 未设置 DB_PATH          → ARKANIS_DATA_DIR/arkanis.db（或 projectRoot/data/arkanis.db）
+ */
 function resolveDbPath() {
     const envPath = process.env.DB_PATH;
-    if (envPath) return resolve(envPath);
-    // 默认：项目根目录 data/arkanis.db
-    return resolve(__dirname, '..', '..', '..', 'data', 'arkanis.db');
+
+    if (envPath) {
+        if (envPath === ':memory:') return ':memory:';
+        return isAbsolute(envPath) ? envPath : resolve(PROJECT_ROOT, envPath);
+    }
+
+    const dataDir = process.env.ARKANIS_DATA_DIR
+        ? resolve(process.env.ARKANIS_DATA_DIR)
+        : resolve(PROJECT_ROOT, 'data');
+
+    return resolve(dataDir, 'arkanis.db');
 }
 
 function initSchema(db) {
@@ -39,7 +54,9 @@ export function getDb() {
     if (_db) return _db;
 
     const dbPath = resolveDbPath();
-    mkdirSync(dirname(dbPath), { recursive: true });
+    if (dbPath !== ':memory:') {
+        mkdirSync(dirname(dbPath), { recursive: true });
+    }
 
     _db = new Database(dbPath);
     _db.pragma('journal_mode = WAL');
@@ -59,27 +76,30 @@ export async function closeDb() {
 }
 
 /**
- * 读取 KV 条目
+ * 读取 KV 条目，统一 JSON 反序列化
  * @param {string} key
  * @returns {any|null}
  */
 export function queryKv(key) {
+    if (!key) throw new Error('queryKv: key 不能为空');
     const row = getDb().prepare('SELECT value FROM app_kv WHERE key = ?').get(key);
     if (!row) return null;
     try {
         return JSON.parse(row.value);
     } catch {
+        // 兼容历史非 JSON 数据
         return row.value;
     }
 }
 
 /**
- * 写入/更新 KV 条目
+ * 写入/更新 KV 条目，统一 JSON 序列化避免类型漂移
  * @param {string} key
  * @param {any} value
  */
 export function upsertKv(key, value) {
-    const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+    if (!key) throw new Error('upsertKv: key 不能为空');
+    const serialized = JSON.stringify(value);
     getDb()
         .prepare(`
             INSERT INTO app_kv (key, value, updated_at)

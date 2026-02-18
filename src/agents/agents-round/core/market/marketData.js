@@ -139,9 +139,16 @@ async function loadFromExchange(
     return bars;
 }
 
-async function loadFromDb({ symbol, timeframe, barsCount, endTime }, { timeoutMs }) {
-    const repo = new KlinesRepository();
-    return withTimeout(
+async function loadFromDb(
+    { symbol, timeframe, barsCount, endTime },
+    { timeoutMs, exchangeId = null, marketType = null, exchangeFallbacks = [] },
+) {
+    const repo = new KlinesRepository({
+        exchangeId: exchangeId || undefined,
+        marketType: marketType || undefined,
+        exchangeFallbacks: exchangeFallbacks || [],
+    });
+    const bars = await withTimeout(
         repo.getBars({
             symbol,
             timeframe,
@@ -150,8 +157,10 @@ async function loadFromDb({ symbol, timeframe, barsCount, endTime }, { timeoutMs
             forceUpdate: true,
         }),
         timeoutMs,
-        `数据库K线(${symbol} ${timeframe})`,
+        `缓存K线(${symbol} ${timeframe})`,
     );
+    if (!bars.length) throw new Error(`缓存无数据：${symbol} ${timeframe}`);
+    return bars;
 }
 
 /**
@@ -209,7 +218,10 @@ export async function loadBars(
             const bars = await withRetries(
                 async ({ attempt }) => {
                     if (attempt > 1) logger?.warn(`数据库读取重试：${symbol} ${timeframe} 第 ${attempt} 次`);
-                    return loadFromDb({ symbol, timeframe, barsCount, endTime }, { timeoutMs: dbTimeoutMs });
+                    return loadFromDb(
+                        { symbol, timeframe, barsCount, endTime },
+                        { timeoutMs: dbTimeoutMs, exchangeId, marketType, exchangeFallbacks },
+                    );
                 },
                 {
                     retries: 1,
