@@ -589,8 +589,58 @@
     border-color: rgb(255 255 255 / 0.1);
   }
 
+  .rt-bf-session-list {
+    @apply max-h-[180px] overflow-y-auto space-y-1.5 pr-1;
+  }
+
+  .rt-bf-session-row {
+    @apply w-full rounded-xl border border-border-light/10 bg-black/20 px-3 py-2 text-left transition;
+  }
+
+  .rt-bf-session-row:hover {
+    border-color: rgb(255 255 255 / 0.16);
+    background: rgb(255 255 255 / 0.06);
+  }
+
+  .rt-bf-session-row-active {
+    border-color: rgb(var(--color-accent) / 0.4) !important;
+    background: rgb(var(--color-accent) / 0.08) !important;
+  }
+
+  .rt-bf-launch-overlay {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    min-height: 0;
+    padding: 1.5rem;
+  }
+
+  .rt-bf-launch-card {
+    width: 100%;
+    max-width: 600px;
+    background: rgb(0 0 0 / 0.40);
+    border: 1px solid rgb(255 255 255 / 0.1);
+    border-radius: 1rem;
+    padding: 1.5rem;
+    backdrop-filter: blur(8px);
+  }
+
+  .rt-bf-launch-title {
+    @apply text-sm font-semibold mb-1;
+  }
+
+  .rt-bf-launch-sub {
+    @apply text-xs text-text-muted mb-4;
+  }
+
   .rt-bf-final {
-    @apply absolute inset-0 flex items-center justify-center;
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 12vh;
     z-index: 40;
     background: rgb(0 0 0 / 0.55);
     backdrop-filter: blur(8px);

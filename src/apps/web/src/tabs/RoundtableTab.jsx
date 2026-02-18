@@ -39,6 +39,7 @@ export default function RoundtableTab() {
     });
     const [error, setError] = useState('');
     const [isStarting, setIsStarting] = useState(false);
+    const [newSessionTick, setNewSessionTick] = useState(0);
 
     const roundtable = useRoundtable();
     const timeframes = useMemo(() => ['5m', '15m', '30m', '1h', '4h', '1d'], []);
@@ -52,10 +53,7 @@ export default function RoundtableTab() {
         SESSION_STATUS_META.incomplete;
 
     const transcriptEntries = useMemo(() => {
-        const source = Array.isArray(roundtable.agentSpeaks)
-            ? roundtable.agentSpeaks
-            : [];
-
+        const source = Array.isArray(roundtable.agentSpeaks) ? roundtable.agentSpeaks : [];
         return source
             .map((item, index) => ({
                 ...item,
@@ -63,9 +61,7 @@ export default function RoundtableTab() {
                 timestamp: normalizeTimestamp(item?.timestamp),
             }))
             .sort((left, right) => {
-                if (left.timestamp !== right.timestamp) {
-                    return left.timestamp - right.timestamp;
-                }
+                if (left.timestamp !== right.timestamp) return left.timestamp - right.timestamp;
                 return left._index - right._index;
             });
     }, [roundtable.agentSpeaks]);
@@ -87,34 +83,28 @@ export default function RoundtableTab() {
         return null;
     }, [finalDecision, roundtable.decisions]);
 
-    const configSummary = useMemo(() => {
-        return [
-            `symbol=${config.symbol}`,
-            `bars=${config.bars}`,
-            `primary=${config.primary}`,
-            `aux=${config.aux}`,
-            config.skipNews ? 'skipNews=1' : null,
-            config.skipLlm ? 'skipLlm=1' : null,
-            config.skipLiquidation ? 'skipLiquidation=1' : null,
-            config.skipMcp ? 'skipMcp=1' : null,
-        ]
-            .filter(Boolean)
-            .join('  ');
-    }, [config]);
-
-    const counts = useMemo(() => {
-        return {
-            speaks: roundtable.agentSpeaks.length,
-            tools: roundtable.toolCalls.length,
-            beliefs: roundtable.beliefUpdates.length,
-            decisions: roundtable.decisions.length,
-        };
-    }, [
+    const counts = useMemo(() => ({
+        speaks: roundtable.agentSpeaks.length,
+        tools: roundtable.toolCalls.length,
+        beliefs: roundtable.beliefUpdates.length,
+        decisions: roundtable.decisions.length,
+    }), [
         roundtable.agentSpeaks.length,
         roundtable.toolCalls.length,
         roundtable.beliefUpdates.length,
         roundtable.decisions.length,
     ]);
+
+    const handleConfigChange = useCallback((updates) => {
+        setConfig((prev) => ({ ...prev, ...updates }));
+    }, []);
+
+    const handleSelectSession = useCallback((id) => {
+        if (!id) return;
+        void roundtable.selectSession(id, { replace: true }).catch((caught) => {
+            setError(caught?.message || String(caught));
+        });
+    }, [roundtable]);
 
     const startRoundtable = useCallback(async () => {
         if (isRunning) {
@@ -201,11 +191,11 @@ export default function RoundtableTab() {
     }, [activePid, refreshSessions, socket]);
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <div className="text-xs tracking-wide text-text-muted">Trade Roundtable</div>
-                    <h1 className="text-2xl md:text-3xl font-bold mt-2">圆桌</h1>
+                    <h1 className="text-2xl font-bold mt-1">圆桌</h1>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
@@ -228,28 +218,38 @@ export default function RoundtableTab() {
                 </div>
             </div>
 
-            <section className="grid grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] gap-6">
-                <div className="card card-hover p-5">
-                    <div className="flex items-start justify-between gap-3 mb-4">
-                        <div>
-                            <h2 className="text-sm font-semibold">Sessions</h2>
+            <section className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)] gap-4">
+                <div className="card p-4 flex flex-col">
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                        <h2 className="text-sm font-semibold">Sessions</h2>
+                        <div className="flex items-center gap-1.5">
+                            <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => {
+                                    void refreshSessions().catch((caught) => {
+                                        setError(caught?.message || String(caught));
+                                    });
+                                }}
+                            >
+                                <i className="fas fa-rotate-right"></i>
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                disabled={isRunning}
+                                onClick={() => {
+                                    setError('');
+                                    setNewSessionTick((prev) => prev + 1);
+                                }}
+                            >
+                                <i className="fas fa-plus"></i>
+                                新建
+                            </button>
                         </div>
-
-                        <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            onClick={() => {
-                                void refreshSessions().catch((caught) => {
-                                    setError(caught?.message || String(caught));
-                                });
-                            }}
-                        >
-                            <i className="fas fa-rotate-right"></i>
-                            刷新
-                        </button>
                     </div>
 
-                    <div className="max-h-[420px] overflow-y-auto pr-1 space-y-2 scrollbar">
+                    <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1.5 scrollbar">
                         {roundtable.sessions.length ? (
                             roundtable.sessions.map((item) => {
                                 const meta =
@@ -266,9 +266,9 @@ export default function RoundtableTab() {
                                         key={item.id}
                                         type="button"
                                         className={[
-                                            'w-full rounded-2xl border px-4 py-3 text-left transition',
+                                            'w-full rounded-xl border px-3 py-2 text-left transition',
                                             selected
-                                                ? 'border-accent/40 bg-accent/10'
+                                                ? 'border-accent/40 bg-accent/8'
                                                 : 'border-border-light/10 bg-black/15 hover:border-white/15 hover:bg-white/5',
                                         ].join(' ')}
                                         onClick={() => {
@@ -278,12 +278,10 @@ export default function RoundtableTab() {
                                             });
                                         }}
                                     >
-                                        <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-start justify-between gap-2">
                                             <div className="min-w-0">
-                                                <div className="font-mono text-xs truncate">
-                                                    {item.id}
-                                                </div>
-                                                <div className="text-xs text-text-muted mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                                                <div className="font-mono text-xs truncate">{item.id}</div>
+                                                <div className="text-[11px] text-text-muted mt-0.5 flex gap-x-2">
                                                     <span>pid {pidValue}</span>
                                                     <span>seq {seqValue}</span>
                                                 </div>
@@ -297,217 +295,25 @@ export default function RoundtableTab() {
                                 );
                             })
                         ) : (
-                            <div className="text-sm text-text-muted italic rounded-xl border border-dashed border-border-light/10 px-4 py-6 text-center">
+                            <div className="text-sm text-text-muted italic rounded-xl border border-dashed border-border-light/10 px-4 py-5 text-center">
                                 暂无会话
                             </div>
                         )}
                     </div>
 
-                    <div className="mt-4 rounded-xl border border-border-light/10 bg-black/20 px-4 py-3 text-xs text-text-muted font-mono whitespace-pre-wrap break-all">
-                        session={activeSessionId || '--'} pid={activePid || '--'} seq={roundtable.lastSeq}
+                    <div className="mt-3 text-[11px] text-text-muted font-mono break-all leading-relaxed border-t border-border-light/8 pt-2">
+                        {activeSessionId || '--'}<br />
+                        pid={activePid || '--'} seq={roundtable.lastSeq}
                     </div>
                 </div>
 
-                <div className="card card-hover p-5">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                            <h2 className="text-sm font-semibold">启动面板</h2>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                            <button
-                                type="button"
-                                className="btn btn-primary"
-                                onClick={startRoundtable}
-                                disabled={isRunning || isStarting}
-                            >
-                                <i className={['fas', isStarting ? 'fa-spinner fa-spin' : 'fa-play'].join(' ')}></i>
-                                启动
-                            </button>
-
-                            <button
-                                type="button"
-                                className="btn btn-danger"
-                                onClick={stopRoundtable}
-                                disabled={!isRunning || !activePid}
-                            >
-                                <i className="fas fa-stop"></i>
-                                终止
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-1 lg:grid-cols-4 gap-3">
-                        <div>
-                            <label className="form-label">交易对</label>
-                            <input
-                                value={config.symbol}
-                                onChange={(e) =>
-                                    setConfig((prev) => ({
-                                        ...prev,
-                                        symbol: e.target.value,
-                                    }))
-                                }
-                                type="text"
-                                className="form-input font-mono"
-                                placeholder="BTCUSDT"
-                                disabled={isRunning || isStarting}
-                            />
-                        </div>
-
-                        <div>
-                            <label className="form-label">Bars</label>
-                            <input
-                                value={config.bars}
-                                onChange={(e) =>
-                                    setConfig((prev) => ({
-                                        ...prev,
-                                        bars: Number(e.target.value || 0),
-                                    }))
-                                }
-                                type="number"
-                                min="50"
-                                max="5000"
-                                className="form-input font-mono"
-                                disabled={isRunning || isStarting}
-                            />
-                        </div>
-
-                        <div>
-                            <label className="form-label">Primary</label>
-                            <select
-                                value={config.primary}
-                                onChange={(e) =>
-                                    setConfig((prev) => ({
-                                        ...prev,
-                                        primary: e.target.value,
-                                    }))
-                                }
-                                className="form-input font-mono"
-                                disabled={isRunning || isStarting}
-                            >
-                                {timeframes.map((tf) => (
-                                    <option key={tf} value={tf}>
-                                        {tf}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div>
-                            <label className="form-label">Aux</label>
-                            <select
-                                value={config.aux}
-                                onChange={(e) =>
-                                    setConfig((prev) => ({
-                                        ...prev,
-                                        aux: e.target.value,
-                                    }))
-                                }
-                                className="form-input font-mono"
-                                disabled={isRunning || isStarting}
-                            >
-                                {timeframes.map((tf) => (
-                                    <option key={tf} value={tf}>
-                                        {tf}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mt-4">
-                        <label className="switch">
-                            <input
-                                checked={config.skipNews}
-                                onChange={(e) =>
-                                    setConfig((prev) => ({
-                                        ...prev,
-                                        skipNews: e.target.checked,
-                                    }))
-                                }
-                                type="checkbox"
-                                disabled={isRunning || isStarting}
-                            />
-                            <span className="switch-control">
-                                <span className="switch-track"></span>
-                                <span className="switch-thumb"></span>
-                            </span>
-                            <span className="text-sm text-text-muted">跳过新闻</span>
-                        </label>
-
-                        <label className="switch">
-                            <input
-                                checked={config.skipLlm}
-                                onChange={(e) =>
-                                    setConfig((prev) => ({
-                                        ...prev,
-                                        skipLlm: e.target.checked,
-                                    }))
-                                }
-                                type="checkbox"
-                                disabled={isRunning || isStarting}
-                            />
-                            <span className="switch-control">
-                                <span className="switch-track"></span>
-                                <span className="switch-thumb"></span>
-                            </span>
-                            <span className="text-sm text-text-muted">跳过模型</span>
-                        </label>
-
-                        <label className="switch">
-                            <input
-                                checked={config.skipLiquidation}
-                                onChange={(e) =>
-                                    setConfig((prev) => ({
-                                        ...prev,
-                                        skipLiquidation: e.target.checked,
-                                    }))
-                                }
-                                type="checkbox"
-                                disabled={isRunning || isStarting}
-                            />
-                            <span className="switch-control">
-                                <span className="switch-track"></span>
-                                <span className="switch-thumb"></span>
-                            </span>
-                            <span className="text-sm text-text-muted">跳过清算</span>
-                        </label>
-
-                        <label className="switch">
-                            <input
-                                checked={config.skipMcp}
-                                onChange={(e) =>
-                                    setConfig((prev) => ({
-                                        ...prev,
-                                        skipMcp: e.target.checked,
-                                    }))
-                                }
-                                type="checkbox"
-                                disabled={isRunning || isStarting}
-                            />
-                            <span className="switch-control">
-                                <span className="switch-track"></span>
-                                <span className="switch-thumb"></span>
-                            </span>
-                            <span className="text-sm text-text-muted">跳过 MCP</span>
-                        </label>
-                    </div>
-
-                    <div className="mt-4 rounded-xl border border-border-light/10 bg-black/20 px-4 py-3 text-xs text-text-muted font-mono whitespace-pre-wrap break-all">
-                        {configSummary}
-                    </div>
-
-                    {error ? <div className="form-error mt-4">{error}</div> : null}
-                </div>
+                <DecisionResultCard
+                    finalDecision={finalDecision}
+                    draftDecision={draftDecision}
+                    processExit={roundtable.processExit}
+                    isRunning={isRunning}
+                />
             </section>
-
-            <DecisionResultCard
-                finalDecision={finalDecision}
-                draftDecision={draftDecision}
-                processExit={roundtable.processExit}
-                isRunning={isRunning}
-            />
 
             <RoundtableBattlefield
                 entries={transcriptEntries}
@@ -520,6 +326,16 @@ export default function RoundtableTab() {
                 finalDecision={finalDecision}
                 draftDecision={draftDecision}
                 counts={counts}
+                activeSessionId={activeSessionId}
+                newSessionTick={newSessionTick}
+                config={config}
+                onConfigChange={handleConfigChange}
+                isStarting={isStarting}
+                onStart={startRoundtable}
+                onStop={stopRoundtable}
+                activePid={activePid}
+                launchError={error}
+                timeframes={timeframes}
             />
         </div>
     );
