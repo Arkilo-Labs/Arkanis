@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'fs';
+import { readFileSync } from 'fs';
 import { join } from 'path';
 import { z } from 'zod';
 
@@ -118,14 +118,6 @@ const McpConfigSchema = z.object({
 function readJson(path) {
     const raw = readFileSync(path, 'utf-8');
     return JSON.parse(raw);
-}
-
-function resolveExistingConfigPath(configDir, candidates) {
-    for (const name of candidates) {
-        const candidatePath = join(configDir, name);
-        if (existsSync(candidatePath)) return candidatePath;
-    }
-    return null;
 }
 
 export async function loadProvidersConfig(configDir) {

@@ -83,7 +83,7 @@ function calculateRR({ entry, sl, tp, direction }) {
  * @param {number} params.minRR - 最小盈亏比要求
  * @returns {number} 调整后的入场价
  */
-function calculateAdjustedEntry({ sl, tp, direction, minRR }) {
+function calculateAdjustedEntry({ sl, tp, direction: _direction, minRR }) {
     // RR = reward / risk
     // LONG: RR = (tp - entry) / (entry - sl)
     //       entry * (RR + 1) = tp + RR * sl

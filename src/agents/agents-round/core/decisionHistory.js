@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { join } from 'path';
 
 /**
  * 历史决策记录管理器
@@ -78,7 +78,7 @@ export class DecisionHistory {
         agentContributions,
         beliefState,
         structuredContext,
-        transcript,
+        transcript: _transcript,
     }) {
         this.load();
 

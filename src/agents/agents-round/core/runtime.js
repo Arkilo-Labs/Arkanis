@@ -19,7 +19,7 @@ export async function withTimeout(promise, ms, label) {
     }
 }
 
-export async function withRetries(fn, { retries = 2, baseDelayMs = 800, label = '操作', onRetry = null } = {}) {
+export async function withRetries(fn, { retries = 2, baseDelayMs = 800, onRetry = null } = {}) {
     let lastErr = null;
     for (let attempt = 1; attempt <= retries + 1; attempt++) {
         try {

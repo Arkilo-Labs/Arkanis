@@ -98,7 +98,6 @@ export class BeliefTracker {
     getConsensusStrength() {
         const probs = Object.values(this.posteriors);
         const max = Math.max(...probs);
-        const min = Math.min(...probs);
         // 共识强度：最大概率与平均概率的差距
         const avg = probs.reduce((a, b) => a + b, 0) / probs.length;
         return {
