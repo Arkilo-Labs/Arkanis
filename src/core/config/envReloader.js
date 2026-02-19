@@ -57,7 +57,7 @@ export function watchEnvFile(envPath, callback) {
     });
 
     watcher.on('change', async (path) => {
-        console.log(`[Env Hot Reload] .env 文件已更新`);
+        console.log('[Env Hot Reload] .env updated');
         const parsed = await reloadEnv(path);
         if (callback && parsed) {
             callback(parsed);

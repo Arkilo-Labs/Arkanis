@@ -81,7 +81,7 @@ function drawOverlays({ data, candlestickSeries }) {
                 });
             }
         } catch (e) {
-            console.warn('绘制标注失败:', e);
+            console.warn('[ChartView] bindOverlays failed:', e);
         }
     });
 
@@ -89,7 +89,7 @@ function drawOverlays({ data, candlestickSeries }) {
         try {
             candlestickSeries.setMarkers(newMarkers);
         } catch (e) {
-            console.warn('设置 markers 失败:', e);
+            console.warn('[ChartView] setMarkers failed:', e);
         }
     }
 }
@@ -243,7 +243,7 @@ export default function ChartView({ data, title, height = 500 }) {
             try {
                 chart.applyOptions({ width });
             } catch (e) {
-                console.warn('图表 resize 失败:', e);
+                console.warn('[ChartView] resize failed:', e);
             }
         }
 

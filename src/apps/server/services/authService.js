@@ -175,7 +175,7 @@ export async function initAuthService({ projectRoot }) {
             setupToken = randomBytes(32).toString('base64url');
             await writeJsonFileAtomic(setupTokenFile, { version: 1, token: setupToken, createdAt: nowIso() });
         }
-        console.log(`[Setup] 访问 /_setup/${setupToken} 完成初始化`);
+        console.log(`[Setup] visit /_setup/${setupToken} to initialize`);
     }
 
     const sessionStore = createSessionStore();

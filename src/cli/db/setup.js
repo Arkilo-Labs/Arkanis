@@ -10,7 +10,7 @@ dotenvConfig({ path: join(root, '.env') });
 // 触发 SQLite 初始化（建表）
 import('../../core/data/sqliteClient.js').then(({ getDb }) => {
     getDb();
-    console.log('[db] SQLite 初始化完成');
+    console.log('[db] SQLite initialized');
     process.exit(0);
 }).catch((err) => {
     console.error(err?.stack || err?.message || String(err));
