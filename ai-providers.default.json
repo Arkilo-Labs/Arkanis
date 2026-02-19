@@ -1,20 +1,5 @@
 {
   "version": 1,
-  "providers": [
-    {
-      "id": "openai_gpt41mini",
-      "name": "OpenAI GPT-4.1 mini",
-      "type": "openai_compatible",
-      "protocol": "chat_completions",
-      "baseUrl": "https://api.openai.com",
-      "modelName": "gpt-4.1-mini",
-      "apiKeyEnv": "OPENAI_API_KEY",
-      "supportsVision": true,
-      "thinkingMode": "disabled",
-      "maxTokens": 8192,
-      "temperature": 0.2,
-      "description": "示例 Provider：定义可提交，密钥请通过 Web 控制台写入 data volume（secrets.json），或用 ENV 注入"
-    }
-  ]
+  "providers": []
 }
 
