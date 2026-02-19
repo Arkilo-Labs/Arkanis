@@ -1419,9 +1419,6 @@ export default function RoundtableBattlefield({
                                       <div>
                                           <div className="text-xs tracking-wide text-text-muted">Terminal</div>
                                           <div className="text-lg font-semibold mt-1">进程输出</div>
-                                          <div className="text-xs text-text-muted mt-1">
-                                              仅用于排错，建议优先看 Trace（工具调用/决策/错误）
-                                          </div>
                                       </div>
                                       <button
                                           type="button"

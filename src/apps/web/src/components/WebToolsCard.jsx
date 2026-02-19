@@ -192,7 +192,6 @@ export default function WebToolsCard({ settings, onSettingsChange, isSaving = fa
                         <i className="fas fa-search"></i>
                         <span className="text-sm font-semibold">搜索</span>
                     </div>
-                    <span className="text-xs text-text-muted">随「保存配置」生效</span>
                 </div>
 
                 {isLoading ? (
@@ -277,7 +276,6 @@ export default function WebToolsCard({ settings, onSettingsChange, isSaving = fa
                         <i className="fas fa-download"></i>
                         <span className="text-sm font-semibold">抓取</span>
                     </div>
-                    <span className="text-xs text-text-muted">随「保存配置」生效</span>
                 </div>
 
                 {isLoading ? (

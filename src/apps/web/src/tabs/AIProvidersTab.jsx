@@ -253,7 +253,6 @@ function AddProviderModal({ onClose, onCreate }) {
                             placeholder="https://api.openai.com"
                             required
                         />
-                        <p className="text-xs text-text-muted mt-1">不要带 /v1，系统自动拼接</p>
                     </div>
 
                     <div>
@@ -281,7 +280,6 @@ function AddProviderModal({ onClose, onCreate }) {
                             placeholder="sk-..."
                             autoComplete="off"
                         />
-                        <p className="text-xs text-text-muted mt-1">保存后不再回显，可通过复制 Provider 复用同一 Key</p>
                     </div>
 
                     {/* 高级设置折叠 */}
@@ -316,7 +314,6 @@ function AddProviderModal({ onClose, onCreate }) {
                                         className="form-input font-mono"
                                         placeholder="OPENAI_API_KEY"
                                     />
-                                    <p className="text-xs text-text-muted mt-1">设置后 ENV 优先，UI 无法覆盖</p>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -659,7 +656,7 @@ export default function AIProvidersTab() {
                     <div className="text-xs tracking-wide text-text-muted">AI Models Management</div>
                     <h1 className="text-2xl md:text-3xl font-bold mt-2">模型</h1>
                     <p className="text-sm text-text-muted mt-2">
-                        管理 Provider 定义与密钥，密钥永不回显
+                        管理 Provider 定义与密钥
                     </p>
                 </div>
                 <button type="button" onClick={() => setShowAddModal(true)} className="btn btn-primary">
