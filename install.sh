@@ -48,6 +48,7 @@ update_env_kv() {
     local key="$1" value="$2" file="$3"
     local tmp
     tmp="$(mktemp)"
+    trap 'rm -f "$tmp"' RETURN
     if grep -qE "^${key}=" "$file" 2>/dev/null; then
         awk -v k="$key" -v v="$value" \
             '$0 ~ ("^" k "=") { print k "=" v; next } { print }' \
@@ -135,6 +136,8 @@ if [[ -z "$LOCAL_SRC" ]]; then
     need_cmd git
 fi
 
+need_cmd curl
+
 success "前置检查通过"
 
 # ── 获取代码 ──────────────────────────────────────────────────────────────────
@@ -215,8 +218,7 @@ echo "  Lens 分析不依赖任何搜索服务。"
 echo ""
 echo "  0) 跳过（稍后手动配置外置 Tavily / Jina）"
 echo "  1) 部署 SearXNG + Firecrawl（推荐，功能完整）"
-echo "  2) 仅部署 SearXNG（新闻搜索，无网页抓取）"
-echo "  3) 仅部署 Firecrawl（含内嵌 SearXNG）"
+echo "  2) 仅部署 SearXNG（轻量，仅搜索，抓取需另配 Jina）"
 echo ""
 
 SEARCH_CHOICE=""
@@ -225,16 +227,17 @@ if [[ "$YES" == true ]]; then
     info "非交互模式：跳过搜索栈部署（选 0）"
 else
     while true; do
-        read -rp "请选择 [0-3]（默认 0）: " SEARCH_CHOICE
+        read -rp "请选择 [0-2]（默认 0）: " SEARCH_CHOICE
         SEARCH_CHOICE="${SEARCH_CHOICE:-0}"
-        [[ "$SEARCH_CHOICE" =~ ^[0-3]$ ]] && break
-        warn "请输入 0、1、2 或 3"
+        [[ "$SEARCH_CHOICE" =~ ^[0-2]$ ]] && break
+        warn "请输入 0、1 或 2"
     done
 fi
 
 SEARCH_STACK_INSTALLED=false
 SEARXNG_URL="http://localhost:8080"
 FIRECRAWL_URL="http://localhost:3002"
+AGENTS_JSON="src/agents/agents-round/config/agents.json"
 
 deploy_search_stack() {
     local stack_script="deploy/searxng-firecrawl/stack.sh"
@@ -242,11 +245,50 @@ deploy_search_stack() {
     bash "$stack_script" up
 }
 
+# 更新 agents.json 中的 search/fetch provider 设置
+update_agents_provider() {
+    local search_provider="$1" fetch_provider="$2"
+    [[ -f "$AGENTS_JSON" ]] || { warn "未找到 $AGENTS_JSON，跳过 provider 写入"; return; }
+
+    if command -v node >/dev/null 2>&1; then
+        node -e "
+const fs=require('fs'),f='$AGENTS_JSON';
+const d=JSON.parse(fs.readFileSync(f,'utf-8'));
+const s=d.news_pipeline_settings||(d.news_pipeline_settings={});
+s.search_provider='$search_provider';
+s.fetch_provider='$fetch_provider';
+fs.writeFileSync(f,JSON.stringify(d,null,2)+'\n');
+"
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 -c "
+import json
+f='$AGENTS_JSON'
+with open(f) as r: d=json.load(r)
+s=d.setdefault('news_pipeline_settings',{})
+s['search_provider']='$search_provider'
+s['fetch_provider']='$fetch_provider'
+with open(f,'w') as w: json.dump(d,w,indent=2,ensure_ascii=False); w.write('\n')
+"
+    else
+        # 兜底：sed 文本替换（仅在 node/python3 均不可用时）
+        local tmp
+        tmp="$(mktemp)"
+        trap 'rm -f "$tmp"' RETURN
+        sed \
+            -e "s/\"search_provider\":[[:space:]]*\"[^\"]*\"/\"search_provider\": \"$search_provider\"/" \
+            -e "s/\"fetch_provider\":[[:space:]]*\"[^\"]*\"/\"fetch_provider\": \"$fetch_provider\"/" \
+            "$AGENTS_JSON" >"$tmp"
+        mv "$tmp" "$AGENTS_JSON"
+    fi
+    info "已将 agents.json provider 设为：search=$search_provider, fetch=$fetch_provider"
+}
+
 case "$SEARCH_CHOICE" in
     1)
         info "部署 SearXNG + Firecrawl..."
         deploy_search_stack
         SEARCH_STACK_INSTALLED=true
+        update_agents_provider "searxng" "firecrawl"
         success "搜索栈部署完成"
         ;;
     2)
@@ -262,13 +304,8 @@ case "$SEARCH_CHOICE" in
         compose -f "$local_compose_file" up -d redis searxng
         SEARCH_STACK_INSTALLED=true
         FIRECRAWL_URL=""
+        update_agents_provider "searxng" "jina"
         success "SearXNG 部署完成"
-        ;;
-    3)
-        info "部署 Firecrawl（含内嵌 SearXNG）..."
-        deploy_search_stack
-        SEARCH_STACK_INSTALLED=true
-        success "Firecrawl 部署完成"
         ;;
     0|*)
         info "跳过搜索栈部署"
@@ -292,12 +329,13 @@ compose up -d --build
 echo ""
 info "等待 server 就绪（最多 ${HEALTH_TIMEOUT}s）..."
 
-PORT_FOR_CHECK="${ARKANIS_PORT:-$DEFAULT_PORT}"
+PORT_FOR_CHECK="$(grep -E '^ARKANIS_PORT=' "$ENV_FILE" 2>/dev/null | head -1 | cut -d'=' -f2 | tr -d '[:space:]' || true)"
+PORT_FOR_CHECK="${PORT_FOR_CHECK:-$DEFAULT_PORT}"
 ELAPSED=0
-until curl -sf "http://localhost:${PORT_FOR_CHECK}/api/auth/me" >/dev/null 2>&1; do
+until curl -so /dev/null -w '%{http_code}' "http://localhost:${PORT_FOR_CHECK}/api/auth/me" 2>/dev/null | grep -qE '^[2-4]'; do
     if [[ "$ELAPSED" -ge "$HEALTH_TIMEOUT" ]]; then
         warn "server 启动超时，请手动检查："
-        warn "  compose logs arkanis"
+        warn "  docker compose logs arkanis"
         break
     fi
     printf "."
@@ -328,7 +366,7 @@ if [[ -n "$SETUP_TOKEN" ]]; then
     echo -e "  ${CYAN}http://${HOST_IP}:${PORT_FOR_CHECK}/_setup/${SETUP_TOKEN}${RESET}"
 else
     echo -e "  ${YELLOW}未能自动获取 setup token，请运行以下命令查看：${RESET}"
-    echo -e "    compose logs arkanis | grep _setup"
+    echo -e "    docker compose logs arkanis | grep _setup"
 fi
 
 echo ""
