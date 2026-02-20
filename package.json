@@ -8,6 +8,7 @@
     "scripts": {
         "main": "node src/agents/lens/main.js",
         "backtest": "node src/agents/lens/backtest.js",
+        "agents-team": "node src/cli/agents-team/main.js",
         "roundtable": "node src/cli/roundtable/main.js",
         "trade-roundtable": "node src/cli/roundtable/main.js",
         "trade-round-table": "node src/cli/roundtable/main.js",
