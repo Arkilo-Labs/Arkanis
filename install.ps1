@@ -214,6 +214,42 @@ if ([string]::IsNullOrWhiteSpace($currentEncKey)) {
   Info "已生成 SECRETS_ENC_KEY"
 }
 
+# ── 网络暴露配置 ──────────────────────────────────────────────────────────────
+
+$BindIP = "127.0.0.1"
+$CorsOrigins = ""
+
+if ($Yes) {
+  Info "非交互模式：默认仅本机访问（BIND_IP=127.0.0.1）"
+} else {
+  Write-Host ""
+  Write-Host "网络暴露配置" -ForegroundColor White
+  Write-Host ("─" * 40)
+  Write-Host "  默认仅允许本机（127.0.0.1）访问。"
+  Write-Host "  如需从局域网或公网直接访问，请选择开放。"
+  Write-Host ""
+  $expose = Read-Host "是否需要从局域网/公网直接访问？[y/N]"
+  if ($expose -match '^[yY]$') {
+    $BindIP = "0.0.0.0"
+    Warn "已开放网络访问（BIND_IP=0.0.0.0），请确保已配置防火墙"
+    Write-Host ""
+    Write-Host "  请输入允许的 CORS 来源（逗号分隔，例如 http://192.168.1.100:8082）"
+    Write-Host "  留空则允许所有来源（不推荐）"
+    $CorsOrigins = Read-Host "CORS_ORIGINS"
+    if ([string]::IsNullOrWhiteSpace($CorsOrigins)) {
+      $CorsOrigins = "*"
+      Warn "CORS 已设为通配符 *，任何网站均可发起跨域请求，存在安全风险"
+    }
+  } else {
+    Info "仅本机访问（BIND_IP=127.0.0.1）"
+  }
+}
+
+SetEnvKv $EnvFile "BIND_IP" $BindIP
+if (-not [string]::IsNullOrWhiteSpace($CorsOrigins)) {
+  SetEnvKv $EnvFile "CORS_ORIGINS" $CorsOrigins
+}
+
 # ── 选择搜索栈 ────────────────────────────────────────────────────────────────
 
 Write-Host ""

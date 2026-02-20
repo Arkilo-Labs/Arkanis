@@ -208,6 +208,40 @@ if [[ -z "$CURRENT_ENC_KEY" ]]; then
     info "已生成 SECRETS_ENC_KEY"
 fi
 
+# ── 网络暴露配置 ──────────────────────────────────────────────────────────────
+
+BIND_IP="127.0.0.1"
+CORS_ORIGINS=""
+
+if [[ "$YES" == true ]]; then
+    info "非交互模式：默认仅本机访问（BIND_IP=127.0.0.1）"
+else
+    echo ""
+    echo -e "${BOLD}网络暴露配置${RESET}"
+    echo "────────────────────────────────────────"
+    echo "  默认仅允许本机（127.0.0.1）访问。"
+    echo "  如需从局域网或公网直接访问，请选择开放。"
+    echo ""
+    read -rp "是否需要从局域网/公网直接访问？[y/N] " _expose
+    if [[ "$_expose" =~ ^[yY]$ ]]; then
+        BIND_IP="0.0.0.0"
+        warn "已开放网络访问（BIND_IP=0.0.0.0），请确保已配置防火墙"
+        echo ""
+        echo "  请输入允许的 CORS 来源（逗号分隔，例如 http://192.168.1.100:8082）"
+        echo "  留空则允许所有来源（不推荐）"
+        read -rp "CORS_ORIGINS: " CORS_ORIGINS
+        if [[ -z "$CORS_ORIGINS" ]]; then
+            CORS_ORIGINS="*"
+            warn "CORS 已设为通配符 *，任何网站均可发起跨域请求，存在安全风险"
+        fi
+    else
+        info "仅本机访问（BIND_IP=127.0.0.1）"
+    fi
+fi
+
+update_env_kv "BIND_IP" "$BIND_IP" "$ENV_FILE"
+[[ -n "$CORS_ORIGINS" ]] && update_env_kv "CORS_ORIGINS" "$CORS_ORIGINS" "$ENV_FILE"
+
 # ── 选择搜索栈 ────────────────────────────────────────────────────────────────
 
 echo ""

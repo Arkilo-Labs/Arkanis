@@ -27,7 +27,6 @@ RUN apt-get update && apt-get install -y \
 
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     CHART_PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
-    CHART_PUPPETEER_NO_SANDBOX=true \
     NODE_ENV=production \
     PORT=3000 \
     ARKANIS_DATA_DIR=/data
@@ -49,8 +48,15 @@ COPY src/index.js ./src/
 
 COPY ai-providers.default.json ./
 
+RUN groupadd --gid 1001 appgroup \
+    && useradd --uid 1001 --gid appgroup --shell /bin/sh --create-home appuser \
+    && mkdir -p /data /app/outputs \
+    && chown -R appuser:appgroup /app /data
+
 VOLUME ["/data", "/app/outputs"]
 
 EXPOSE 3000
+
+USER appuser
 
 CMD ["node", "src/apps/server/index.mjs"]
