@@ -10,6 +10,8 @@ services:
     env_file:
       - .env
     environment:
+      # 容器内需要监听 0.0.0.0，端口映射才可访问
+      BIND_IP: 0.0.0.0
       ARKANIS_DATA_DIR: /data
       DB_PATH: /data/arkanis.db
       CHART_PUPPETEER_NO_SANDBOX: "true"
@@ -17,8 +19,7 @@ services:
       test:
         - CMD-SHELL
         - >
-          node -e "require('http').get('http://localhost:3000/api/auth/me',
-          function(r){process.exit(r.statusCode<500?0:1)}).on('error',function(){process.exit(1)})"
+          node -e "require('http').get('http://127.0.0.1:3000/api/auth/status', (r) => process.exit(r.statusCode < 500 ? 0 : 1)).on('error', () => process.exit(1))"
       interval: 10s
       timeout: 5s
       retries: 18

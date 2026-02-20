@@ -374,7 +374,7 @@ $elapsed = 0
 $healthy = $false
 while ($elapsed -lt $HEALTH_TIMEOUT) {
   try {
-    $resp = Invoke-WebRequest -Uri "http://localhost:${portForCheck}/api/auth/me" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+    $resp = Invoke-WebRequest -Uri "http://127.0.0.1:${portForCheck}/api/auth/status" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
     if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500) {
       $healthy = $true
       break
@@ -391,6 +391,12 @@ Write-Host ""
 if (-not $healthy -and $elapsed -ge $HEALTH_TIMEOUT) {
   Warn "server 启动超时，请手动检查："
   Warn "  docker compose logs arkanis"
+
+  Warn "容器状态："
+  try { Compose @("ps", "arkanis") } catch { }
+
+  Warn "最近日志（tail=200）："
+  try { Compose @("logs", "--tail=200", "arkanis") } catch { }
 }
 
 # ── 读取 setup token ──────────────────────────────────────────────────────────
@@ -412,7 +418,11 @@ $hostIp = "localhost"
 
 Write-Host ""
 Write-Host ("─" * 40) -ForegroundColor White
-Write-Host "安装完成！" -ForegroundColor Green
+if ($healthy) {
+  Write-Host "安装完成！" -ForegroundColor Green
+} else {
+  Write-Host "安装完成（服务未就绪）" -ForegroundColor Yellow
+}
 Write-Host ("─" * 40) -ForegroundColor White
 Write-Host ""
 Write-Host "  访问地址: " -NoNewline
@@ -441,3 +451,5 @@ if (-not $searchStackInstalled) {
 
 Write-Host ("─" * 40) -ForegroundColor White
 Write-Host ""
+
+if (-not $healthy) { exit 1 }

@@ -366,8 +366,11 @@ info "等待 server 就绪（最多 ${HEALTH_TIMEOUT}s）..."
 PORT_FOR_CHECK="$(grep -E '^ARKANIS_PORT=' "$ENV_FILE" 2>/dev/null | head -1 | cut -d'=' -f2 | tr -d '[:space:]' || true)"
 PORT_FOR_CHECK="${PORT_FOR_CHECK:-$DEFAULT_PORT}"
 ELAPSED=0
-until curl -so /dev/null -w '%{http_code}' "http://localhost:${PORT_FOR_CHECK}/api/auth/me" 2>/dev/null | grep -qE '^[2-4]'; do
+TIMED_OUT=false
+until curl -s --connect-timeout 2 --max-time 3 -o /dev/null -w '%{http_code}' \
+    "http://127.0.0.1:${PORT_FOR_CHECK}/api/auth/status" 2>/dev/null | grep -qE '^[2-4]'; do
     if [[ "$ELAPSED" -ge "$HEALTH_TIMEOUT" ]]; then
+        TIMED_OUT=true
         warn "server 启动超时，请手动检查："
         warn "  docker compose logs arkanis"
         break
@@ -377,6 +380,15 @@ until curl -so /dev/null -w '%{http_code}' "http://localhost:${PORT_FOR_CHECK}/a
     ELAPSED=$(( ELAPSED + HEALTH_INTERVAL ))
 done
 echo ""
+
+SERVER_READY=true
+if [[ "$TIMED_OUT" == true ]]; then
+    SERVER_READY=false
+    warn "容器状态："
+    compose ps arkanis 2>/dev/null || true
+    warn "最近日志（tail=200）："
+    compose logs --tail=200 arkanis 2>/dev/null || true
+fi
 
 # ── 读取 setup token ──────────────────────────────────────────────────────────
 
@@ -389,7 +401,11 @@ HOST_IP="localhost"
 
 echo ""
 echo -e "${BOLD}────────────────────────────────────────${RESET}"
-echo -e "${GREEN}${BOLD}安装完成！${RESET}"
+if [[ "$SERVER_READY" == true ]]; then
+    echo -e "${GREEN}${BOLD}安装完成！${RESET}"
+else
+    echo -e "${YELLOW}${BOLD}安装完成（服务未就绪）${RESET}"
+fi
 echo -e "${BOLD}────────────────────────────────────────${RESET}"
 echo ""
 echo -e "  访问地址: ${CYAN}http://${HOST_IP}:${PORT_FOR_CHECK}${RESET}"
@@ -417,3 +433,7 @@ fi
 
 echo -e "${BOLD}────────────────────────────────────────${RESET}"
 echo ""
+
+if [[ "$SERVER_READY" == false ]]; then
+    exit 1
+fi

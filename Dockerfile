@@ -22,6 +22,7 @@ FROM node:20-slim AS runner
 # Chromium 供 Puppeteer 渲图使用
 RUN apt-get update && apt-get install -y \
     chromium \
+    gosu \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
@@ -47,16 +48,18 @@ COPY src/resources ./src/resources
 COPY src/index.js ./src/
 
 COPY ai-providers.default.json ./
+COPY docker-entrypoint.sh /usr/local/bin/arkanis-entrypoint
 
 RUN groupadd --gid 1001 appgroup \
     && useradd --uid 1001 --gid appgroup --shell /bin/sh --create-home appuser \
     && mkdir -p /data /app/outputs \
-    && chown -R appuser:appgroup /app /data
+    && chown -R appuser:appgroup /app /data \
+    && chmod +x /usr/local/bin/arkanis-entrypoint
 
 VOLUME ["/data", "/app/outputs"]
 
 EXPOSE 3000
 
-USER appuser
+ENTRYPOINT ["/usr/local/bin/arkanis-entrypoint"]
 
 CMD ["node", "src/apps/server/index.mjs"]
