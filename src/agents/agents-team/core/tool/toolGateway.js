@@ -182,8 +182,8 @@ export class ToolGateway {
         if (!this._auditPath) return;
         try {
             await writeToolCallRecord(this._auditPath, record);
-        } catch {
-            // 审计写失败不应中断业务
+        } catch (err) {
+            process.stderr.write(`[tool-audit] 写入失败: ${err?.message}\n`);
         }
     }
 }

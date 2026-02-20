@@ -1,7 +1,7 @@
 // sandbox contracts 一律使用 snake_case 字段名
 import { z } from 'zod';
 
-import { AgentsTeamErrorSchema } from '../../agents-team/contracts/errors.js';
+import { SandboxErrorSchema } from './sandboxErrors.js';
 
 const TimestampSchema = z.string().datetime();
 
@@ -35,7 +35,7 @@ export const ExecResultSchema = z.discriminatedUnion('ok', [
     ExecResultFieldsSchema.extend({ ok: z.literal(true) }).strict(),
     ExecResultFieldsSchema.extend({
         ok: z.literal(false),
-        error: AgentsTeamErrorSchema,
+        error: SandboxErrorSchema,
     }).strict(),
 ]);
 

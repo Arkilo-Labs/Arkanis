@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createRunPaths, formatUtcRunId } from '../../agents/agents-team/core/outputs/runPaths.js';
+import { writeRunIndex } from '../../agents/agents-team/core/outputs/runIndexWriter.js';
 import { createRuntime } from '../../agents/agents-team/core/runtime/createRuntime.js';
 import { OciProvider } from '../../core/sandbox/index.js';
 
@@ -106,6 +107,8 @@ sandboxCmd
                 policyConfig: toolsConfig.policy ?? {},
             });
 
+            await writeRunIndex(ctx.runPaths);
+
             const result = await ctx.toolGateway.call(
                 'sandbox.exec',
                 {
@@ -162,6 +165,8 @@ toolCmd
                 sandboxSpec: sandboxConfig,
                 policyConfig: toolsConfig.policy ?? {},
             });
+
+            await writeRunIndex(ctx.runPaths);
 
             const result = await ctx.toolGateway.call(cmdOpts.name, rawArgs, ctx, {
                 run_id: runPaths.runId,

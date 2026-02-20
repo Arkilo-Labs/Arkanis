@@ -1,4 +1,5 @@
-import { SandboxEngine, SandboxRuntime, WorkspaceAccess, NetworkPolicy } from '../../contracts/sandboxSpec.schema.js';
+import { WorkspaceAccess, NetworkPolicy } from '../../contracts/sandboxSpec.schema.js';
+import { SandboxRuntimeResolved } from '../../contracts/sandboxHandle.schema.js';
 
 /**
  * 将 SandboxHandle 与 ExecSpec 拼装成 `docker run` / `podman run` 参数数组。
@@ -75,7 +76,7 @@ export function buildDoctorArgs(engine, image) {
 
 function applyRuntime(args, handle) {
     const resolved = handle.runtime_resolved;
-    if (resolved === SandboxRuntime.GVISOR) {
+    if (resolved === SandboxRuntimeResolved.GVISOR) {
         args.push('--runtime=runsc');
         return 'gvisor';
     }
@@ -89,10 +90,7 @@ function applyHardening(args) {
 }
 
 function applyNetwork(args, policy) {
-    if (policy === NetworkPolicy.OFF || policy === NetworkPolicy.OFF) {
-        args.push('--network', 'none');
-    } else if (policy === NetworkPolicy.RESTRICTED) {
-        // restricted：internal-only bridge，禁止外网
+    if (policy === NetworkPolicy.OFF || policy === NetworkPolicy.RESTRICTED) {
         args.push('--network', 'none');
     }
     // full：不添加 network 限制（走 default bridge）

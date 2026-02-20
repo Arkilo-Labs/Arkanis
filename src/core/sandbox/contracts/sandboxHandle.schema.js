@@ -42,6 +42,7 @@ export const SandboxHandleSchema = z
         image: z.string().min(1),
 
         workspace_access: WorkspaceAccessSchema,
+        workspace_mount_path: z.string().min(1).nullable().optional(),
         network_policy: NetworkPolicySchema,
 
         mounts: z.array(SandboxMountSchema),

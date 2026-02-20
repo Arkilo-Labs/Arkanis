@@ -8,7 +8,7 @@ import { SandboxEngineResolved, SandboxRuntimeResolved } from '../../contracts/s
 import { nowIso, durationMs } from '../../utils/clock.js';
 import { probeExecutable, runOciCommand } from './ociCli.js';
 import { buildRunArgs, buildDoctorArgs, DEFAULT_IMAGE } from './ociSpecBuilder.js';
-import { ErrorCode } from '../../../agents-team/contracts/errors.js';
+import { SandboxErrorCode as ErrorCode } from '../../contracts/sandboxErrors.js';
 
 const execFileAsync = promisify(execFile);
 
