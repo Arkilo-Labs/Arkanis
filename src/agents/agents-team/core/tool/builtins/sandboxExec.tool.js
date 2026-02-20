@@ -60,7 +60,8 @@ export const sandboxExecTool = {
             workspace_access: 'none',
         };
 
-        const handle = await sandboxProvider.createSandbox(spec);
+        const artifactsDir = runPaths.artifactsDir;
+        const handle = await sandboxProvider.createSandbox(spec, { artifactsDir });
 
         const execSpec = {
             cmd: args.cmd,
@@ -69,8 +70,12 @@ export const sandboxExecTool = {
             ...(args.timeout_ms ? { timeout_ms: args.timeout_ms } : {}),
         };
 
-        const artifactsDir = runPaths.artifactsDir;
-        const result = await sandboxProvider.exec(handle, execSpec, { artifactsDir });
+        let result;
+        try {
+            result = await sandboxProvider.exec(handle, execSpec);
+        } finally {
+            await sandboxProvider.destroy(handle).catch(() => {});
+        }
 
         // 写 sandbox 审计
         const correlationId = `cmd_${randomBytes(4).toString('hex')}`;

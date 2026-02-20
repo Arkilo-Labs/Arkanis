@@ -84,9 +84,77 @@ sandboxCmd
     });
 
 sandboxCmd
+    .command('create')
+    .description('创建持久化 sandbox 容器（docker run -d）')
+    .option('--network <policy>', 'network 策略：off|restricted|full', 'off')
+    .option('--image <image>', '镜像', 'node:20-bookworm-slim')
+    .action(async (cmdOpts) => {
+        const runPaths = resolveRunPaths(program);
+        const configDir = program.opts().configDir;
+
+        try {
+            const sandboxConfig = await loadSandboxConfig(configDir);
+            const provider = new OciProvider({ defaultSpec: sandboxConfig });
+
+            const handle = await provider.createSandbox(
+                {
+                    engine: sandboxConfig.engine ?? 'auto',
+                    runtime: sandboxConfig.runtime ?? 'auto',
+                    mode: 'sandboxed',
+                    network_policy: cmdOpts.network,
+                    workspace_access: sandboxConfig.workspace_access ?? 'none',
+                    image: cmdOpts.image,
+                },
+                { artifactsDir: runPaths.artifactsDir },
+            );
+
+            process.stdout.write(JSON.stringify({
+                sandbox_id: handle.sandbox_id,
+                provider_id: handle.provider_id,
+                engine_resolved: handle.engine_resolved,
+                runtime_resolved: handle.runtime_resolved,
+                image: handle.image,
+                network_policy: handle.network_policy,
+                created_at: handle.created_at,
+            }, null, 2) + '\n');
+        } catch (err) {
+            process.stderr.write(`[agents-team] sandbox create 失败: ${err.message}\n`);
+            process.exitCode = 1;
+        }
+    });
+
+sandboxCmd
+    .command('destroy')
+    .description('销毁 sandbox 容器（docker rm -f）')
+    .requiredOption('--sandbox-id <id>', 'sandbox ID')
+    .action(async (cmdOpts) => {
+        const configDir = program.opts().configDir;
+
+        try {
+            const sandboxConfig = await loadSandboxConfig(configDir);
+            const provider = new OciProvider({ defaultSpec: sandboxConfig });
+
+            const engineResolved = sandboxConfig.engine === 'podman' ? 'podman' : 'docker';
+            await provider.destroy({
+                sandbox_id: cmdOpts.sandboxId,
+                engine_resolved: engineResolved,
+            });
+
+            process.stdout.write(JSON.stringify({
+                sandbox_id: cmdOpts.sandboxId,
+                destroyed: true,
+            }, null, 2) + '\n');
+        } catch (err) {
+            process.stderr.write(`[agents-team] sandbox destroy 失败: ${err.message}\n`);
+            process.exitCode = 1;
+        }
+    });
+
+sandboxCmd
     .command('exec')
-    .description('在 sandbox 内执行命令并落盘审计')
+    .description('在 sandbox 内执行命令（支持 --sandbox-id 复用已有容器）')
     .requiredOption('--cmd <cmd>', '执行命令')
+    .option('--sandbox-id <id>', '复用已有容器（由 sandbox create 返回）')
     .option('--args <arg>', '命令参数（可重复）', (v, prev) => [...(prev || []), v], [])
     .option('--network <policy>', 'network 策略：off|restricted|full', 'off')
     .option('--timeout-ms <ms>', '超时毫秒', (v) => parseInt(v, 10), 60000)
@@ -94,6 +162,37 @@ sandboxCmd
         const runPaths = resolveRunPaths(program);
         const configDir = program.opts().configDir;
 
+        // 持久容器模式：直接 docker exec
+        if (cmdOpts.sandboxId) {
+            try {
+                const sandboxConfig = await loadSandboxConfig(configDir);
+                const provider = new OciProvider({ defaultSpec: sandboxConfig });
+
+                const engineResolved = sandboxConfig.engine === 'podman' ? 'podman' : 'docker';
+                const handle = {
+                    sandbox_id: cmdOpts.sandboxId,
+                    engine_resolved: engineResolved,
+                    resources: sandboxConfig.resources ?? {},
+                };
+
+                const execSpec = {
+                    cmd: cmdOpts.cmd,
+                    args: cmdOpts.args,
+                    ...(cmdOpts.timeoutMs ? { timeout_ms: cmdOpts.timeoutMs } : {}),
+                };
+
+                const result = await provider.exec(handle, execSpec);
+                process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+
+                if (!result.ok) process.exitCode = 1;
+            } catch (err) {
+                process.stderr.write(`[agents-team] sandbox exec 失败: ${err.message}\n`);
+                process.exitCode = 1;
+            }
+            return;
+        }
+
+        // 原有模式：通过 toolGateway 走完整流程
         try {
             const [sandboxConfig, toolsConfig] = await Promise.all([
                 loadSandboxConfig(configDir),

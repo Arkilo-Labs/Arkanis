@@ -2,8 +2,8 @@ import { WorkspaceAccess, NetworkPolicy } from '../../contracts/sandboxSpec.sche
 import { SandboxRuntimeResolved } from '../../contracts/sandboxHandle.schema.js';
 
 /**
- * 将 SandboxHandle 与 ExecSpec 拼装成 `docker run` / `podman run` 参数数组。
- * 此模块是所有 CLI 参数的单点真相源。
+ * OCI CLI 参数构建器。
+ * 三个公开函数分别对应容器生命周期的三个阶段：create / exec / doctor。
  */
 
 /** 默认镜像 */
@@ -15,64 +15,66 @@ export const CONTAINER_WORKSPACE_PATH = '/workspace';
 export const CONTAINER_TMP_PATH = '/tmp';
 
 /**
- * 构建 `docker/podman run --rm` 命令的完整参数数组。
+ * 构建 `docker run -d --name <sandbox_id> ... sleep infinity` 参数。
+ * 仅在 createSandbox 时调用一次，加固 / 资源限制 / 挂载全部在此施加。
+ *
+ * @param {object} params
+ * @param {import('../../contracts/sandboxHandle.schema.js').SandboxHandle} params.handle
+ * @param {string} params.artifactsDir
+ * @returns {{ args: string[], runtimeNote: string }}
+ */
+export function buildCreateArgs({ handle, artifactsDir }) {
+    const args = ['run', '-d', '--name', handle.sandbox_id];
+
+    const runtimeNote = applyRuntime(args, handle);
+    applyHardening(args);
+    applyNetwork(args, handle.network_policy);
+    applyResources(args, handle.resources);
+
+    args.push('--read-only');
+    args.push('--tmpfs', `${CONTAINER_TMP_PATH}:rw,size=256m,exec`);
+
+    applyWorkspace(args, handle);
+    args.push('-v', `${artifactsDir}:${CONTAINER_ARTIFACTS_PATH}:rw`);
+    applyCustomMounts(args, handle.mounts);
+
+    // 镜像 + 长驻入口
+    args.push(handle.image || DEFAULT_IMAGE);
+    args.push('sleep', 'infinity');
+
+    return { args, runtimeNote };
+}
+
+/**
+ * 构建 `docker exec <sandbox_id> cmd ...args` 参数。
+ * 加固参数已在 create 阶段施加，此处仅注入命令。
  *
  * @param {object} params
  * @param {import('../../contracts/sandboxHandle.schema.js').SandboxHandle} params.handle
  * @param {import('../../contracts/execSpec.schema.js').ExecSpec} params.execSpec
- * @param {string} params.artifactsDir  - 宿主机 artifacts 目录（绝对路径）
- * @returns {{ args: string[], runtimeNote: string }}
+ * @returns {{ args: string[] }}
  */
-export function buildRunArgs({ handle, execSpec, artifactsDir }) {
-    const args = ['run', '--rm'];
+export function buildExecArgs({ handle, execSpec }) {
+    const args = ['exec'];
 
-    // runtime（gvisor 需要放在 --runtime 参数）
-    const runtimeNote = applyRuntime(args, handle);
-
-    // 加固参数
-    applyHardening(args);
-
-    // 网络策略
-    applyNetwork(args, handle.network_policy);
-
-    // 资源限制
-    applyResources(args, handle.resources);
-
-    // read-only rootfs + /tmp tmpfs（减小逃逸面）
-    args.push('--read-only');
-    args.push('--tmpfs', `${CONTAINER_TMP_PATH}:rw,size=256m,exec`);
-
-    // workspace 挂载
-    applyWorkspace(args, handle);
-
-    // artifacts 挂载（读写，用于落盘产物）
-    args.push('-v', `${artifactsDir}:${CONTAINER_ARTIFACTS_PATH}:rw`);
-
-    // 额外自定义挂载（来自 spec.mounts）
-    applyCustomMounts(args, handle.mounts);
-
-    // 工作目录
     if (execSpec.cwd) {
         args.push('-w', execSpec.cwd);
     }
 
-    // 环境变量
     if (execSpec.env && typeof execSpec.env === 'object') {
         for (const [key, value] of Object.entries(execSpec.env)) {
             args.push('-e', `${key}=${value}`);
         }
     }
 
-    // 镜像
-    args.push(handle.image || DEFAULT_IMAGE);
+    args.push(handle.sandbox_id);
 
-    // 执行命令
     args.push(execSpec.cmd);
     if (Array.isArray(execSpec.args)) {
         args.push(...execSpec.args);
     }
 
-    return { args, runtimeNote };
+    return { args };
 }
 
 /**
