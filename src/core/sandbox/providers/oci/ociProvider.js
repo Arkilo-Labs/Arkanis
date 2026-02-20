@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -7,12 +8,20 @@ import { SandboxEngine, SandboxRuntime } from '../../contracts/sandboxSpec.schem
 import { SandboxEngineResolved, SandboxRuntimeResolved } from '../../contracts/sandboxHandle.schema.js';
 import { nowIso, durationMs } from '../../utils/clock.js';
 import { probeExecutable, runOciCommand } from './ociCli.js';
-import { buildRunArgs, buildDoctorArgs, DEFAULT_IMAGE } from './ociSpecBuilder.js';
+import { buildCreateArgs, buildExecArgs, buildDoctorArgs, DEFAULT_IMAGE } from './ociSpecBuilder.js';
 import { SandboxErrorCode as ErrorCode } from '../../contracts/sandboxErrors.js';
 
 const execFileAsync = promisify(execFile);
 
 const PROVIDER_ID = 'oci_local';
+
+/**
+ * 解析 engine：auto → docker → podman。
+ * 导出供外部（CLI 等）在不启动容器的情况下做 engine 检测。
+ */
+export async function resolveOciEngine(engine) {
+    return resolveEngine(engine);
+}
 
 /** 解析 engine：auto → docker → podman */
 async function resolveEngine(engine) {
@@ -53,6 +62,24 @@ function generateSandboxId() {
     return `sb_${randomBytes(6).toString('hex')}`;
 }
 
+/** 检测 bind mount 是否指向宿主 docker/podman socket */
+function isDangerousSocket(sourcePath) {
+    const normalized = sourcePath.replace(/\\/g, '/').toLowerCase();
+    return normalized.endsWith('/docker.sock') || normalized.endsWith('/podman.sock');
+}
+
+/** 校验 mounts 中没有危险 socket，违规时抛出 ERR_SANDBOX_START_FAILED */
+function validateMounts(mounts) {
+    for (const mount of mounts) {
+        if (mount.type === 'bind' && isDangerousSocket(mount.source_path)) {
+            throw makeError(
+                ErrorCode.ERR_SANDBOX_START_FAILED,
+                `禁止挂载 ${mount.source_path}（安全限制）`,
+            );
+        }
+    }
+}
+
 /**
  * OCI sandbox provider。
  *
@@ -70,13 +97,21 @@ export class OciProvider {
     }
 
     /**
-     * 创建 sandbox handle（只分配 ID，不启动容器）。
+     * 创建 sandbox：分配 ID + 启动长驻容器（`docker run -d --name <id> sleep infinity`）。
+     *
+     * @param {object} spec
+     * @param {object} opts
+     * @param {string} opts.artifactsDir - 宿主机 artifacts 目录
+     * @returns {Promise<object>} SandboxHandle
      */
-    async createSandbox(spec) {
+    async createSandbox(spec, { artifactsDir } = {}) {
         const engineResolved = await resolveEngine(spec.engine ?? this._defaultSpec.engine);
         const runtimeResolved = await resolveRuntime(spec.runtime ?? this._defaultSpec.runtime);
 
-        return {
+        const mounts = spec.mounts ?? this._defaultSpec.mounts ?? [];
+        validateMounts(mounts);
+
+        const handle = {
             provider_id: this._id,
             sandbox_id: generateSandboxId(),
             created_at: nowIso(),
@@ -97,13 +132,37 @@ export class OciProvider {
             mounts: spec.mounts ?? this._defaultSpec.mounts ?? [],
             resources: spec.resources ?? this._defaultSpec.resources ?? defaultResources(),
         };
+
+        // 如果提供 artifactsDir，启动长驻容器
+        if (artifactsDir) {
+            await mkdir(artifactsDir, { recursive: true });
+
+            const { args } = buildCreateArgs({ handle, artifactsDir });
+            const raw = await runOciCommand(handle.engine_resolved, args, { timeout_ms: 30_000 });
+
+            if (raw.spawnError) {
+                throw makeError(
+                    ErrorCode.ERR_SANDBOX_START_FAILED,
+                    `engine spawn 失败: ${raw.spawnError.message}`,
+                );
+            }
+            if (raw.exit_code !== 0) {
+                throw makeError(
+                    ErrorCode.ERR_SANDBOX_START_FAILED,
+                    `容器启动失败 (exit ${raw.exit_code}): ${raw.stderr}`.slice(0, 500),
+                );
+            }
+        }
+
+        return handle;
     }
 
     /**
-     * 在 sandbox 内执行命令（每次 = 一个临时容器 + --rm）。
+     * 在已有容器内执行命令（`docker exec <sandbox_id> cmd`）。
+     * 容器不存在时返回 ERR_SANDBOX_NOT_FOUND。
      */
-    async exec(handle, execSpec, { artifactsDir }) {
-        const { args } = buildRunArgs({ handle, execSpec, artifactsDir });
+    async exec(handle, execSpec) {
+        const { args } = buildExecArgs({ handle, execSpec });
         const timeoutMs = execSpec.timeout_ms ?? handle.resources?.max_wall_clock_ms ?? 60_000;
 
         const raw = await runOciCommand(handle.engine_resolved, args, {
@@ -124,6 +183,18 @@ export class OciProvider {
             };
         }
 
+        // 容器不存在: stderr 含 "No such container"（docker exec 返回 1，podman 可能返回 125）
+        if (raw.stderr && raw.stderr.includes('No such container')) {
+            return {
+                ok: false,
+                error: {
+                    code: ErrorCode.ERR_SANDBOX_NOT_FOUND,
+                    message: `容器 ${handle.sandbox_id} 不存在`,
+                },
+                ...baseExecResult(raw),
+            };
+        }
+
         if (raw.timed_out) {
             return {
                 ok: false,
@@ -139,10 +210,22 @@ export class OciProvider {
     }
 
     /**
-     * 销毁 sandbox（临时容器模式下主要用于审计 cleanup 标记）。
+     * 销毁容器（`docker rm -f <sandbox_id>`）。幂等：容器已不存在不抛错。
      */
-    async destroy(_handle) {
-        // --rm 语义下无需额外清理
+    async destroy(handle) {
+        const raw = await runOciCommand(
+            handle.engine_resolved,
+            ['rm', '-f', handle.sandbox_id],
+            { timeout_ms: 15_000 },
+        );
+
+        if (raw.spawnError) {
+            throw makeError(
+                ErrorCode.ERR_SANDBOX_EXEC_FAILED,
+                `destroy spawn 失败: ${raw.spawnError.message}`,
+            );
+        }
+        // rm -f 对不存在的容器返回 0 或非零都视为成功（幂等语义）
     }
 
     /**

@@ -2,13 +2,14 @@
  * RunContext — 一次 run 的上下文容器，持有所有运行时依赖。
  *
  * 注入顺序（自上而下）：
- *   runPaths → sandboxProvider → artifactRegistry → policyEngine
- *   → toolRegistry → toolGateway → mcpRegistry（可选）
+ *   runPaths → sandboxProvider → sandboxRegistry → artifactRegistry
+ *   → policyEngine → toolRegistry → toolGateway → mcpRegistry（可选）
  */
 export class RunContext {
     constructor({
         runPaths,
         sandboxProvider,
+        sandboxRegistry = null,
         artifactRegistry,
         policyEngine,
         toolRegistry,
@@ -17,6 +18,7 @@ export class RunContext {
     }) {
         this.runPaths = runPaths;
         this.sandboxProvider = sandboxProvider;
+        this.sandboxRegistry = sandboxRegistry;
         this.artifactRegistry = artifactRegistry;
         this.policyEngine = policyEngine;
         this.toolRegistry = toolRegistry;

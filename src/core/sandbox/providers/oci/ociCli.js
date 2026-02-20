@@ -1,31 +1,52 @@
 import { spawn } from 'node:child_process';
-import { once } from 'node:events';
 
 import { limitBytes } from '../../utils/fileSizeLimiter.js';
 import { nowIso, durationMs } from '../../utils/clock.js';
 
 const DEFAULT_MAX_STDOUT_BYTES = 4 * 1024 * 1024; // 4 MiB
 const DEFAULT_MAX_STDERR_BYTES = 1 * 1024 * 1024; // 1 MiB
+const PROBE_TIMEOUT_MS = 5_000;
 
 /**
- * 检测指定可执行文件是否存在于 PATH。
+ * 检测指定可执行文件是否存在于 PATH（带超时保护，防止 `--version` 挂住）。
+ * @param {string} name
  * @returns {Promise<boolean>}
  */
 export async function probeExecutable(name) {
     return new Promise((resolve) => {
+        let settled = false;
+
+        function settle(value) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(value);
+        }
+
         const child = spawn(name, ['--version'], { stdio: 'ignore' });
-        child.on('error', () => resolve(false));
-        child.on('close', () => resolve(true));
+        child.on('error', () => settle(false));
+        child.on('close', () => settle(true));
+
+        // 防止 --version 挂住（某些二进制等待 stdin）
+        const timer = setTimeout(() => {
+            try {
+                child.kill('SIGKILL');
+            } catch {
+                // 已退出
+            }
+            settle(false);
+        }, PROBE_TIMEOUT_MS);
     });
 }
 
 /**
  * 运行 engine CLI 命令，统一处理超时、stdout/stderr 截断。
+ * 超时时发送 SIGKILL 并在结果中标记 timed_out=true；由上层（OciProvider）将其转换为标准错误码。
  *
- * @param {string} engine - 'docker' | 'podman'
+ * @param {string} engine - 'docker' | 'podman' 或任意可执行文件
  * @param {string[]} args
  * @param {object} opts
- * @param {number} [opts.timeout_ms]
+ * @param {number} [opts.timeout_ms]        0 或缺省表示不设超时
  * @param {number} [opts.max_stdout_bytes]
  * @param {number} [opts.max_stderr_bytes]
  * @returns {Promise<OciCliResult>}
@@ -59,7 +80,7 @@ export async function runOciCommand(engine, args, opts = {}) {
             try {
                 child.kill('SIGKILL');
             } catch {
-                // process may have already exited
+                // 进程可能已退出
             }
         }, timeoutMs);
     }

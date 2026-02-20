@@ -1,16 +1,21 @@
 import { z } from 'zod';
 import { randomBytes } from 'node:crypto';
 
-import { nowIso, durationMs } from '../../../../../core/sandbox/utils/clock.js';
-import { writeCommandRecord, writeOutputLogs, writeEnvFingerprint } from '../../../../../core/sandbox/audit/sandboxAuditWriter.js';
+import {
+    writeCommandRecord,
+    writeOutputLogs,
+    writeEnvFingerprint,
+    loadHandleJson,
+} from '../../../../../core/sandbox/audit/sandboxAuditWriter.js';
+import { ErrorCode } from '../../contracts/errors.js';
 
 const InputSchema = z
     .object({
+        sandbox_id: z.string().min(1),
         cmd: z.string().min(1),
         args: z.array(z.string()).default([]),
         cwd: z.string().min(1).optional(),
         timeout_ms: z.number().int().positive().optional(),
-        network: z.enum(['off', 'restricted', 'full']).optional(),
     })
     .strict();
 
@@ -50,17 +55,29 @@ export const sandboxExecTool = {
     outputSchema: OutputSchema,
 
     async run(ctx, args) {
-        const { sandboxProvider, runPaths } = ctx;
+        const { sandboxProvider, sandboxRegistry, runPaths } = ctx;
 
-        const spec = {
-            engine: 'auto',
-            runtime: 'auto',
-            mode: 'sandboxed',
-            network_policy: args.network ?? 'off',
-            workspace_access: 'none',
-        };
-
-        const handle = await sandboxProvider.createSandbox(spec);
+        let handle = sandboxRegistry.get(args.sandbox_id);
+        if (!handle) {
+            handle = await loadHandleJson(runPaths.runDir, args.sandbox_id);
+        }
+        if (!handle) {
+            return {
+                ok: false,
+                exit_code: null,
+                timed_out: false,
+                stdout_preview: '',
+                stderr_preview: '',
+                stdout_truncated: false,
+                stderr_truncated: false,
+                stdout_bytes: 0,
+                stderr_bytes: 0,
+                error: {
+                    code: ErrorCode.ERR_SANDBOX_NOT_FOUND,
+                    message: `sandbox ${args.sandbox_id} 不在 registry 中，且未找到 handle.json`,
+                },
+            };
+        }
 
         const execSpec = {
             cmd: args.cmd,
@@ -69,8 +86,7 @@ export const sandboxExecTool = {
             ...(args.timeout_ms ? { timeout_ms: args.timeout_ms } : {}),
         };
 
-        const artifactsDir = runPaths.artifactsDir;
-        const result = await sandboxProvider.exec(handle, execSpec, { artifactsDir });
+        const result = await sandboxProvider.exec(handle, execSpec);
 
         // 写 sandbox 审计
         const correlationId = `cmd_${randomBytes(4).toString('hex')}`;

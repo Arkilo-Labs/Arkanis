@@ -1,4 +1,4 @@
-import { writeFile, appendFile, mkdir } from 'node:fs/promises';
+import { writeFile, readFile, appendFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
 import { appendJsonlLine } from '../../utils/jsonlWriter.js';
@@ -44,4 +44,34 @@ export async function writeEnvFingerprint(runDir, sandboxId, snapshot) {
     const paths = sandboxAuditPaths(runDir, sandboxId);
     await ensureDir(paths.dir);
     await writeFile(paths.envFingerprintJson, JSON.stringify(snapshot, null, 2), 'utf-8');
+}
+
+/**
+ * 将 sandbox handle 序列化到磁盘（handle.json），供跨进程恢复使用。
+ *
+ * @param {string} runDir
+ * @param {string} sandboxId
+ * @param {object} handle  SandboxHandle
+ */
+export async function writeHandleJson(runDir, sandboxId, handle) {
+    const paths = sandboxAuditPaths(runDir, sandboxId);
+    await ensureDir(paths.dir);
+    await writeFile(paths.handleJson, JSON.stringify(handle, null, 2), 'utf-8');
+}
+
+/**
+ * 从磁盘读取 handle.json。文件不存在或解析失败时返回 null。
+ *
+ * @param {string} runDir
+ * @param {string} sandboxId
+ * @returns {Promise<object|null>}
+ */
+export async function loadHandleJson(runDir, sandboxId) {
+    const paths = sandboxAuditPaths(runDir, sandboxId);
+    try {
+        const raw = await readFile(paths.handleJson, 'utf-8');
+        return JSON.parse(raw);
+    } catch {
+        return null;
+    }
 }
