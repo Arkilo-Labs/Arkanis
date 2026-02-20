@@ -1,6 +1,9 @@
 import { defineConfig } from 'vitepress';
 
+const base = process.env.VITEPRESS_BASE ?? (process.env.GITHUB_ACTIONS ? '/Arkanis/' : '/');
+
 export default defineConfig({
+    base,
     lang: 'zh-CN',
     title: 'Arkanis',
     description: 'AI 驱动的交易决策实验系统',
