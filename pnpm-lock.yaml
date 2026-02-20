@@ -116,28 +116,6 @@ importers:
         specifier: ^7.2.4
         version: 7.3.0(@types/node@25.0.2)(jiti@1.21.7)
 
-  src/apps/web_console:
-    dependencies:
-      lightweight-charts:
-        specifier: ^4.1.0
-        version: 4.1.0
-      socket.io-client:
-        specifier: ^4.8.1
-        version: 4.8.1
-      vue:
-        specifier: ^3.5.24
-        version: 3.5.26
-      vue-router:
-        specifier: ^4.6.4
-        version: 4.6.4(vue@3.5.26)
-    devDependencies:
-      '@vitejs/plugin-vue':
-        specifier: ^6.0.1
-        version: 6.0.3(vite@7.3.0(@types/node@25.0.2)(jiti@1.21.7))(vue@3.5.26)
-      vite:
-        specifier: ^7.2.4
-        version: 7.3.0(@types/node@25.0.2)(jiti@1.21.7)
-
 packages:
 
   '@algolia/abtesting@1.14.1':

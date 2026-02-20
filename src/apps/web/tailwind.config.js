@@ -7,7 +7,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        // web_console / surface 暗色设计 tokens（CSS 变量驱动）
+        // 暗色设计 tokens（CSS 变量驱动）
         'bg': 'rgb(var(--color-bg) / <alpha-value>)',
         'bg-alt': 'rgb(var(--color-bg-alt) / <alpha-value>)',
         'card': 'rgb(var(--color-card) / <alpha-value>)',
