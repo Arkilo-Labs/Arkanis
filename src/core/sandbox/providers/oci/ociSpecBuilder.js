@@ -21,7 +21,7 @@ export const CONTAINER_TMP_PATH = '/tmp';
  * @param {import('../../contracts/sandboxHandle.schema.js').SandboxHandle} params.handle
  * @param {import('../../contracts/execSpec.schema.js').ExecSpec} params.execSpec
  * @param {string} params.artifactsDir  - 宿主机 artifacts 目录（绝对路径）
- * @returns {{ args: string[], runtimeNote?: string }}
+ * @returns {{ args: string[], runtimeNote: string }}
  */
 export function buildRunArgs({ handle, execSpec, artifactsDir }) {
     const args = ['run', '--rm'];
@@ -47,6 +47,21 @@ export function buildRunArgs({ handle, execSpec, artifactsDir }) {
 
     // artifacts 挂载（读写，用于落盘产物）
     args.push('-v', `${artifactsDir}:${CONTAINER_ARTIFACTS_PATH}:rw`);
+
+    // 额外自定义挂载（来自 spec.mounts）
+    applyCustomMounts(args, handle.mounts);
+
+    // 工作目录
+    if (execSpec.cwd) {
+        args.push('-w', execSpec.cwd);
+    }
+
+    // 环境变量
+    if (execSpec.env && typeof execSpec.env === 'object') {
+        for (const [key, value] of Object.entries(execSpec.env)) {
+            args.push('-e', `${key}=${value}`);
+        }
+    }
 
     // 镜像
     args.push(handle.image || DEFAULT_IMAGE);
@@ -116,4 +131,24 @@ function applyWorkspace(args, handle) {
         args.push('-v', `${handle.workspace_mount_path}:${CONTAINER_WORKSPACE_PATH}:rw`);
     }
     // NONE：不挂载
+}
+
+function applyCustomMounts(args, mounts) {
+    if (!Array.isArray(mounts) || mounts.length === 0) return;
+
+    for (const mount of mounts) {
+        if (mount.type === 'bind') {
+            const mode = mount.read_only ? 'ro' : 'rw';
+            args.push('-v', `${mount.source_path}:${mount.target_path}:${mode}`);
+        } else if (mount.type === 'tmpfs') {
+            const opts = [];
+            if (mount.size_mb) opts.push(`size=${mount.size_mb}m`);
+            if (mount.read_only === false) opts.push('rw');
+            const spec =
+                opts.length > 0
+                    ? `${mount.target_path}:${opts.join(',')}`
+                    : mount.target_path;
+            args.push('--tmpfs', spec);
+        }
+    }
 }
