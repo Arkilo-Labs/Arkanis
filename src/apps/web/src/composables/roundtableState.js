@@ -33,6 +33,7 @@ export function createRoundtableEventState() {
         beliefUpdates: [],
         decisions: [],
         processExit: null,
+        tokenUsage: null,
     };
 }
 
@@ -121,6 +122,17 @@ export function applyRoundtableEvent(
             code: Number.isFinite(rawCode) ? rawCode : null,
             signal: payload.signal || null,
             killRequested: Boolean(payload.killRequested),
+        };
+        return next;
+    }
+
+    if (type === 'token-usage') {
+        const payload = normalizeObject(rawEvent.payload);
+        next.tokenUsage = {
+            input: Number(payload.input) || 0,
+            output: Number(payload.output) || 0,
+            cacheRead: Number(payload.cacheRead) || 0,
+            cacheWrite: Number(payload.cacheWrite) || 0,
         };
         return next;
     }

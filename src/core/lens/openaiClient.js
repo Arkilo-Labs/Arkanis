@@ -368,6 +368,11 @@ export class LensClient {
         this.maxTokens = maxTokens;
         this.temperature = temperature;
         this.promptName = lensConfig.promptName;
+        this.tokenAccumulator = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+    }
+
+    getUsage() {
+        return { ...this.tokenAccumulator };
     }
 
     /**
@@ -533,6 +538,11 @@ ${primaryUserPrompt || DEFAULT_USER_PROMPT}
             if (!content) {
                 throw new Error(`API 响应 content 为空`);
             }
+
+            const raw = data?.usage ?? {};
+            this.tokenAccumulator.input += Number(raw.prompt_tokens) || 0;
+            this.tokenAccumulator.output += Number(raw.completion_tokens) || 0;
+            this.tokenAccumulator.cacheRead += Number(raw.prompt_tokens_details?.cached_tokens) || 0;
 
             return content;
         } catch (error) {

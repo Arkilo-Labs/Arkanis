@@ -3,8 +3,18 @@ import assert from 'node:assert/strict';
 
 import { Roundtable } from './roundtable.js';
 
+const ZERO_USAGE = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+
+function wrapSpeak(fn) {
+    return async (...args) => {
+        const result = await fn(...args);
+        if (result && typeof result === 'object' && 'text' in result) return result;
+        return { text: String(result ?? ''), usage: ZERO_USAGE };
+    };
+}
+
 function newAgent({ name, role, order, speak }) {
-    return { name, role, order, tools: [], canSeeImages: false, speak };
+    return { name, role, order, tools: [], canSeeImages: false, speak: wrapSpeak(speak) };
 }
 
 function newLogger() {

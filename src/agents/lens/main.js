@@ -445,6 +445,9 @@ async function main() {
             decision = await client.analyzeChart(basePng, { userPrompt: enhancedPrompt });
         }
 
+        const lensUsage = client.getUsage();
+        process.stdout.write(`__LENS_EVENT__${JSON.stringify({ type: 'token-usage', payload: lensUsage })}\n`);
+
         logger.info('='.repeat(60));
         logger.info('Lens 决策结果:');
         logger.info('='.repeat(60));

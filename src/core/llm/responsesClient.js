@@ -64,6 +64,15 @@ export class ResponsesClient {
         const data = await res.json();
         const content = extractOutputText(data);
         if (!content) throw new Error('Provider 响应缺少 output_text');
-        return content;
+
+        const raw = data?.usage ?? {};
+        const usage = {
+            input: Number(raw.input_tokens) || 0,
+            output: Number(raw.output_tokens) || 0,
+            cacheRead: Number(raw.input_tokens_details?.cached_tokens) || 0,
+            cacheWrite: 0,
+        };
+
+        return { text: content, usage };
     }
 }

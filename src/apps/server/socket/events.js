@@ -12,6 +12,8 @@ export const SOCKET_EVENTS = Object.freeze({
     ROUND_TOOL_CALL: 'roundtable:tool-call',
     ROUND_BELIEF_UPDATE: 'roundtable:belief-update',
     ROUND_DECISION: 'roundtable:decision',
+    ROUND_TOKEN_USAGE: 'roundtable:token-usage',
+    LENS_TOKEN_USAGE: 'lens:token-usage',
 });
 
 export const ROUND_EVENT_TO_SOCKET_EVENT = Object.freeze({
@@ -19,6 +21,7 @@ export const ROUND_EVENT_TO_SOCKET_EVENT = Object.freeze({
     'tool-call': SOCKET_EVENTS.ROUND_TOOL_CALL,
     'belief-update': SOCKET_EVENTS.ROUND_BELIEF_UPDATE,
     decision: SOCKET_EVENTS.ROUND_DECISION,
+    'token-usage': SOCKET_EVENTS.ROUND_TOKEN_USAGE,
 });
 
 export function resolveRoundtableSocketEvent(type) {

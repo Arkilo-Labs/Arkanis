@@ -31,6 +31,13 @@ function normalizeTimestamp(value) {
     return Date.now();
 }
 
+function formatTokenCount(n) {
+    const v = Number(n) || 0;
+    if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+    if (v >= 1_000) return `${(v / 1_000).toFixed(1)}k`;
+    return String(v);
+}
+
 function formatTimestamp(value) {
     const ts = normalizeTimestamp(value);
     return new Date(ts).toLocaleTimeString('zh-CN', {
@@ -152,6 +159,7 @@ export default function RoundtableBattlefield({
     finalDecision,
     draftDecision,
     counts = null,
+    tokenUsage = null,
 }) {
     const battlefieldRef = useRef(null);
     const feedRef = useRef(null);
@@ -1351,6 +1359,28 @@ export default function RoundtableBattlefield({
                         ) : null}
 
                         <div className="rt-bf-panel rt-bf-panel-logs">
+                            {tokenUsage ? (
+                                <div className="rt-bf-token-bar">
+                                    <span className="rt-bf-token-item">
+                                        <i className="fas fa-arrow-right-to-bracket"></i>
+                                        {formatTokenCount(tokenUsage.input)}
+                                    </span>
+                                    <span className="rt-bf-token-sep">|</span>
+                                    <span className="rt-bf-token-item">
+                                        <i className="fas fa-arrow-right-from-bracket"></i>
+                                        {formatTokenCount(tokenUsage.output)}
+                                    </span>
+                                    {tokenUsage.cacheRead > 0 ? (
+                                        <>
+                                            <span className="rt-bf-token-sep">|</span>
+                                            <span className="rt-bf-token-item rt-bf-token-cache">
+                                                <i className="fas fa-bolt"></i>
+                                                {Math.round((tokenUsage.cacheRead / (tokenUsage.input || 1)) * 100)}%
+                                            </span>
+                                        </>
+                                    ) : null}
+                                </div>
+                            ) : null}
                             <div className="rt-bf-panel-title">
                                 <span>Trace</span>
                                 <div className="flex items-center gap-2">
