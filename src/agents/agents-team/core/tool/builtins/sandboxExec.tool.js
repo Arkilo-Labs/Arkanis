@@ -1,0 +1,130 @@
+import { z } from 'zod';
+import { randomBytes } from 'node:crypto';
+
+import { nowIso, durationMs } from '../../../../../core/sandbox/utils/clock.js';
+import { writeCommandRecord, writeOutputLogs, writeEnvFingerprint } from '../../../../../core/sandbox/audit/sandboxAuditWriter.js';
+
+const InputSchema = z
+    .object({
+        cmd: z.string().min(1),
+        args: z.array(z.string()).default([]),
+        cwd: z.string().min(1).optional(),
+        timeout_ms: z.number().int().positive().optional(),
+        network: z.enum(['off', 'restricted', 'full']).optional(),
+    })
+    .strict();
+
+const OutputSchema = z
+    .object({
+        ok: z.boolean(),
+        exit_code: z.number().int().nullable(),
+        timed_out: z.boolean(),
+        stdout_preview: z.string(),
+        stderr_preview: z.string(),
+        stdout_truncated: z.boolean(),
+        stderr_truncated: z.boolean(),
+        stdout_bytes: z.number().int().nonnegative(),
+        stderr_bytes: z.number().int().nonnegative(),
+        sandbox_ref: z
+            .object({ provider_id: z.string(), sandbox_id: z.string() })
+            .strict()
+            .optional(),
+        error: z
+            .object({ code: z.string(), message: z.string() })
+            .strict()
+            .optional(),
+    })
+    .strict();
+
+const PREVIEW_MAX_BYTES = 4096;
+
+export const sandboxExecTool = {
+    name: 'sandbox.exec',
+    permissions: {
+        needs_network: false,
+        needs_workspace_write: false,
+        needs_host_exec: false,
+        needs_secrets: false,
+    },
+    inputSchema: InputSchema,
+    outputSchema: OutputSchema,
+
+    async run(ctx, args) {
+        const { sandboxProvider, runPaths } = ctx;
+
+        const spec = {
+            engine: 'auto',
+            runtime: 'auto',
+            mode: 'sandboxed',
+            network_policy: args.network ?? 'off',
+            workspace_access: 'none',
+        };
+
+        const handle = await sandboxProvider.createSandbox(spec);
+
+        const execSpec = {
+            cmd: args.cmd,
+            args: args.args ?? [],
+            ...(args.cwd ? { cwd: args.cwd } : {}),
+            ...(args.timeout_ms ? { timeout_ms: args.timeout_ms } : {}),
+        };
+
+        const artifactsDir = runPaths.artifactsDir;
+        const result = await sandboxProvider.exec(handle, execSpec, { artifactsDir });
+
+        // 写 sandbox 审计
+        const correlationId = `cmd_${randomBytes(4).toString('hex')}`;
+        await writeCommandRecord(runPaths.runDir, handle.sandbox_id, {
+            run_id: runPaths.runId,
+            sandbox_id: handle.sandbox_id,
+            provider_id: handle.provider_id,
+            correlation_id: correlationId,
+            cmd: args.cmd,
+            args: args.args ?? [],
+            ...(args.cwd ? { cwd: args.cwd } : {}),
+            started_at: result.started_at,
+            ended_at: result.ended_at,
+            duration_ms: result.duration_ms,
+            timeout_ms: args.timeout_ms ?? handle.resources?.max_wall_clock_ms ?? 60000,
+            timed_out: result.timed_out,
+            exit_code: result.exit_code ?? null,
+            signal: result.signal ?? null,
+            workspace_access: handle.workspace_access,
+            network_policy: handle.network_policy,
+            stdout_bytes: result.stdout_bytes,
+            stderr_bytes: result.stderr_bytes,
+            stdout_truncated: result.stdout_truncated,
+            stderr_truncated: result.stderr_truncated,
+            stdout_max_bytes: result.stdout_max_bytes,
+            stderr_max_bytes: result.stderr_max_bytes,
+            ok: result.ok,
+            ...(result.ok ? {} : { error: result.error }),
+        });
+
+        await writeOutputLogs(runPaths.runDir, handle.sandbox_id, {
+            stdout: result.stdout,
+            stderr: result.stderr,
+        });
+
+        // 写 env_fingerprint（每次 exec 更新）
+        const snapshot = await sandboxProvider.snapshot(handle);
+        await writeEnvFingerprint(runPaths.runDir, handle.sandbox_id, snapshot);
+
+        const stdoutPreview = result.stdout.slice(0, PREVIEW_MAX_BYTES);
+        const stderrPreview = result.stderr.slice(0, PREVIEW_MAX_BYTES);
+
+        return {
+            ok: result.ok,
+            exit_code: result.exit_code ?? null,
+            timed_out: result.timed_out,
+            stdout_preview: stdoutPreview,
+            stderr_preview: stderrPreview,
+            stdout_truncated: result.stdout_truncated,
+            stderr_truncated: result.stderr_truncated,
+            stdout_bytes: result.stdout_bytes,
+            stderr_bytes: result.stderr_bytes,
+            sandbox_ref: { provider_id: handle.provider_id, sandbox_id: handle.sandbox_id },
+            ...(result.ok ? {} : { error: result.error }),
+        };
+    },
+};

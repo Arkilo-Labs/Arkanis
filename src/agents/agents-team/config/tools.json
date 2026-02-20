@@ -1,0 +1,15 @@
+{
+    "version": 1,
+    "allowed_tools": [
+        "sandbox.exec",
+        "artifact.write_text",
+        "artifact.hash",
+        "mcp.call"
+    ],
+    "policy": {
+        "network": "off",
+        "workspace_access": "none",
+        "host_exec": "deny",
+        "secrets": "deny"
+    }
+}
