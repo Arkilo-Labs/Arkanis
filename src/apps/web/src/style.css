@@ -261,7 +261,7 @@
     z-index: 20;
     display: flex;
     flex-direction: column;
-    height: 100%;
+    min-height: min(760px, 82vh);
     position: relative;
   }
 
@@ -425,6 +425,43 @@
     background: rgb(var(--color-success) / 0.06);
   }
 
+  .rt-bf-tool-tooltip {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    min-width: 180px;
+    background: rgb(10 10 10 / 0.92);
+    border: 1px solid rgb(255 255 255 / 0.1);
+    border-radius: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    backdrop-filter: blur(8px);
+    pointer-events: none;
+  }
+
+  .rt-bf-tool-tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.7rem;
+  }
+
+  .rt-bf-tool-tooltip-row + .rt-bf-tool-tooltip-row {
+    margin-top: 0.2rem;
+  }
+
+  .rt-bf-tool-tooltip-name {
+    @apply text-text font-mono truncate;
+    font-size: 0.7rem;
+  }
+
+  .rt-bf-tool-tooltip-count {
+    @apply text-text-muted flex-shrink-0;
+    font-variant-numeric: tabular-nums;
+  }
+
   .rt-bf-panel-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -518,7 +555,8 @@
   }
 
   .rt-bf-feed-empty {
-    @apply h-full flex items-center justify-center text-sm text-text-muted border border-dashed border-border-light/10 rounded-xl;
+    @apply flex items-center justify-center text-sm text-text-muted border border-dashed border-border-light/10 rounded-xl;
+    height: calc(100% - 2rem);
     margin: 1rem;
   }
 
