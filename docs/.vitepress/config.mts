@@ -19,10 +19,10 @@ export default defineConfig({
                 text: '开发者',
                 collapsed: true,
                 items: [
-                    { text: '本地部署', link: '/guide/local-deploy' },
+                    { text: '本地安装（非 Docker）', link: '/guide/local-install' },
+                    { text: '本地源码部署（Docker）', link: '/guide/local-deploy' },
                 ],
             },
         ],
     },
 });
-

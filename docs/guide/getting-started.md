@@ -5,6 +5,9 @@
 - 已安装 [Docker](https://docs.docker.com/get-docker/) 并确保 Docker 正在运行
 - Docker Compose v2（`docker compose`）可用
 
+> 不想使用 Docker？可以参考 [本地安装（非 Docker）](/guide/local-install)（面向开发者/高级用户）。
+> 如果你需要把当前源码部署到 Docker（开发调试、PR 验证），参考 [本地源码部署（Docker）](/guide/local-deploy)。
+
 ## 安装
 
 ### Linux / macOS

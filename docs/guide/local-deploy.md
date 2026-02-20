@@ -1,4 +1,4 @@
-# 本地部署
+# 本地源码部署（Docker）
 
 ::: info 面向开发者
 本页面说明如何使用 `--local` 参数将本地源码部署到 Docker 环境，适用于开发调试、PR 验证、VM 测试等场景。普通用户请参考[快速开始](/guide/getting-started)。
