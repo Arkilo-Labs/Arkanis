@@ -1,3 +1,5 @@
+import { join } from 'path';
+
 import { resolveDataDir } from '../../../core/utils/dataDir.js';
 import {
     createProviderDefinition,
@@ -8,8 +10,45 @@ import {
 } from '../../../core/services/aiProvidersStore.js';
 import { listProvidersWithStatus } from '../../../core/services/providerResolver.js';
 import { deleteProviderApiKey, setProviderApiKey } from '../../../core/services/secretsStore.js';
-import { removeProviderFromRoles } from '../../../core/services/providerConfigStore.js';
+import { readProviderConfig, setProviderRoles, getRoleKeys, removeProviderFromRoles } from '../../../core/services/providerConfigStore.js';
+import { readAgentProviderOverrides, writeAgentProviderOverrides } from '../../../core/services/agentProviderOverrideStore.js';
+import { loadAgentsConfig } from '../../../agents/agents-round/core/config/configLoader.js';
 import { SOCKET_EVENTS } from '../socket/events.js';
+
+/**
+ * 首次添加 provider 时的自动引导：
+ * 当系统中没有任何有效的角色分配和 agent 覆盖时，
+ * 将新 provider 自动分配给所有角色和所有 agent。
+ * 仅在"全空"状态下触发一次，后续添加 provider 不会自动分配。
+ */
+async function bootstrapIfEmpty({ projectRoot, dataDir, providerId }) {
+    try {
+        // 检查角色配置：是否所有角色都为 null
+        const roleConfig = await readProviderConfig({ dataDir });
+        const allRolesEmpty = getRoleKeys().every((k) => roleConfig.roles[k] === null);
+
+        // 检查 agent 覆盖：是否没有任何有效覆盖
+        const { overrides } = await readAgentProviderOverrides({ dataDir });
+        const hasAnyOverride = Object.values(overrides).some((v) => v !== null);
+
+        if (!allRolesEmpty || hasAnyOverride) return;
+
+        // 全空状态 → 自动分配新 provider 到所有角色
+        const roleKeys = getRoleKeys();
+        const roles = Object.fromEntries(roleKeys.map((k) => [k, providerId]));
+        await setProviderRoles({ dataDir, roles, knownProviderIds: [providerId] });
+
+        // 自动分配新 provider 到所有 agent
+        const configDir = join(projectRoot, 'src', 'agents', 'agents-round', 'config');
+        const agentsConfig = loadAgentsConfig(configDir);
+        const allAgents = [...(agentsConfig.agents || []), ...(agentsConfig.subagents || [])];
+        const knownAgentNames = allAgents.map((a) => a.name);
+        const overridesMap = Object.fromEntries(knownAgentNames.map((name) => [name, providerId]));
+        await writeAgentProviderOverrides({ dataDir, overridesMap, knownAgentNames, knownProviderIds: [providerId] });
+    } catch {
+        // 引导失败不阻断 provider 创建
+    }
+}
 
 export function registerProviderRoutes({ app, io, projectRoot }) {
     const dataDir = resolveDataDir({ projectRoot });
@@ -49,6 +88,9 @@ export function registerProviderRoutes({ app, io, projectRoot }) {
                     apiKey,
                 });
             }
+
+            // 首次添加 provider 时自动引导角色和 agent 分配
+            await bootstrapIfEmpty({ projectRoot, dataDir, providerId: provider.id });
 
             io.emit(SOCKET_EVENTS.PROVIDERS_UPDATED);
             return res.json(provider);
