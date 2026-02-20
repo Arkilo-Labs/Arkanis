@@ -15,12 +15,12 @@ const protocolOptions = [
 
 function getKeyBadge(provider) {
   if (!provider?.hasKey) {
-    return { className: 'badge badge-error', label: '未配置' };
+    return { className: 'badge badge-error', label: '未配置', textClassName: 'text-error' };
   }
   if (provider.keySource === 'env') {
-    return { className: 'badge badge-accent', label: '已配置(ENV)' };
+    return { className: 'badge badge-accent', label: '已配置(ENV)', textClassName: 'text-accent-light' };
   }
-  return { className: 'badge badge-success', label: '已配置(secrets)' };
+  return { className: 'badge badge-success', label: '已配置(secrets)', textClassName: 'text-success' };
 }
 
 export default function ProviderCard({ provider, usedRoles = [], onUpdate, onDelete }) {
@@ -386,10 +386,12 @@ export default function ProviderCard({ provider, usedRoles = [], onUpdate, onDel
                   </div>
 
                   <div>
-                    <label className="form-label">API Key</label>
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span className={keyBadge.className}>{keyBadge.label}</span>
-                    </div>
+                    <label className="form-label">
+                      API Key
+                      <span className={`ml-2 text-xs font-normal ${keyBadge.textClassName}`}>
+                        {keyBadge.label}
+                      </span>
+                    </label>
                     {provider.locked ? (
                       <p className="text-xs text-text-muted">由 ENV 管理，无法在此修改</p>
                     ) : (
@@ -448,22 +450,26 @@ export default function ProviderCard({ provider, usedRoles = [], onUpdate, onDel
                     </select>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    <input
-                      id={`supportsVision_${provider.id}`}
-                      checked={Boolean(editForm.supportsVision)}
-                      onChange={(e) =>
-                        setEditForm((prev) => ({
-                          ...prev,
-                          supportsVision: e.target.checked,
-                        }))
-                      }
-                      type="checkbox"
-                      className="rounded border-border-light/20 bg-white/5"
-                    />
-                    <label className="form-label mb-0" htmlFor={`supportsVision_${provider.id}`}>
-                      Supports Vision
-                    </label>
+                  <div>
+                    <label className="form-label">Supports Vision</label>
+                    <div className="flex items-center h-10">
+                      <label className="switch">
+                        <input
+                          checked={Boolean(editForm.supportsVision)}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              supportsVision: e.target.checked,
+                            }))
+                          }
+                          type="checkbox"
+                        />
+                        <span className="switch-control">
+                          <span className="switch-track"></span>
+                          <span className="switch-thumb"></span>
+                        </span>
+                      </label>
+                    </div>
                   </div>
 
                   <div>
