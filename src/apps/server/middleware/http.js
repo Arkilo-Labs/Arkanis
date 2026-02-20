@@ -1,11 +1,20 @@
 import cors from 'cors';
 import express from 'express';
+import helmet from 'helmet';
 import { existsSync } from 'fs';
 import { join } from 'path';
 
-export function registerHttpMiddleware({ app }) {
-    app.use(cors());
-    app.use(express.json());
+export function registerHttpMiddleware({ app, corsOrigin }) {
+    // Security headers first (CSP disabled for SPA inline scripts)
+    app.use(helmet({ contentSecurityPolicy: false }));
+
+    app.use(cors({
+        origin: corsOrigin,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'X-Chart-Write-Token'],
+    }));
+
+    app.use(express.json({ limit: '1mb' }));
 }
 
 export function registerStaticMiddleware({ app, projectRoot }) {

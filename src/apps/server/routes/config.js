@@ -24,9 +24,7 @@ const ALLOWED_CONFIG_KEYS = [
     'CCXT_TIMEOUT_MS',
     'CCXT_SANDBOX',
     'BINANCE_MARKET',
-    'ALLOW_NO_AUTH',
     'ARKANIS_DATA_DIR',
-    'SECRETS_ENC_KEY',
     'ENABLE_SHARE',
 ];
 
@@ -70,7 +68,7 @@ const CONFIG_SCHEMA = {
     },
     opensource: {
         label: '开源部署预留',
-        items: ['ALLOW_NO_AUTH', 'ARKANIS_DATA_DIR', 'SECRETS_ENC_KEY', 'ENABLE_SHARE'],
+        items: ['ARKANIS_DATA_DIR', 'ENABLE_SHARE'],
     },
 };
 
@@ -98,7 +96,8 @@ function generateEnvContent(config) {
         lines.push(`# ${group.label}`);
         for (const key of group.items) {
             if (config[key] !== undefined) {
-                lines.push(`${key}=${config[key]}`);
+                const safeValue = String(config[key]).replace(/[\r\n]/g, '');
+                lines.push(`${key}=${safeValue}`);
             }
         }
         lines.push('');

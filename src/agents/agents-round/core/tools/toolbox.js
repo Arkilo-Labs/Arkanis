@@ -2,10 +2,44 @@ import { join } from 'path';
 import { ensureDir } from '../runtime/fsUtils.js';
 import { screenshotPage } from '../screenshots/liquidationShot.js';
 
-function isHttpUrl(raw) {
+const BLOCKED_HOSTS = new Set([
+    'localhost',
+    'host.docker.internal',
+]);
+
+const BLOCKED_HOST_PREFIXES = [
+    '0.0.0.0',
+    '::1',
+    'fe80::',
+];
+
+function isPrivateIP(hostname) {
+    // IPv6 ULA / loopback
+    if (hostname.startsWith('fc') || hostname.startsWith('fd')) return true;
+    for (const prefix of BLOCKED_HOST_PREFIXES) {
+        if (hostname === prefix || hostname.startsWith(prefix)) return true;
+    }
+    // IPv4 checks
+    const parts = hostname.split('.').map(Number);
+    if (parts.length !== 4 || parts.some((p) => Number.isNaN(p))) return false;
+    const [a, b] = parts;
+    if (a === 127) return true;                         // 127.0.0.0/8
+    if (a === 10) return true;                          // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true;   // 172.16.0.0/12
+    if (a === 192 && b === 168) return true;             // 192.168.0.0/16
+    if (a === 169 && b === 254) return true;             // 169.254.0.0/16 (link-local / cloud metadata)
+    if (a === 0) return true;                            // 0.0.0.0/8
+    return false;
+}
+
+function isSafeHttpUrl(raw) {
     try {
         const u = new URL(String(raw || '').trim());
-        return u.protocol === 'http:' || u.protocol === 'https:';
+        if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+        const hostname = u.hostname.toLowerCase();
+        if (BLOCKED_HOSTS.has(hostname)) return false;
+        if (isPrivateIP(hostname)) return false;
+        return true;
     } catch {
         return false;
     }
@@ -191,7 +225,7 @@ export class Toolbox {
                 if (name === 'firecrawl.scrape') {
                     if (!this.firecrawlClient) throw new Error('Firecrawl 未配置/未注入');
                     const url = String(args.url || '').trim();
-                    if (!isHttpUrl(url)) throw new Error('firecrawl.scrape 仅允许 http/https url');
+                    if (!isSafeHttpUrl(url)) throw new Error('firecrawl.scrape 仅允许公网 http/https url（内网地址已被阻止）');
                     const maxChars = safeNumber(args.max_markdown_chars ?? args.maxMarkdownChars, {
                         min: 200,
                         max: 30000,
@@ -212,7 +246,7 @@ export class Toolbox {
 
                 if (name === 'browser.screenshot') {
                     const url = String(args.url || '').trim();
-                    if (!isHttpUrl(url)) throw new Error('browser.screenshot 仅允许 http/https url');
+                    if (!isSafeHttpUrl(url)) throw new Error('browser.screenshot 仅允许公网 http/https url（内网地址已被阻止）');
                     if (!this.outputDir) throw new Error('截图 outputDir 未配置/未注入');
 
                     const shotDir = join(this.outputDir, 'tool_shots');

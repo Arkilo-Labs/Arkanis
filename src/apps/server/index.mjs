@@ -40,21 +40,24 @@ const PROJECT_ROOT = join(__dirname, '..', '..', '..');
 dotenvConfig({ path: join(PROJECT_ROOT, '.env') });
 
 function resolveCorsOrigin() {
-    const raw = (process.env.SOCKET_CORS_ORIGINS || '').trim();
-    if (!raw || raw === '*') return '*';
+    const raw = (process.env.CORS_ORIGINS || process.env.SOCKET_CORS_ORIGINS || '').trim();
+    if (raw === '*') return '*';
+    if (!raw) return [/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/];
     return raw.split(',').map((s) => s.trim()).filter(Boolean);
 }
+
+const corsOrigin = resolveCorsOrigin();
 
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
     cors: {
-        origin: resolveCorsOrigin(),
+        origin: corsOrigin,
         methods: ['GET', 'POST'],
     },
 });
 
-registerHttpMiddleware({ app });
+registerHttpMiddleware({ app, corsOrigin });
 
 let authService = null;
 try {
@@ -123,9 +126,14 @@ function setupConfigWatcher({ io, projectRoot }) {
     return watcher;
 }
 
+if (authService.allowNoAuth) {
+    console.warn('[Security Warning] ALLOW_NO_AUTH is enabled — authentication is disabled. Do NOT use in production.');
+}
+
 const PORT = process.env.PORT || 3000;
-httpServer.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+const BIND_IP = process.env.BIND_IP || '127.0.0.1';
+httpServer.listen(PORT, BIND_IP, () => {
+    console.log(`Server running on http://${BIND_IP}:${PORT}`);
     setupConfigWatcher({ io, projectRoot: PROJECT_ROOT });
     console.log('[Config Hot Reload] 配置文件监听已启动');
 });

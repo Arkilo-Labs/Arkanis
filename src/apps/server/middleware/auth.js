@@ -1,4 +1,13 @@
+import { rateLimit } from 'express-rate-limit';
 import { isValidChartWriteToken } from '../services/chartWriteToken.js';
+
+const loginRateLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 5,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'Too many login attempts, please try again later' },
+});
 
 function isAllowedSetupPath({ path, setupToken }) {
   if (!setupToken) return false;
@@ -18,6 +27,8 @@ function isChartWriteRoute({ method, path }) {
 }
 
 export function registerAuthMiddleware({ app, io, authService }) {
+  app.post('/api/auth/login', loginRateLimiter);
+
   app.use((req, res, next) => {
     // Frontend assets and SPA HTML are public — auth only guards /api/* and /outputs/*
     if (!req.path.startsWith('/api/') && !req.path.startsWith('/outputs/')) return next();
