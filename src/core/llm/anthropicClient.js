@@ -60,6 +60,15 @@ export class AnthropicClient {
         const data = await res.json();
         const content = data?.content?.find((c) => c.type === 'text')?.text;
         if (!content) throw new Error('Provider 响应缺少 content[].text');
-        return content;
+
+        const raw = data?.usage ?? {};
+        const usage = {
+            input: Number(raw.input_tokens) || 0,
+            output: Number(raw.output_tokens) || 0,
+            cacheRead: Number(raw.cache_read_input_tokens) || 0,
+            cacheWrite: Number(raw.cache_creation_input_tokens) || 0,
+        };
+
+        return { text: content, usage };
     }
 }

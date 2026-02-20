@@ -421,6 +421,17 @@ export function useRoundtable({ initialSessionId = '' } = {}) {
             });
         }
 
+        function onTokenUsage(msg) {
+            applyEvent({
+                type: 'token-usage',
+                seq: msg?.seq,
+                timestamp: msg?.timestamp,
+                sessionId: msg?.sessionId,
+                pid: msg?.pid,
+                payload: msg,
+            });
+        }
+
         function onConnect() {
             const target = selectedSessionRef.current;
             if (!target) return;
@@ -440,6 +451,7 @@ export function useRoundtable({ initialSessionId = '' } = {}) {
         socket.on('roundtable:tool-call', onToolCall);
         socket.on('roundtable:belief-update', onBeliefUpdate);
         socket.on('roundtable:decision', onDecision);
+        socket.on('roundtable:token-usage', onTokenUsage);
 
         return () => {
             socket.off('connect', onConnect);
@@ -449,6 +461,7 @@ export function useRoundtable({ initialSessionId = '' } = {}) {
             socket.off('roundtable:tool-call', onToolCall);
             socket.off('roundtable:belief-update', onBeliefUpdate);
             socket.off('roundtable:decision', onDecision);
+            socket.off('roundtable:token-usage', onTokenUsage);
         };
     }, [applyEvent, replayFrom, socket]);
 
@@ -469,6 +482,7 @@ export function useRoundtable({ initialSessionId = '' } = {}) {
         beliefUpdates: eventState.beliefUpdates,
         decisions: eventState.decisions,
         processExit: eventState.processExit,
+        tokenUsage: eventState.tokenUsage,
         isSessionRunning,
         clear,
         applyEvent,

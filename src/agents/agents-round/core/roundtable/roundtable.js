@@ -19,6 +19,7 @@ export class Roundtable {
         this.toolbox = toolbox;
         this.onEvent = typeof onEvent === 'function' ? onEvent : null;
         this.auditHistory = [];
+        this.tokenAccumulator = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
         this.structuredContext = new StructuredContext();
         this.beliefTracker = new BeliefTracker({
             agentAccuracy: settings.agent_accuracy ?? {},
@@ -39,6 +40,18 @@ export class Roundtable {
         const providerId = agent?.provider?.providerId;
         if (typeof providerId !== 'string') return '';
         return providerId.trim();
+    }
+
+    _accumulateUsage(usage) {
+        if (!usage || typeof usage !== 'object') return;
+        this.tokenAccumulator.input += Number(usage.input) || 0;
+        this.tokenAccumulator.output += Number(usage.output) || 0;
+        this.tokenAccumulator.cacheRead += Number(usage.cacheRead) || 0;
+        this.tokenAccumulator.cacheWrite += Number(usage.cacheWrite) || 0;
+    }
+
+    _emitTokenUsage() {
+        this._emitEvent('token-usage', { ...this.tokenAccumulator });
     }
 
     _buildAgentSpeakEvent({ phase, turn, agent, text, audited, filtered, target = null, targetTurn = null, relation = null }) {
@@ -188,15 +201,17 @@ export class Roundtable {
                     ? '\n\n# 约束\n- 工具调用次数已到上限，请基于已有“外部工具数据”直接输出最终答案（不要再请求工具）。\n'
                     : '';
 
-            const text = await agent.speak({
+            const { text, usage: speakUsage } = await agent.speak({
                 contextText: `${contextText}${extraLimitNote}`,
                 imagePaths: mergedImages,
                 toolResults,
                 callOptions,
             });
+            this._accumulateUsage(speakUsage);
 
             const parsed = this._extractJsonObject(text);
             if (!this._isToolRequest(parsed)) {
+                this._emitTokenUsage();
                 return { text, toolResults, imagePaths: mergedImages };
             }
 
@@ -263,7 +278,9 @@ export class Roundtable {
         }
 
         // 理论不会走到这里（iter>=maxIters 时已强制要求输出最终答案）
-        const fallbackText = await agent.speak({ contextText, imagePaths: mergedImages, toolResults, callOptions });
+        const { text: fallbackText, usage: fallbackUsage } = await agent.speak({ contextText, imagePaths: mergedImages, toolResults, callOptions });
+        this._accumulateUsage(fallbackUsage);
+        this._emitTokenUsage();
         return { text: fallbackText, toolResults, imagePaths: mergedImages };
     }
 

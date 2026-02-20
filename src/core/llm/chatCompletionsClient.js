@@ -50,6 +50,15 @@ export class ChatCompletionsClient {
         const data = await res.json();
         const content = data?.choices?.[0]?.message?.content;
         if (!content) throw new Error('Provider 响应缺少 message.content');
-        return content;
+
+        const raw = data?.usage ?? {};
+        const usage = {
+            input: Number(raw.prompt_tokens) || 0,
+            output: Number(raw.completion_tokens) || 0,
+            cacheRead: Number(raw.prompt_tokens_details?.cached_tokens) || 0,
+            cacheWrite: 0,
+        };
+
+        return { text: content, usage };
     }
 }

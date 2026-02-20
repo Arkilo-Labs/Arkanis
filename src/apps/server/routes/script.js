@@ -8,6 +8,28 @@ import { readProviderDefinitions } from '../../../core/services/aiProvidersStore
 import { readSecrets } from '../../../core/services/secretsStore.js';
 import { createRedactor } from '../../../core/utils/redactSecrets.js';
 
+const LENS_EVENT_PREFIX = '__LENS_EVENT__';
+
+function createLineBuffer(onLine) {
+    let buffer = '';
+    return {
+        push(chunk) {
+            buffer += chunk.toString();
+            let idx = buffer.indexOf('\n');
+            while (idx >= 0) {
+                onLine(buffer.slice(0, idx).replace(/\r$/, ''));
+                buffer = buffer.slice(idx + 1);
+                idx = buffer.indexOf('\n');
+            }
+        },
+        flush() {
+            const tail = buffer.replace(/\r$/, '');
+            buffer = '';
+            if (tail) onLine(tail);
+        },
+    };
+}
+
 function resolveScriptPath({ projectRoot, script }) {
     return join(projectRoot, 'src', 'agents', 'lens', `${script}.js`);
 }
@@ -70,21 +92,31 @@ export function registerScriptRoutes({ app, io, projectRoot, activeProcesses }) 
             const pid = child.pid;
             if (pid) activeProcesses.set(pid, child);
 
-            child.stdout.on('data', (data) => {
-                const text = data.toString();
+            const handleLine = (streamType) => (line) => {
+                if (streamType === 'stdout' && line.startsWith(LENS_EVENT_PREFIX)) {
+                    const raw = line.slice(LENS_EVENT_PREFIX.length);
+                    let parsed = null;
+                    try { parsed = JSON.parse(raw); } catch { parsed = null; }
+                    if (parsed?.type === 'token-usage' && parsed.payload) {
+                        io.emit(SOCKET_EVENTS.LENS_TOKEN_USAGE, { pid, ...parsed.payload });
+                        return;
+                    }
+                }
+                const text = `${line}\n`;
                 void getRedactor()
-                    .then((redact) => io.emit(SOCKET_EVENTS.LOG, { type: 'stdout', data: redact(text) }))
-                    .catch(() => io.emit(SOCKET_EVENTS.LOG, { type: 'stdout', data: text }));
-            });
+                    .then((redact) => io.emit(SOCKET_EVENTS.LOG, { type: streamType, data: redact(text) }))
+                    .catch(() => io.emit(SOCKET_EVENTS.LOG, { type: streamType, data: text }));
+            };
 
-            child.stderr.on('data', (data) => {
-                const text = data.toString();
-                void getRedactor()
-                    .then((redact) => io.emit(SOCKET_EVENTS.LOG, { type: 'stderr', data: redact(text) }))
-                    .catch(() => io.emit(SOCKET_EVENTS.LOG, { type: 'stderr', data: text }));
-            });
+            const outBuffer = createLineBuffer(handleLine('stdout'));
+            const errBuffer = createLineBuffer(handleLine('stderr'));
+
+            child.stdout.on('data', (chunk) => outBuffer.push(chunk));
+            child.stderr.on('data', (chunk) => errBuffer.push(chunk));
 
             child.on('close', (code) => {
+                outBuffer.flush();
+                errBuffer.flush();
                 io.emit(SOCKET_EVENTS.PROCESS_EXIT, { code, pid });
                 if (pid) activeProcesses.delete(pid);
             });

@@ -21,7 +21,7 @@ export class Agent {
         const usedImages = this.canSeeImages ? imagePaths : [];
         const { retries = 1, timeoutMs = 60000 } = callOptions;
 
-        const text = await withRetries(
+        const result = await withRetries(
             async ({ attempt }) => {
                 if (attempt > 1) this.logger.warn(`[重试] ${this.name} 第 ${attempt} 次调用`);
                 return withTimeout(
@@ -42,6 +42,6 @@ export class Agent {
             },
         );
 
-        return String(text).trim();
+        return { text: String(result.text).trim(), usage: result.usage };
     }
 }
