@@ -168,6 +168,7 @@ export default function RoundtableBattlefield({
     const [impactMap, setImpactMap] = useState({});
     const [hideFinalOverlay, setHideFinalOverlay] = useState(false);
     const [terminalOpen, setTerminalOpen] = useState(false);
+    const [toolTooltipVisible, setToolTooltipVisible] = useState(false);
 
     const normalizedEntries = useMemo(() => normalizeEntries(entries), [entries]);
     const latestBeliefs = useMemo(() => computeLatestBeliefs(beliefUpdates), [beliefUpdates]);
@@ -733,6 +734,19 @@ export default function RoundtableBattlefield({
         return items.slice(-90);
     }, [beliefUpdates, decisions, logs, processExit, toolCalls]);
 
+    const toolCallSummary = useMemo(() => {
+        const countMap = new Map();
+        for (const ev of (Array.isArray(toolCalls) ? toolCalls : [])) {
+            if (String(ev?.stage || '') !== 'request') continue;
+            const calls = Array.isArray(ev?.calls) ? ev.calls : [];
+            for (const c of calls) {
+                const name = String(c?.name || '').trim();
+                if (name) countMap.set(name, (countMap.get(name) || 0) + 1);
+            }
+        }
+        return Array.from(countMap.entries()).sort((a, b) => b[1] - a[1]);
+    }, [toolCalls]);
+
     useEffect(() => {
         const el = traceListRef.current;
         if (!el) return;
@@ -808,10 +822,26 @@ export default function RoundtableBattlefield({
                                     <i className="fas fa-user"></i>
                                     发言 {counts.speaks ?? 0}
                                 </span>
-                                <span className="badge badge-muted">
-                                    <i className="fas fa-wrench"></i>
-                                    工具 {counts.tools ?? 0}
-                                </span>
+                                <div
+                                    className="relative"
+                                    onMouseEnter={() => setToolTooltipVisible(true)}
+                                    onMouseLeave={() => setToolTooltipVisible(false)}
+                                >
+                                    <span className="badge badge-muted cursor-default">
+                                        <i className="fas fa-wrench"></i>
+                                        工具 {counts.tools ?? 0}
+                                    </span>
+                                    {toolTooltipVisible && toolCallSummary.length > 0 ? (
+                                        <div className="rt-bf-tool-tooltip">
+                                            {toolCallSummary.map(([name, count]) => (
+                                                <div key={name} className="rt-bf-tool-tooltip-row">
+                                                    <span className="rt-bf-tool-tooltip-name">{name}</span>
+                                                    <span className="rt-bf-tool-tooltip-count">{count}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : null}
+                                </div>
                                 <span className="badge badge-muted">
                                     <i className="fas fa-chart-line"></i>
                                     信念 {counts.beliefs ?? 0}
@@ -1260,6 +1290,66 @@ export default function RoundtableBattlefield({
                             </span>
                         </div>
 
+                        {battlePhase === 'duel' ? (
+                            <div className="rt-bf-agent-list scrollbar">
+                                {rightAgents.length ? (
+                                    rightAgents.map((agent) => {
+                                        const avatarKey = agent.name;
+                                        const impacted = isImpacted(`agent:${avatarKey}`);
+                                        const badge =
+                                            agent.status === 'speaking'
+                                                ? 'badge-accent'
+                                                : agent.status === 'done'
+                                                  ? 'badge-success'
+                                                  : 'badge-muted';
+                                        const campClass = 'rt-bf-camp-bear';
+
+                                        return (
+                                            <button
+                                                key={agent.name}
+                                                type="button"
+                                                data-side="RIGHT"
+                                                className={[
+                                                    'rt-bf-agent-chip',
+                                                    campClass,
+                                                    impacted ? 'rt-bf-impact' : '',
+                                                ].join(' ')}
+                                                ref={(node) => {
+                                                    const map = agentRefs.current;
+                                                    if (node) map.set(avatarKey, node);
+                                                    else map.delete(avatarKey);
+                                                }}
+                                                onClick={() => {
+                                                    const key = messageItems
+                                                        .slice()
+                                                        .reverse()
+                                                        .find((item) => item.name === agent.name)?.key;
+                                                    if (!key) return;
+                                                    const el = messageRefs.current.get(key);
+                                                    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                                                }}
+                                            >
+                                                <span className={['rt-bf-avatar', campClass].join(' ')}>
+                                                    {agent.name.slice(0, 1).toUpperCase()}
+                                                </span>
+                                                <span className="min-w-0 flex-1 text-left">
+                                                    <span className="rt-bf-agent-name">{agent.name}</span>
+                                                    <span className="rt-bf-agent-role">{agent.role || '未设置角色'}</span>
+                                                </span>
+                                                <span className={['badge', badge].join(' ')}>
+                                                    {agent.direction ? agent.direction : '--'}
+                                                </span>
+                                            </button>
+                                        );
+                                    })
+                                ) : (
+                                    <div className="rt-bf-empty">
+                                        {isRunning ? '等待对抗阵营...' : '暂无阵营数据'}
+                                    </div>
+                                )}
+                            </div>
+                        ) : null}
+
                         <div className="rt-bf-panel rt-bf-panel-logs">
                             <div className="rt-bf-panel-title">
                                 <span>Trace</span>
@@ -1339,66 +1429,6 @@ export default function RoundtableBattlefield({
                                 )}
                             </div>
                         </div>
-
-                        {battlePhase === 'duel' ? (
-                            <div className="rt-bf-agent-list scrollbar">
-                                {rightAgents.length ? (
-                                    rightAgents.map((agent) => {
-                                        const avatarKey = agent.name;
-                                        const impacted = isImpacted(`agent:${avatarKey}`);
-                                        const badge =
-                                            agent.status === 'speaking'
-                                                ? 'badge-accent'
-                                                : agent.status === 'done'
-                                                  ? 'badge-success'
-                                                  : 'badge-muted';
-                                        const campClass = 'rt-bf-camp-bear';
-
-                                        return (
-                                            <button
-                                                key={agent.name}
-                                                type="button"
-                                                data-side="RIGHT"
-                                                className={[
-                                                    'rt-bf-agent-chip',
-                                                    campClass,
-                                                    impacted ? 'rt-bf-impact' : '',
-                                                ].join(' ')}
-                                                ref={(node) => {
-                                                    const map = agentRefs.current;
-                                                    if (node) map.set(avatarKey, node);
-                                                    else map.delete(avatarKey);
-                                                }}
-                                                onClick={() => {
-                                                    const key = messageItems
-                                                        .slice()
-                                                        .reverse()
-                                                        .find((item) => item.name === agent.name)?.key;
-                                                    if (!key) return;
-                                                    const el = messageRefs.current.get(key);
-                                                    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                                                }}
-                                            >
-                                                <span className={['rt-bf-avatar', campClass].join(' ')}>
-                                                    {agent.name.slice(0, 1).toUpperCase()}
-                                                </span>
-                                                <span className="min-w-0 flex-1 text-left">
-                                                    <span className="rt-bf-agent-name">{agent.name}</span>
-                                                    <span className="rt-bf-agent-role">{agent.role || '未设置角色'}</span>
-                                                </span>
-                                                <span className={['badge', badge].join(' ')}>
-                                                    {agent.direction ? agent.direction : '--'}
-                                                </span>
-                                            </button>
-                                        );
-                                    })
-                                ) : (
-                                    <div className="rt-bf-empty">
-                                        {isRunning ? '等待对抗阵营...' : '暂无阵营数据'}
-                                    </div>
-                                )}
-                            </div>
-                        ) : null}
                     </aside>
                 </div>
 
