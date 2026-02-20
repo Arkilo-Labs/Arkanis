@@ -110,7 +110,7 @@ export default function ConsoleShell() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="card p-10 max-w-md text-center space-y-5">
             <div className="w-16 h-16 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center mx-auto">
-              <i className="fas fa-wand-magic-sparkles text-accent text-2xl"></i>
+              <img src="/logo.png" alt="" className="w-9 h-9" />
             </div>
             <h2 className="text-xl font-bold">Welcome to Arkanis</h2>
             <p className="text-sm text-text-muted">
