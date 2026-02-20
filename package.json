@@ -3,6 +3,7 @@
     "version": "1.0.0",
     "description": "Arkanis Lens 交易决策实验环境 - JavaScript 重构版",
     "type": "module",
+    "packageManager": "pnpm@10.29.3",
     "main": "src/index.js",
     "scripts": {
         "main": "node src/agents/lens/main.js",
