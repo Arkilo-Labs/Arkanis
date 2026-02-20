@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { ErrorCode } from '../../agents-team/contracts/errors.js';
+import { SandboxErrorCode as ErrorCode } from './sandboxErrors.js';
 
 import { ExecResultSchema } from './execResult.schema.js';
 import { ExecSpecSchema } from './execSpec.schema.js';

@@ -1,2 +1,2 @@
-export * from '../../../../core/agents-team/contracts/patterns.js';
+export * from '../../../../core/utils/patterns.js';
 

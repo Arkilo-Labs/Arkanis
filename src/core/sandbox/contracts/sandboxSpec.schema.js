@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { z } from 'zod';
 
-import { SAFE_SEGMENT_REGEX } from '../../agents-team/contracts/patterns.js';
+import { SAFE_SEGMENT_REGEX } from '../../utils/patterns.js';
 
 export const SandboxSpecVersion = Object.freeze({
     V1: 1,

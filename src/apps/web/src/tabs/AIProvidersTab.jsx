@@ -378,16 +378,18 @@ function AddProviderModal({ onClose, onCreate }) {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <input
-                    id="add_supportsVision"
-                    type="checkbox"
-                    checked={Boolean(form.supportsVision)}
-                    onChange={(e) => update({ supportsVision: e.target.checked })}
-                    className="rounded border-border-light/20 bg-white/5"
-                  />
-                  <label className="form-label mb-0" htmlFor="add_supportsVision">
-                    Supports Vision
+                <div className="flex items-center">
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.supportsVision)}
+                      onChange={(e) => update({ supportsVision: e.target.checked })}
+                    />
+                    <span className="switch-control">
+                      <span className="switch-track"></span>
+                      <span className="switch-thumb"></span>
+                    </span>
+                    <span className="text-sm text-text-muted">Supports Vision</span>
                   </label>
                 </div>
 
