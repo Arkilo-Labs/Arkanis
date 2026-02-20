@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { mkdir } from 'node:fs/promises';
 import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -53,6 +54,24 @@ function generateSandboxId() {
     return `sb_${randomBytes(6).toString('hex')}`;
 }
 
+/** 检测 bind mount 是否指向宿主 docker/podman socket */
+function isDangerousSocket(sourcePath) {
+    const normalized = sourcePath.replace(/\\/g, '/').toLowerCase();
+    return normalized.endsWith('/docker.sock') || normalized.endsWith('/podman.sock');
+}
+
+/** 校验 mounts 中没有危险 socket，违规时抛出 ERR_SANDBOX_START_FAILED */
+function validateMounts(mounts) {
+    for (const mount of mounts) {
+        if (mount.type === 'bind' && isDangerousSocket(mount.source_path)) {
+            throw makeError(
+                ErrorCode.ERR_SANDBOX_START_FAILED,
+                `禁止挂载 ${mount.source_path}（安全限制）`,
+            );
+        }
+    }
+}
+
 /**
  * OCI sandbox provider。
  *
@@ -71,10 +90,14 @@ export class OciProvider {
 
     /**
      * 创建 sandbox handle（只分配 ID，不启动容器）。
+     * 在此处校验安全限制，避免等到 exec 时才发现。
      */
     async createSandbox(spec) {
         const engineResolved = await resolveEngine(spec.engine ?? this._defaultSpec.engine);
         const runtimeResolved = await resolveRuntime(spec.runtime ?? this._defaultSpec.runtime);
+
+        const mounts = spec.mounts ?? this._defaultSpec.mounts ?? [];
+        validateMounts(mounts);
 
         return {
             provider_id: this._id,
@@ -101,8 +124,15 @@ export class OciProvider {
 
     /**
      * 在 sandbox 内执行命令（每次 = 一个临时容器 + --rm）。
+     * 每次调用对应 commands.jsonl 中的一条记录。
      */
     async exec(handle, execSpec, { artifactsDir }) {
+        if (!artifactsDir) {
+            throw makeError(ErrorCode.ERR_SANDBOX_EXEC_FAILED, 'artifactsDir 不能为空');
+        }
+        // 确保 artifacts 目录在 bind mount 前已存在
+        await mkdir(artifactsDir, { recursive: true });
+
         const { args } = buildRunArgs({ handle, execSpec, artifactsDir });
         const timeoutMs = execSpec.timeout_ms ?? handle.resources?.max_wall_clock_ms ?? 60_000;
 
