@@ -6,7 +6,9 @@ import { ToolGateway } from '../tool/toolGateway.js';
 import { ArtifactRegistry } from '../artifacts/artifactRegistry.js';
 import { RunContext } from './runContext.js';
 
+import { sandboxCreateTool } from '../tool/builtins/sandboxCreate.tool.js';
 import { sandboxExecTool } from '../tool/builtins/sandboxExec.tool.js';
+import { sandboxDestroyTool } from '../tool/builtins/sandboxDestroy.tool.js';
 import { artifactWriteTextTool } from '../tool/builtins/artifactWriteText.tool.js';
 import { artifactHashTool } from '../tool/builtins/artifactHash.tool.js';
 import { mcpCallTool } from '../tool/builtins/mcpCall.tool.js';
@@ -48,7 +50,9 @@ export function createRuntime({
     const policyEngine = new PolicyEngine(policyConfig);
 
     const toolRegistry = new ToolRegistry();
+    toolRegistry.register(sandboxCreateTool);
     toolRegistry.register(sandboxExecTool);
+    toolRegistry.register(sandboxDestroyTool);
     toolRegistry.register(artifactWriteTextTool);
     toolRegistry.register(artifactHashTool);
     toolRegistry.register(mcpCallTool);

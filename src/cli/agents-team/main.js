@@ -152,79 +152,35 @@ sandboxCmd
 
 sandboxCmd
     .command('exec')
-    .description('在 sandbox 内执行命令（支持 --sandbox-id 复用已有容器）')
+    .description('在持久容器内执行命令（直接 docker exec，需先 sandbox create）')
+    .requiredOption('--sandbox-id <id>', 'sandbox ID（由 sandbox create 返回）')
     .requiredOption('--cmd <cmd>', '执行命令')
-    .option('--sandbox-id <id>', '复用已有容器（由 sandbox create 返回）')
     .option('--args <arg>', '命令参数（可重复）', (v, prev) => [...(prev || []), v], [])
-    .option('--network <policy>', 'network 策略：off|restricted|full', 'off')
     .option('--timeout-ms <ms>', '超时毫秒', (v) => parseInt(v, 10), 60000)
-    .action(async (cmdOpts, cmd) => {
-        const runPaths = resolveRunPaths(program);
+    .action(async (cmdOpts) => {
         const configDir = program.opts().configDir;
 
-        // 持久容器模式：直接 docker exec
-        if (cmdOpts.sandboxId) {
-            try {
-                const sandboxConfig = await loadSandboxConfig(configDir);
-                const provider = new OciProvider({ defaultSpec: sandboxConfig });
-
-                const engineResolved = sandboxConfig.engine === 'podman' ? 'podman' : 'docker';
-                const handle = {
-                    sandbox_id: cmdOpts.sandboxId,
-                    engine_resolved: engineResolved,
-                    resources: sandboxConfig.resources ?? {},
-                };
-
-                const execSpec = {
-                    cmd: cmdOpts.cmd,
-                    args: cmdOpts.args,
-                    ...(cmdOpts.timeoutMs ? { timeout_ms: cmdOpts.timeoutMs } : {}),
-                };
-
-                const result = await provider.exec(handle, execSpec);
-                process.stdout.write(JSON.stringify(result, null, 2) + '\n');
-
-                if (!result.ok) process.exitCode = 1;
-            } catch (err) {
-                process.stderr.write(`[agents-team] sandbox exec 失败: ${err.message}\n`);
-                process.exitCode = 1;
-            }
-            return;
-        }
-
-        // 原有模式：通过 toolGateway 走完整流程
         try {
-            const [sandboxConfig, toolsConfig] = await Promise.all([
-                loadSandboxConfig(configDir),
-                loadToolsConfig(configDir),
-            ]);
+            const sandboxConfig = await loadSandboxConfig(configDir);
+            const provider = new OciProvider({ defaultSpec: sandboxConfig });
 
-            const ctx = createRuntime({
-                outputDir: program.opts().outputDir,
-                runId: runPaths.runId,
-                sandboxSpec: { ...sandboxConfig, network_policy: cmdOpts.network },
-                policyConfig: toolsConfig.policy ?? {},
-            });
+            const engineResolved = sandboxConfig.engine === 'podman' ? 'podman' : 'docker';
+            const handle = {
+                sandbox_id: cmdOpts.sandboxId,
+                engine_resolved: engineResolved,
+                resources: sandboxConfig.resources ?? {},
+            };
 
-            await writeRunIndex(ctx.runPaths);
+            const execSpec = {
+                cmd: cmdOpts.cmd,
+                args: cmdOpts.args,
+                ...(cmdOpts.timeoutMs ? { timeout_ms: cmdOpts.timeoutMs } : {}),
+            };
 
-            const result = await ctx.toolGateway.call(
-                'sandbox.exec',
-                {
-                    cmd: cmdOpts.cmd,
-                    args: cmdOpts.args,
-                    network: cmdOpts.network,
-                    timeout_ms: cmdOpts.timeoutMs,
-                },
-                ctx,
-                { run_id: runPaths.runId },
-            );
-
+            const result = await provider.exec(handle, execSpec);
             process.stdout.write(JSON.stringify(result, null, 2) + '\n');
 
-            if (!result.ok || (result.data && !result.data.ok)) {
-                process.exitCode = 1;
-            }
+            if (!result.ok) process.exitCode = 1;
         } catch (err) {
             process.stderr.write(`[agents-team] sandbox exec 失败: ${err.message}\n`);
             process.exitCode = 1;
