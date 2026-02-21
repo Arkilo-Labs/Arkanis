@@ -13,5 +13,6 @@ export function sandboxAuditPaths(runDir, sandboxId) {
         stderrLog: path.join(dir, 'stderr.log'),
         envFingerprintJson: path.join(dir, 'env_fingerprint.json'),
         networkJsonl: path.join(dir, 'network.jsonl'),
+        handleJson: path.join(dir, 'handle.json'),
     };
 }

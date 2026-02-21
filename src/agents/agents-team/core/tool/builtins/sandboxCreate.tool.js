@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { ErrorCode } from '../../contracts/errors.js';
+import { writeHandleJson, writeEnvFingerprint } from '../../../../../core/sandbox/audit/sandboxAuditWriter.js';
 
 const InputSchema = z
     .object({
@@ -13,6 +13,7 @@ const InputSchema = z
 const OutputSchema = z
     .object({
         sandbox_id: z.string(),
+        run_id: z.string(),
         provider_id: z.string(),
         engine_resolved: z.string(),
         runtime_resolved: z.string(),
@@ -52,8 +53,14 @@ export const sandboxCreateTool = {
 
         sandboxRegistry.register(handle);
 
+        // 持久化 handle 供跨进程回读，并写初始 env_fingerprint
+        await writeHandleJson(runPaths.runDir, handle.sandbox_id, handle);
+        const snapshot = await sandboxProvider.snapshot(handle);
+        await writeEnvFingerprint(runPaths.runDir, handle.sandbox_id, snapshot);
+
         return {
             sandbox_id: handle.sandbox_id,
+            run_id: runPaths.runId,
             provider_id: handle.provider_id,
             engine_resolved: handle.engine_resolved,
             runtime_resolved: handle.runtime_resolved,

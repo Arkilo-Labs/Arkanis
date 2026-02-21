@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import { randomBytes } from 'node:crypto';
 
-import { writeCommandRecord, writeOutputLogs, writeEnvFingerprint } from '../../../../../core/sandbox/audit/sandboxAuditWriter.js';
+import {
+    writeCommandRecord,
+    writeOutputLogs,
+    writeEnvFingerprint,
+    loadHandleJson,
+} from '../../../../../core/sandbox/audit/sandboxAuditWriter.js';
 import { ErrorCode } from '../../contracts/errors.js';
 
 const InputSchema = z
@@ -52,7 +57,10 @@ export const sandboxExecTool = {
     async run(ctx, args) {
         const { sandboxProvider, sandboxRegistry, runPaths } = ctx;
 
-        const handle = sandboxRegistry.get(args.sandbox_id);
+        let handle = sandboxRegistry.get(args.sandbox_id);
+        if (!handle) {
+            handle = await loadHandleJson(runPaths.runDir, args.sandbox_id);
+        }
         if (!handle) {
             return {
                 ok: false,
@@ -66,7 +74,7 @@ export const sandboxExecTool = {
                 stderr_bytes: 0,
                 error: {
                     code: ErrorCode.ERR_SANDBOX_NOT_FOUND,
-                    message: `sandbox ${args.sandbox_id} 不在 registry 中`,
+                    message: `sandbox ${args.sandbox_id} 不在 registry 中，且未找到 handle.json`,
                 },
             };
         }

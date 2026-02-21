@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { SandboxErrorCode } from '../../../../../core/sandbox/contracts/sandboxErrors.js';
+import { loadHandleJson } from '../../../../../core/sandbox/audit/sandboxAuditWriter.js';
+import { resolveOciEngine } from '../../../../../core/sandbox/index.js';
 
 const InputSchema = z
     .object({
@@ -26,18 +28,26 @@ export const sandboxDestroyTool = {
     outputSchema: OutputSchema,
 
     async run(ctx, args) {
-        const { sandboxProvider, sandboxRegistry } = ctx;
+        const { sandboxProvider, sandboxRegistry, runPaths } = ctx;
 
-        const handle = sandboxRegistry.get(args.sandbox_id);
+        let handle = sandboxRegistry.get(args.sandbox_id);
         if (!handle) {
-            const err = new Error(`sandbox ${args.sandbox_id} 未在 registry 中找到`);
-            err.code = SandboxErrorCode.ERR_SANDBOX_NOT_FOUND;
-            throw err;
+            handle = await loadHandleJson(runPaths.runDir, args.sandbox_id);
         }
 
-        await sandboxProvider.destroy(handle);
-        sandboxRegistry.remove(args.sandbox_id);
+        if (handle) {
+            await sandboxProvider.destroy(handle);
+        } else {
+            // handle 完全丢失：用默认 engine 做 best-effort rm -f（幂等语义）
+            try {
+                const engineResolved = await resolveOciEngine('auto');
+                await sandboxProvider.destroy({ sandbox_id: args.sandbox_id, engine_resolved: engineResolved });
+            } catch {
+                // 容器可能已不存在，忽略
+            }
+        }
 
+        sandboxRegistry.remove(args.sandbox_id);
         return { sandbox_id: args.sandbox_id, destroyed: true };
     },
 };
