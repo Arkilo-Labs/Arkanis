@@ -20,6 +20,10 @@ const OutputSchema = z
         image: z.string(),
         network_policy: z.string(),
         created_at: z.string(),
+        sandbox_ref: z
+            .object({ provider_id: z.string(), sandbox_id: z.string() })
+            .strict()
+            .optional(),
     })
     .strict();
 
@@ -35,7 +39,17 @@ export const sandboxCreateTool = {
     outputSchema: OutputSchema,
 
     async run(ctx, args) {
-        const { sandboxProvider, sandboxRegistry, runPaths } = ctx;
+        const { sandboxProvider, sandboxRegistry, runPaths, policyEngine } = ctx;
+
+        // sandbox 本身要用网络时，检查系统 policy 是否允许
+        if (args.network && args.network !== 'off') {
+            const check = policyEngine.check({ needs_network: true });
+            if (!check.ok) {
+                const err = new Error(check.error.message);
+                Object.assign(err, check.error);
+                throw err;
+            }
+        }
 
         const spec = {
             engine: 'auto',
@@ -67,6 +81,7 @@ export const sandboxCreateTool = {
             image: handle.image,
             network_policy: handle.network_policy,
             created_at: handle.created_at,
+            sandbox_ref: { provider_id: handle.provider_id, sandbox_id: handle.sandbox_id },
         };
     },
 };

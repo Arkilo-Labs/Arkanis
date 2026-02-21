@@ -13,6 +13,10 @@ const OutputSchema = z
     .object({
         sandbox_id: z.string(),
         destroyed: z.boolean(),
+        sandbox_ref: z
+            .object({ provider_id: z.string(), sandbox_id: z.string() })
+            .strict()
+            .optional(),
     })
     .strict();
 
@@ -48,6 +52,13 @@ export const sandboxDestroyTool = {
         }
 
         sandboxRegistry.remove(args.sandbox_id);
-        return { sandbox_id: args.sandbox_id, destroyed: true };
+        return {
+            sandbox_id: args.sandbox_id,
+            destroyed: true,
+            sandbox_ref: {
+                provider_id: handle?.provider_id ?? 'oci_local',
+                sandbox_id: args.sandbox_id,
+            },
+        };
     },
 };
