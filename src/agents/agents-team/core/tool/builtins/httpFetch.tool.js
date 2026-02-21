@@ -72,7 +72,7 @@ export const httpFetchTool = {
                 body_truncated: false,
                 body_bytes: 0,
                 error: {
-                    code: isTimeout ? ErrorCode.ERR_TOOL_EXEC_FAILED : ErrorCode.ERR_TOOL_EXEC_FAILED,
+                    code: ErrorCode.ERR_TOOL_EXEC_FAILED,
                     message: isTimeout ? `请求超时（${args.timeout_ms}ms）` : err.message,
                 },
             };

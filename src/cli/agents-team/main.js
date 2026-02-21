@@ -7,7 +7,18 @@ import { fileURLToPath } from 'node:url';
 import { createRunPaths, formatUtcRunId } from '../../agents/agents-team/core/outputs/runPaths.js';
 import { writeRunIndex } from '../../agents/agents-team/core/outputs/runIndexWriter.js';
 import { createRuntime } from '../../agents/agents-team/core/runtime/createRuntime.js';
-import { OciProvider, SandboxRegistry, registerCleanupHooks, resolveOciEngine } from '../../core/sandbox/index.js';
+import { randomBytes } from 'node:crypto';
+import {
+    OciProvider,
+    SandboxRegistry,
+    registerCleanupHooks,
+    resolveOciEngine,
+    writeHandleJson,
+    writeEnvFingerprint,
+    writeCommandRecord,
+    writeOutputLogs,
+    loadHandleJson,
+} from '../../core/sandbox/index.js';
 
 const DEFAULT_SKILLS_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../agents/agents-team/skills');
 
@@ -123,6 +134,12 @@ sandboxCmd
             );
 
             registry.register(handle);
+
+            // 持久化 handle 供后续 exec/destroy 子命令跨进程使用
+            await writeHandleJson(runPaths.runDir, handle.sandbox_id, handle);
+            const snapshot = await provider.snapshot(handle);
+            await writeEnvFingerprint(runPaths.runDir, handle.sandbox_id, snapshot);
+
             // 正常退出时移除钩子，容器持续运行
             detach();
 
@@ -176,28 +193,70 @@ sandboxCmd
     .option('--args <arg>', '命令参数（可重复）', (v, prev) => [...(prev || []), v], [])
     .option('--timeout-ms <ms>', '超时毫秒', (v) => parseInt(v, 10), 60000)
     .action(async (cmdOpts) => {
+        const runPaths = resolveRunPaths(program);
         const configDir = program.opts().configDir;
 
         try {
             const sandboxConfig = await loadSandboxConfig(configDir);
             const provider = new OciProvider({ defaultSpec: sandboxConfig });
 
-            const engineResolved = await resolveOciEngine(sandboxConfig.engine ?? 'auto');
-            const handle = {
-                sandbox_id: cmdOpts.sandboxId,
-                engine_resolved: engineResolved,
-                resources: sandboxConfig.resources ?? {},
-            };
+            // 优先从磁盘恢复完整 handle（由 sandbox create 写入）
+            let handle = await loadHandleJson(runPaths.runDir, cmdOpts.sandboxId);
+            if (!handle) {
+                const engineResolved = await resolveOciEngine(sandboxConfig.engine ?? 'auto');
+                handle = {
+                    sandbox_id: cmdOpts.sandboxId,
+                    provider_id: 'oci_local',
+                    engine_resolved: engineResolved,
+                    workspace_access: sandboxConfig.workspace_access ?? 'none',
+                    network_policy: sandboxConfig.network_policy ?? 'off',
+                    resources: sandboxConfig.resources ?? {},
+                };
+            }
 
             const execSpec = {
                 cmd: cmdOpts.cmd,
                 args: cmdOpts.args,
-                ...(cmdOpts.timeoutMs ? { timeout_ms: cmdOpts.timeoutMs } : {}),
+                timeout_ms: cmdOpts.timeoutMs,
             };
 
             const result = await provider.exec(handle, execSpec);
-            process.stdout.write(JSON.stringify(result, null, 2) + '\n');
 
+            // 写完整审计链路（与 tool call 路径一致）
+            const correlationId = `cmd_${randomBytes(4).toString('hex')}`;
+            await writeCommandRecord(runPaths.runDir, handle.sandbox_id, {
+                run_id: runPaths.runId,
+                sandbox_id: handle.sandbox_id,
+                provider_id: handle.provider_id ?? 'oci_local',
+                correlation_id: correlationId,
+                cmd: cmdOpts.cmd,
+                args: cmdOpts.args,
+                started_at: result.started_at,
+                ended_at: result.ended_at,
+                duration_ms: result.duration_ms,
+                timeout_ms: cmdOpts.timeoutMs,
+                timed_out: result.timed_out,
+                exit_code: result.exit_code ?? null,
+                signal: result.signal ?? null,
+                workspace_access: handle.workspace_access ?? 'none',
+                network_policy: handle.network_policy ?? 'off',
+                stdout_bytes: result.stdout_bytes,
+                stderr_bytes: result.stderr_bytes,
+                stdout_truncated: result.stdout_truncated,
+                stderr_truncated: result.stderr_truncated,
+                stdout_max_bytes: result.stdout_max_bytes,
+                stderr_max_bytes: result.stderr_max_bytes,
+                ok: result.ok,
+                ...(result.ok ? {} : { error: result.error }),
+            });
+            await writeOutputLogs(runPaths.runDir, handle.sandbox_id, {
+                stdout: result.stdout,
+                stderr: result.stderr,
+            });
+            const snapshot = await provider.snapshot(handle);
+            await writeEnvFingerprint(runPaths.runDir, handle.sandbox_id, snapshot);
+
+            process.stdout.write(JSON.stringify(result, null, 2) + '\n');
             if (!result.ok) process.exitCode = 1;
         } catch (err) {
             process.stderr.write(`[agents-team] sandbox exec 失败: ${err.message}\n`);
@@ -237,6 +296,7 @@ toolCmd
                 runId: runPaths.runId,
                 sandboxSpec: sandboxConfig,
                 policyConfig: toolsConfig.policy ?? {},
+                allowedTools: toolsConfig.allowed_tools ?? null,
                 enableCleanupHooks: true,
             });
 
@@ -271,6 +331,7 @@ toolCmd
             const ctx = createRuntime({
                 sandboxSpec: sandboxConfig,
                 policyConfig: toolsConfig.policy ?? {},
+                allowedTools: toolsConfig.allowed_tools ?? null,
             });
 
             process.stdout.write(JSON.stringify(ctx.toolRegistry.list(), null, 2) + '\n');
@@ -312,6 +373,7 @@ skillCmd
                 runId: runPaths.runId,
                 sandboxSpec: sandboxConfig,
                 policyConfig: toolsConfig.policy ?? {},
+                allowedTools: toolsConfig.allowed_tools ?? null,
                 skillsConfig,
                 skillsDir: DEFAULT_SKILLS_DIR,
                 enableCleanupHooks: true,

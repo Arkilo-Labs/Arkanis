@@ -38,7 +38,6 @@ test('DenyReason 集合冻结且不可变', () => {
         'NETWORK_DISABLED',
         'SECRETS_FORBIDDEN',
         'SKILL_NOT_WHITELISTED',
-        'WORKSPACE_ACCESS_FORBIDDEN',
         'WORKSPACE_WRITE_FORBIDDEN',
     ].sort();
 

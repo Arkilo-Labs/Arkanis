@@ -54,7 +54,7 @@ export const sandboxExecTool = {
     inputSchema: InputSchema,
     outputSchema: OutputSchema,
 
-    async run(ctx, args) {
+    async run(ctx, args, { correlationId: parentCorrelationId } = {}) {
         const { sandboxProvider, sandboxRegistry, runPaths } = ctx;
 
         let handle = sandboxRegistry.get(args.sandbox_id);
@@ -88,13 +88,14 @@ export const sandboxExecTool = {
 
         const result = await sandboxProvider.exec(handle, execSpec);
 
-        // 写 sandbox 审计
+        // 写 sandbox 审计（correlation_id 关联到上层 tool_calls.jsonl 的记录）
         const correlationId = `cmd_${randomBytes(4).toString('hex')}`;
         await writeCommandRecord(runPaths.runDir, handle.sandbox_id, {
             run_id: runPaths.runId,
             sandbox_id: handle.sandbox_id,
             provider_id: handle.provider_id,
             correlation_id: correlationId,
+            ...(parentCorrelationId ? { parent_correlation_id: parentCorrelationId } : {}),
             cmd: args.cmd,
             args: args.args ?? [],
             ...(args.cwd ? { cwd: args.cwd } : {}),

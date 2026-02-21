@@ -43,6 +43,7 @@ export function createRuntime({
     skillsDir = null,
     mcpRegistry = null,
     enableCleanupHooks = false,
+    allowedTools = null,
 } = {}) {
     const runPaths = createRunPaths({
         outputDir: outputDir ?? './outputs/agents_team',
@@ -76,6 +77,7 @@ export function createRuntime({
         toolRegistry,
         policyEngine,
         toolCallsJsonlPath: runPaths.toolCallsJsonlPath,
+        allowedTools,
     });
 
     const skillRegistry = new SkillRegistry();

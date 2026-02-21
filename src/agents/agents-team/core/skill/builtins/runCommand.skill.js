@@ -65,7 +65,7 @@ export async function runCommand(ctx, inputs, { correlationId, runId }) {
     });
     toolCorrelationIds.push(execCid);
 
-    // 3. 按需销毁 sandbox
+    // 3. 按需销毁 sandbox（无论 exec 成败都清理，避免泄漏）
     if (autoSandbox) {
         const destroyCid = `${correlationId}_destroy`;
         await toolGateway.call(
@@ -77,9 +77,16 @@ export async function runCommand(ctx, inputs, { correlationId, runId }) {
         toolCorrelationIds.push(destroyCid);
     }
 
-    // 4. 截断后写 artifact
-    const stdoutRaw = execResult.ok ? (execResult.data.stdout_preview ?? '') : '';
-    const stderrRaw = execResult.ok ? (execResult.data.stderr_preview ?? '') : '';
+    // 4. exec 失败则提前返回（sandbox 已清理）
+    if (!execResult.ok) {
+        const e = new Error(execResult.error?.message ?? 'sandbox.exec 失败');
+        e.code = execResult.error?.code ?? ErrorCode.ERR_SANDBOX_EXEC_FAILED;
+        throw e;
+    }
+
+    // 5. 截断后写 artifact
+    const stdoutRaw = execResult.data.stdout_preview ?? '';
+    const stderrRaw = execResult.data.stderr_preview ?? '';
     const stdoutContent = truncateUtf8(stdoutRaw, MAX_OUTPUT_BYTES);
     const stderrContent = truncateUtf8(stderrRaw, MAX_OUTPUT_BYTES);
 

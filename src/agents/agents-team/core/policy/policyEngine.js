@@ -18,7 +18,7 @@ export class PolicyEngine {
      */
     evaluate(permissions = {}) {
         if (permissions.needs_network) {
-            if (this._policy.network === 'off') {
+            if (this._policy.network === 'off' || this._policy.network === 'restricted') {
                 return deny(DenyReason.NETWORK_DISABLED);
             }
         }
