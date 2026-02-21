@@ -26,6 +26,9 @@ export const CONTAINER_TMP_PATH = '/tmp';
 export function buildCreateArgs({ handle, artifactsDir }) {
     const args = ['run', '-d', '--name', handle.sandbox_id];
 
+    // OrbStack / Docker Desktop 按 compose project 折叠，把所有 sandbox 归到同一组
+    args.push('--label', 'com.docker.compose.project=arkanis-sandbox');
+
     const runtimeNote = applyRuntime(args, handle);
     applyHardening(args);
     applyNetwork(args, handle.network_policy);

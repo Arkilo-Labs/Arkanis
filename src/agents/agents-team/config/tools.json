@@ -1,10 +1,16 @@
 {
     "version": 1,
     "allowed_tools": [
+        "sandbox.create",
         "sandbox.exec",
+        "sandbox.destroy",
         "artifact.write_text",
         "artifact.hash",
-        "mcp.call"
+        "mcp.call",
+        "http.fetch",
+        "file.read",
+        "file.write",
+        "file.patch"
     ],
     "policy": {
         "network": "off",

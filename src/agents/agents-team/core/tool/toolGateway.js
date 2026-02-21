@@ -111,9 +111,11 @@ export class ToolGateway {
             runResult = await tool.run(ctx, args);
         } catch (err) {
             const endedAt = nowIso();
+            const knownCode = Object.values(ErrorCode).includes(err?.code);
             const error = {
-                code: ErrorCode.ERR_TOOL_EXEC_FAILED,
-                message: `tool "${toolName}" 执行失败: ${err.message}`,
+                code: knownCode ? err.code : ErrorCode.ERR_TOOL_EXEC_FAILED,
+                message: knownCode ? err.message : `tool "${toolName}" 执行失败: ${err.message}`,
+                ...(err?.deny_reason ? { deny_reason: err.deny_reason } : {}),
             };
             const record = buildAuditRecord({
                 runId,

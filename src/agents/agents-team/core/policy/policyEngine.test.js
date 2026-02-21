@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { PolicyEngine } from './policyEngine.js';
+import { PolicyConfigSchema } from './policyConfig.schema.js';
 import { DenyReason } from '../contracts/denyReasons.js';
 import { ErrorCode } from '../contracts/errors.js';
 
@@ -71,4 +72,26 @@ test('PolicyEngine: workspace=read_only 仍拒绝 write', () => {
     const result = engine.evaluate({ needs_workspace_write: true });
     assert.equal(result.decision, 'deny');
     assert.equal(result.reason, DenyReason.WORKSPACE_WRITE_FORBIDDEN);
+});
+
+// ──────────────────────────────────────────────
+// PolicyConfigSchema
+
+test('PolicyConfigSchema: 空对象解析返回全默认值', () => {
+    const result = PolicyConfigSchema.parse({});
+    assert.deepEqual(result, {
+        network: 'off',
+        workspace_access: 'none',
+        host_exec: 'deny',
+        secrets: 'deny',
+    });
+});
+
+test('PolicyConfigSchema: 拒绝未知字段（strict）', () => {
+    assert.throws(() => PolicyConfigSchema.parse({ unknown_key: 'x' }));
+});
+
+test('PolicyConfigSchema: 拒绝非法枚举值', () => {
+    assert.throws(() => PolicyConfigSchema.parse({ network: 'all' }));
+    assert.throws(() => PolicyConfigSchema.parse({ host_exec: 'maybe' }));
 });

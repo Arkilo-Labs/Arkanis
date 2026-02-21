@@ -1,26 +1,13 @@
 import { DenyReason } from '../contracts/denyReasons.js';
 import { ErrorCode } from '../contracts/errors.js';
-
-/**
- * PolicyConfig 字段含义：
- *   network          : 'off' | 'restricted' | 'full'  默认 'off'
- *   workspace_access : 'none' | 'read_only' | 'read_write'  默认 'none'
- *   host_exec        : 'deny' | 'allow'  默认 'deny'
- *   secrets          : 'deny' | 'allow'  默认 'deny'
- */
-const DEFAULT_POLICY = Object.freeze({
-    network: 'off',
-    workspace_access: 'none',
-    host_exec: 'deny',
-    secrets: 'deny',
-});
+import { PolicyConfigSchema } from './policyConfig.schema.js';
 
 export class PolicyEngine {
     /**
-     * @param {object} [config]  PolicyConfig，未设置的字段回退到 DEFAULT_POLICY
+     * @param {object} [config]  PolicyConfig，字段缺失时使用 schema 默认值
      */
     constructor(config = {}) {
-        this._policy = { ...DEFAULT_POLICY, ...config };
+        this._policy = PolicyConfigSchema.parse(config);
     }
 
     /**

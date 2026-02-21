@@ -133,6 +133,32 @@ test('ToolGateway: run 抛出时返回 ERR_TOOL_EXEC_FAILED', async () => {
     assert.equal(result.error.code, ErrorCode.ERR_TOOL_EXEC_FAILED);
 });
 
+test('ToolGateway: run 抛出已知错误码时保留该 code', async () => {
+    const { gateway, auditPath, runId } = await makeGateway(
+        {},
+        {
+            run: async () => {
+                const err = new Error('policy denied: NETWORK_DISABLED');
+                err.code = ErrorCode.ERR_POLICY_DENIED;
+                err.deny_reason = 'NETWORK_DISABLED';
+                throw err;
+            },
+        },
+    );
+
+    const result = await gateway.call('test.echo', { value: 'x' }, {}, { run_id: runId });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, ErrorCode.ERR_POLICY_DENIED);
+    assert.equal(result.error.deny_reason, 'NETWORK_DISABLED');
+    assert.equal(result.error.message, 'policy denied: NETWORK_DISABLED');
+
+    const raw = await readFile(auditPath, 'utf-8');
+    const record = JSON.parse(splitJsonl(raw)[0]);
+    assert.equal(record.ok, false);
+    assert.equal(record.error.code, ErrorCode.ERR_POLICY_DENIED);
+});
+
 test('ToolGateway: outputSchema 校验失败时返回 ERR_TOOL_EXEC_FAILED', async () => {
     const badTool = {
         name: 'test.badout',
