@@ -13,7 +13,7 @@
         "secrets": "deny"
     },
     "inputs": {
-        "sandbox_id": "string",
+        "sandbox_id": "string?",
         "cmd": "string",
         "args": "string[]",
         "cwd": "string?",

@@ -18,6 +18,7 @@ import { httpFetchTool } from '../tool/builtins/httpFetch.tool.js';
 import { fileReadTool } from '../tool/builtins/fileRead.tool.js';
 import { fileWriteTool } from '../tool/builtins/fileWrite.tool.js';
 import { filePatchTool } from '../tool/builtins/filePatch.tool.js';
+import { runCommand } from '../skill/builtins/runCommand.skill.js';
 
 /**
  * Composition root：装配一次 run 所需的全部依赖并返回 RunContext。
@@ -78,6 +79,7 @@ export function createRuntime({
     });
 
     const skillRegistry = new SkillRegistry();
+    skillRegistry.registerBuiltin('runCommand', runCommand);
 
     const skillRunner = new SkillRunner({
         skillRegistry,
