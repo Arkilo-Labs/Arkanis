@@ -13,6 +13,9 @@ import { artifactWriteTextTool } from '../tool/builtins/artifactWriteText.tool.j
 import { artifactHashTool } from '../tool/builtins/artifactHash.tool.js';
 import { mcpCallTool } from '../tool/builtins/mcpCall.tool.js';
 import { httpFetchTool } from '../tool/builtins/httpFetch.tool.js';
+import { fileReadTool } from '../tool/builtins/fileRead.tool.js';
+import { fileWriteTool } from '../tool/builtins/fileWrite.tool.js';
+import { filePatchTool } from '../tool/builtins/filePatch.tool.js';
 
 /**
  * Composition root：装配一次 run 所需的全部依赖并返回 RunContext。
@@ -58,6 +61,9 @@ export function createRuntime({
     toolRegistry.register(artifactHashTool);
     toolRegistry.register(mcpCallTool);
     toolRegistry.register(httpFetchTool);
+    toolRegistry.register(fileReadTool);
+    toolRegistry.register(fileWriteTool);
+    toolRegistry.register(filePatchTool);
 
     const toolGateway = new ToolGateway({
         toolRegistry,

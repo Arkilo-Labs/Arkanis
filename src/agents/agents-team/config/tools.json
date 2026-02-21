@@ -7,7 +7,10 @@
         "artifact.write_text",
         "artifact.hash",
         "mcp.call",
-        "http.fetch"
+        "http.fetch",
+        "file.read",
+        "file.write",
+        "file.patch"
     ],
     "policy": {
         "network": "off",
