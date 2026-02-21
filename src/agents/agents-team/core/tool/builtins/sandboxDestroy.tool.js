@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SandboxErrorCode } from '../../../../../core/sandbox/contracts/sandboxErrors.js';
 
 const InputSchema = z
     .object({
@@ -29,7 +30,9 @@ export const sandboxDestroyTool = {
 
         const handle = sandboxRegistry.get(args.sandbox_id);
         if (!handle) {
-            return { sandbox_id: args.sandbox_id, destroyed: false };
+            const err = new Error(`sandbox ${args.sandbox_id} 未在 registry 中找到`);
+            err.code = SandboxErrorCode.ERR_SANDBOX_NOT_FOUND;
+            throw err;
         }
 
         await sandboxProvider.destroy(handle);

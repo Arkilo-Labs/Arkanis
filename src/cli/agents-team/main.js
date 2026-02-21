@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createRunPaths, formatUtcRunId } from '../../agents/agents-team/core/outputs/runPaths.js';
 import { writeRunIndex } from '../../agents/agents-team/core/outputs/runIndexWriter.js';
 import { createRuntime } from '../../agents/agents-team/core/runtime/createRuntime.js';
-import { OciProvider } from '../../core/sandbox/index.js';
+import { OciProvider, SandboxRegistry, registerCleanupHooks, resolveOciEngine } from '../../core/sandbox/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -95,6 +95,9 @@ sandboxCmd
         try {
             const sandboxConfig = await loadSandboxConfig(configDir);
             const provider = new OciProvider({ defaultSpec: sandboxConfig });
+            const registry = new SandboxRegistry();
+            // 仅处理信号清理；正常退出前会 detach，容器留存
+            const { detach } = registerCleanupHooks(registry, provider);
 
             const handle = await provider.createSandbox(
                 {
@@ -107,6 +110,10 @@ sandboxCmd
                 },
                 { artifactsDir: runPaths.artifactsDir },
             );
+
+            registry.register(handle);
+            // 正常退出时移除钩子，容器持续运行
+            detach();
 
             process.stdout.write(JSON.stringify({
                 sandbox_id: handle.sandbox_id,
@@ -134,7 +141,7 @@ sandboxCmd
             const sandboxConfig = await loadSandboxConfig(configDir);
             const provider = new OciProvider({ defaultSpec: sandboxConfig });
 
-            const engineResolved = sandboxConfig.engine === 'podman' ? 'podman' : 'docker';
+            const engineResolved = await resolveOciEngine(sandboxConfig.engine ?? 'auto');
             await provider.destroy({
                 sandbox_id: cmdOpts.sandboxId,
                 engine_resolved: engineResolved,
@@ -164,7 +171,7 @@ sandboxCmd
             const sandboxConfig = await loadSandboxConfig(configDir);
             const provider = new OciProvider({ defaultSpec: sandboxConfig });
 
-            const engineResolved = sandboxConfig.engine === 'podman' ? 'podman' : 'docker';
+            const engineResolved = await resolveOciEngine(sandboxConfig.engine ?? 'auto');
             const handle = {
                 sandbox_id: cmdOpts.sandboxId,
                 engine_resolved: engineResolved,
@@ -219,6 +226,7 @@ toolCmd
                 runId: runPaths.runId,
                 sandboxSpec: sandboxConfig,
                 policyConfig: toolsConfig.policy ?? {},
+                enableCleanupHooks: true,
             });
 
             await writeRunIndex(ctx.runPaths);

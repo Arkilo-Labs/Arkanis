@@ -15,6 +15,14 @@ const execFileAsync = promisify(execFile);
 
 const PROVIDER_ID = 'oci_local';
 
+/**
+ * 解析 engine：auto → docker → podman。
+ * 导出供外部（CLI 等）在不启动容器的情况下做 engine 检测。
+ */
+export async function resolveOciEngine(engine) {
+    return resolveEngine(engine);
+}
+
 /** 解析 engine：auto → docker → podman */
 async function resolveEngine(engine) {
     if (engine === SandboxEngine.DOCKER || engine === undefined) return SandboxEngineResolved.DOCKER;

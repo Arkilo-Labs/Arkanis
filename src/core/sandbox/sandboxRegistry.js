@@ -111,21 +111,19 @@ export function registerCleanupHooks(registry, provider) {
         process.exit(1);
     }
 
-    function onExit() {
-        if (!cleaned && registry.size > 0) {
-            process.stderr.write(`[sandbox-cleanup] 进程退出时仍有 ${registry.size} 个容器未清理\n`);
-        }
+    async function onBeforeExit() {
+        await cleanup();
     }
 
     process.on('SIGTERM', onSignal);
     process.on('SIGINT', onSignal);
-    process.on('exit', onExit);
+    process.on('beforeExit', onBeforeExit);
 
     return {
         detach() {
             process.removeListener('SIGTERM', onSignal);
             process.removeListener('SIGINT', onSignal);
-            process.removeListener('exit', onExit);
+            process.removeListener('beforeExit', onBeforeExit);
         },
     };
 }
