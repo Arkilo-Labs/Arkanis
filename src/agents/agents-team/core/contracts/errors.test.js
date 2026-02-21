@@ -21,6 +21,12 @@ test('ErrorCode 集合冻结且不可变', () => {
         'ERR_SKILL_VALIDATION_FAILED',
         'ERR_TOOL_EXEC_FAILED',
         'ERR_TOOL_NOT_FOUND',
+        'ERR_TASK_NOT_FOUND',
+        'ERR_LEASE_CONFLICT',
+        'ERR_LEASE_EXPIRED',
+        'ERR_TASK_DEPENDENCY_NOT_MET',
+        'ERR_LOCK_CONFLICT',
+        'ERR_SESSION_INVALID_STATE',
     ].sort();
 
     assert.deepEqual(values, expected);
@@ -39,6 +45,10 @@ test('DenyReason 集合冻结且不可变', () => {
         'SECRETS_FORBIDDEN',
         'SKILL_NOT_WHITELISTED',
         'WORKSPACE_WRITE_FORBIDDEN',
+        'TASK_WRONG_STATE',
+        'TASK_DEPENDENCY_NOT_MET',
+        'LEASE_REQUIRED',
+        'LOCK_HELD_BY_OTHER',
     ].sort();
 
     assert.deepEqual(values, expected);
