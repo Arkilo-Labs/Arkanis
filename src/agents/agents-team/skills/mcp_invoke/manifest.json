@@ -1,0 +1,23 @@
+{
+    "id": "mcp_invoke",
+    "version": "0.1.0",
+    "description": "通过 MCP 调用外部工具，把 result 落为 artifact",
+    "implementation": {
+        "type": "builtin",
+        "entry": "mcpInvoke"
+    },
+    "permissions": {
+        "network": "off",
+        "workspace_access": "none",
+        "host_exec": "deny",
+        "secrets": "deny"
+    },
+    "inputs": {
+        "server": "string",
+        "method": "string",
+        "params": "object?"
+    },
+    "outputs": {
+        "result_artifact_id": "string"
+    }
+}
