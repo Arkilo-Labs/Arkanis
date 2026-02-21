@@ -4,6 +4,8 @@ import { PolicyEngine } from '../policy/policyEngine.js';
 import { ToolRegistry } from '../tool/toolRegistry.js';
 import { ToolGateway } from '../tool/toolGateway.js';
 import { ArtifactRegistry } from '../artifacts/artifactRegistry.js';
+import { SkillRegistry } from '../skill/skillRegistry.js';
+import { SkillRunner } from '../skill/skillRunner.js';
 import { RunContext } from './runContext.js';
 
 import { sandboxCreateTool } from '../tool/builtins/sandboxCreate.tool.js';
@@ -25,6 +27,8 @@ import { filePatchTool } from '../tool/builtins/filePatch.tool.js';
  * @param {string} [opts.runId]
  * @param {object} [opts.sandboxSpec]  默认 SandboxSpec 覆盖项
  * @param {object} [opts.policyConfig]  PolicyEngine 配置覆盖项
+ * @param {object} [opts.skillsConfig]  skills 白名单配置，来自 skills.json
+ * @param {string} [opts.skillsDir]  skills manifests 根目录（绝对路径）
  * @param {object|null} [opts.mcpRegistry]  可选，P17 阶段注入
  * @param {boolean} [opts.enableCleanupHooks]  是否注册进程退出自动 cleanup（长生命周期场景开启）
  * @returns {RunContext}
@@ -34,6 +38,8 @@ export function createRuntime({
     runId,
     sandboxSpec = {},
     policyConfig = {},
+    skillsConfig = {},
+    skillsDir = null,
     mcpRegistry = null,
     enableCleanupHooks = false,
 } = {}) {
@@ -71,6 +77,15 @@ export function createRuntime({
         toolCallsJsonlPath: runPaths.toolCallsJsonlPath,
     });
 
+    const skillRegistry = new SkillRegistry();
+
+    const skillRunner = new SkillRunner({
+        skillRegistry,
+        skillRunsJsonlPath: runPaths.skillRunsJsonlPath,
+        skillsDir: skillsDir ?? null,
+        allowedSkills: skillsConfig?.allowed_skills ?? [],
+    });
+
     return new RunContext({
         runPaths,
         sandboxProvider,
@@ -79,6 +94,8 @@ export function createRuntime({
         policyEngine,
         toolRegistry,
         toolGateway,
+        skillRegistry,
+        skillRunner,
         mcpRegistry,
     });
 }

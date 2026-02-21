@@ -9,6 +9,8 @@ import { writeRunIndex } from '../../agents/agents-team/core/outputs/runIndexWri
 import { createRuntime } from '../../agents/agents-team/core/runtime/createRuntime.js';
 import { OciProvider, SandboxRegistry, registerCleanupHooks, resolveOciEngine } from '../../core/sandbox/index.js';
 
+const DEFAULT_SKILLS_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../agents/agents-team/skills');
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -42,6 +44,15 @@ async function loadSandboxConfig(configDir) {
         return JSON.parse(raw);
     } catch {
         return {};
+    }
+}
+
+async function loadSkillsConfig(configDir) {
+    try {
+        const raw = await readFile(join(configDir, 'skills.json'), 'utf-8');
+        return JSON.parse(raw);
+    } catch {
+        return { allowed_skills: [] };
     }
 }
 
@@ -276,9 +287,65 @@ skillCmd
     .command('run <skill_id>')
     .description('通过 SkillRunner 执行指定 skill')
     .requiredOption('--json <inputJson>', '输入 JSON 字符串')
-    .action(() => {
-        process.stderr.write('[agents-team] 此子命令将在 P16 阶段实现\n');
-        process.exitCode = 1;
+    .action(async (skillId, cmdOpts) => {
+        const runPaths = resolveRunPaths(program);
+        const configDir = program.opts().configDir;
+
+        let inputs;
+        try {
+            inputs = JSON.parse(cmdOpts.json);
+        } catch {
+            process.stderr.write('[agents-team] --json 参数不是合法 JSON\n');
+            process.exitCode = 1;
+            return;
+        }
+
+        try {
+            const [sandboxConfig, toolsConfig, skillsConfig] = await Promise.all([
+                loadSandboxConfig(configDir),
+                loadToolsConfig(configDir),
+                loadSkillsConfig(configDir),
+            ]);
+
+            const ctx = createRuntime({
+                outputDir: program.opts().outputDir,
+                runId: runPaths.runId,
+                sandboxSpec: sandboxConfig,
+                policyConfig: toolsConfig.policy ?? {},
+                skillsConfig,
+                skillsDir: DEFAULT_SKILLS_DIR,
+                enableCleanupHooks: true,
+            });
+
+            await writeRunIndex(ctx.runPaths);
+
+            const result = await ctx.skillRunner.run(skillId, inputs, ctx, {
+                run_id: runPaths.runId,
+            });
+
+            process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+
+            if (!result.ok) {
+                process.exitCode = 1;
+            }
+        } catch (err) {
+            process.stderr.write(`[agents-team] skill run 失败: ${err.message}\n`);
+            process.exitCode = 1;
+        }
+    });
+
+skillCmd
+    .command('list')
+    .description('列出白名单中的 skill')
+    .action(async () => {
+        const configDir = program.opts().configDir;
+        try {
+            const skillsConfig = await loadSkillsConfig(configDir);
+            process.stdout.write(JSON.stringify(skillsConfig.allowed_skills ?? [], null, 2) + '\n');
+        } catch (err) {
+            process.stderr.write(`[agents-team] skill list 失败: ${err.message}\n`);
+            process.exitCode = 1;
+        }
     });
 
 // ── mcp ───────────────────────────────────────────
