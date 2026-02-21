@@ -7,19 +7,21 @@ import { nowIso, durationMs } from '../../../../core/sandbox/utils/clock.js';
 /**
  * ToolGateway — 工具调用的统一入口。
  *
- * 流程：inputSchema 校验 → PolicyEngine → run → outputSchema 校验 → 写审计
+ * 流程：allowlist 检查 → inputSchema 校验 → PolicyEngine → run → outputSchema 校验 → 写审计
  * deny 时仍写审计（ok=false）。
  *
  * @param {object} deps
  * @param {import('./toolRegistry.js').ToolRegistry} deps.toolRegistry
  * @param {import('../policy/policyEngine.js').PolicyEngine} deps.policyEngine
  * @param {string} deps.toolCallsJsonlPath  绝对路径
+ * @param {string[]|null} [deps.allowedTools]  工具白名单；null 表示不限制
  */
 export class ToolGateway {
-    constructor({ toolRegistry, policyEngine, toolCallsJsonlPath }) {
+    constructor({ toolRegistry, policyEngine, toolCallsJsonlPath, allowedTools = null }) {
         this._registry = toolRegistry;
         this._policy = policyEngine;
         this._auditPath = toolCallsJsonlPath;
+        this._allowedTools = allowedTools ? new Set(allowedTools) : null;
     }
 
     /**
@@ -38,6 +40,28 @@ export class ToolGateway {
         const startedAt = nowIso();
         const correlationId = callMeta.correlation_id ?? `tc_${randomBytes(6).toString('hex')}`;
         const runId = callMeta.run_id ?? ctx?.runPaths?.runId ?? 'unknown';
+
+        // 0. allowlist 检查（configured 时才生效）
+        if (this._allowedTools && !this._allowedTools.has(toolName)) {
+            const endedAt = nowIso();
+            const error = {
+                code: ErrorCode.ERR_TOOL_NOT_FOUND,
+                message: `tool "${toolName}" 不在 allowed_tools 列表中`,
+            };
+            const record = buildAuditRecord({
+                runId,
+                correlationId,
+                parentCorrelationId: callMeta.parent_correlation_id,
+                toolName,
+                rawArgs,
+                startedAt,
+                endedAt,
+                ok: false,
+                error,
+            });
+            await this._writeAudit(record);
+            return { ok: false, error };
+        }
 
         // 1. tool 查找
         let tool;
@@ -105,10 +129,10 @@ export class ToolGateway {
             return { ok: false, error: policyCheck.error };
         }
 
-        // 4. 执行 tool
+        // 4. 执行 tool（透传 correlationId / runId 供 tool 内部写审计时建立父子关联）
         let runResult;
         try {
-            runResult = await tool.run(ctx, args);
+            runResult = await tool.run(ctx, args, { correlationId, runId });
         } catch (err) {
             const endedAt = nowIso();
             const knownCode = Object.values(ErrorCode).includes(err?.code);

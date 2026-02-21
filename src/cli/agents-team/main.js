@@ -7,7 +7,20 @@ import { fileURLToPath } from 'node:url';
 import { createRunPaths, formatUtcRunId } from '../../agents/agents-team/core/outputs/runPaths.js';
 import { writeRunIndex } from '../../agents/agents-team/core/outputs/runIndexWriter.js';
 import { createRuntime } from '../../agents/agents-team/core/runtime/createRuntime.js';
-import { OciProvider, SandboxRegistry, registerCleanupHooks, resolveOciEngine } from '../../core/sandbox/index.js';
+import { randomBytes } from 'node:crypto';
+import {
+    OciProvider,
+    SandboxRegistry,
+    registerCleanupHooks,
+    resolveOciEngine,
+    writeHandleJson,
+    writeEnvFingerprint,
+    writeCommandRecord,
+    writeOutputLogs,
+    loadHandleJson,
+} from '../../core/sandbox/index.js';
+
+const DEFAULT_SKILLS_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../agents/agents-team/skills');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -42,6 +55,15 @@ async function loadSandboxConfig(configDir) {
         return JSON.parse(raw);
     } catch {
         return {};
+    }
+}
+
+async function loadSkillsConfig(configDir) {
+    try {
+        const raw = await readFile(join(configDir, 'skills.json'), 'utf-8');
+        return JSON.parse(raw);
+    } catch {
+        return { allowed_skills: [] };
     }
 }
 
@@ -112,6 +134,12 @@ sandboxCmd
             );
 
             registry.register(handle);
+
+            // 持久化 handle 供后续 exec/destroy 子命令跨进程使用
+            await writeHandleJson(runPaths.runDir, handle.sandbox_id, handle);
+            const snapshot = await provider.snapshot(handle);
+            await writeEnvFingerprint(runPaths.runDir, handle.sandbox_id, snapshot);
+
             // 正常退出时移除钩子，容器持续运行
             detach();
 
@@ -165,28 +193,70 @@ sandboxCmd
     .option('--args <arg>', '命令参数（可重复）', (v, prev) => [...(prev || []), v], [])
     .option('--timeout-ms <ms>', '超时毫秒', (v) => parseInt(v, 10), 60000)
     .action(async (cmdOpts) => {
+        const runPaths = resolveRunPaths(program);
         const configDir = program.opts().configDir;
 
         try {
             const sandboxConfig = await loadSandboxConfig(configDir);
             const provider = new OciProvider({ defaultSpec: sandboxConfig });
 
-            const engineResolved = await resolveOciEngine(sandboxConfig.engine ?? 'auto');
-            const handle = {
-                sandbox_id: cmdOpts.sandboxId,
-                engine_resolved: engineResolved,
-                resources: sandboxConfig.resources ?? {},
-            };
+            // 优先从磁盘恢复完整 handle（由 sandbox create 写入）
+            let handle = await loadHandleJson(runPaths.runDir, cmdOpts.sandboxId);
+            if (!handle) {
+                const engineResolved = await resolveOciEngine(sandboxConfig.engine ?? 'auto');
+                handle = {
+                    sandbox_id: cmdOpts.sandboxId,
+                    provider_id: 'oci_local',
+                    engine_resolved: engineResolved,
+                    workspace_access: sandboxConfig.workspace_access ?? 'none',
+                    network_policy: sandboxConfig.network_policy ?? 'off',
+                    resources: sandboxConfig.resources ?? {},
+                };
+            }
 
             const execSpec = {
                 cmd: cmdOpts.cmd,
                 args: cmdOpts.args,
-                ...(cmdOpts.timeoutMs ? { timeout_ms: cmdOpts.timeoutMs } : {}),
+                timeout_ms: cmdOpts.timeoutMs,
             };
 
             const result = await provider.exec(handle, execSpec);
-            process.stdout.write(JSON.stringify(result, null, 2) + '\n');
 
+            // 写完整审计链路（与 tool call 路径一致）
+            const correlationId = `cmd_${randomBytes(4).toString('hex')}`;
+            await writeCommandRecord(runPaths.runDir, handle.sandbox_id, {
+                run_id: runPaths.runId,
+                sandbox_id: handle.sandbox_id,
+                provider_id: handle.provider_id ?? 'oci_local',
+                correlation_id: correlationId,
+                cmd: cmdOpts.cmd,
+                args: cmdOpts.args,
+                started_at: result.started_at,
+                ended_at: result.ended_at,
+                duration_ms: result.duration_ms,
+                timeout_ms: cmdOpts.timeoutMs,
+                timed_out: result.timed_out,
+                exit_code: result.exit_code ?? null,
+                signal: result.signal ?? null,
+                workspace_access: handle.workspace_access ?? 'none',
+                network_policy: handle.network_policy ?? 'off',
+                stdout_bytes: result.stdout_bytes,
+                stderr_bytes: result.stderr_bytes,
+                stdout_truncated: result.stdout_truncated,
+                stderr_truncated: result.stderr_truncated,
+                stdout_max_bytes: result.stdout_max_bytes,
+                stderr_max_bytes: result.stderr_max_bytes,
+                ok: result.ok,
+                ...(result.ok ? {} : { error: result.error }),
+            });
+            await writeOutputLogs(runPaths.runDir, handle.sandbox_id, {
+                stdout: result.stdout,
+                stderr: result.stderr,
+            });
+            const snapshot = await provider.snapshot(handle);
+            await writeEnvFingerprint(runPaths.runDir, handle.sandbox_id, snapshot);
+
+            process.stdout.write(JSON.stringify(result, null, 2) + '\n');
             if (!result.ok) process.exitCode = 1;
         } catch (err) {
             process.stderr.write(`[agents-team] sandbox exec 失败: ${err.message}\n`);
@@ -226,6 +296,7 @@ toolCmd
                 runId: runPaths.runId,
                 sandboxSpec: sandboxConfig,
                 policyConfig: toolsConfig.policy ?? {},
+                allowedTools: toolsConfig.allowed_tools ?? null,
                 enableCleanupHooks: true,
             });
 
@@ -260,6 +331,7 @@ toolCmd
             const ctx = createRuntime({
                 sandboxSpec: sandboxConfig,
                 policyConfig: toolsConfig.policy ?? {},
+                allowedTools: toolsConfig.allowed_tools ?? null,
             });
 
             process.stdout.write(JSON.stringify(ctx.toolRegistry.list(), null, 2) + '\n');
@@ -276,9 +348,66 @@ skillCmd
     .command('run <skill_id>')
     .description('通过 SkillRunner 执行指定 skill')
     .requiredOption('--json <inputJson>', '输入 JSON 字符串')
-    .action(() => {
-        process.stderr.write('[agents-team] 此子命令将在 P16 阶段实现\n');
-        process.exitCode = 1;
+    .action(async (skillId, cmdOpts) => {
+        const runPaths = resolveRunPaths(program);
+        const configDir = program.opts().configDir;
+
+        let inputs;
+        try {
+            inputs = JSON.parse(cmdOpts.json);
+        } catch {
+            process.stderr.write('[agents-team] --json 参数不是合法 JSON\n');
+            process.exitCode = 1;
+            return;
+        }
+
+        try {
+            const [sandboxConfig, toolsConfig, skillsConfig] = await Promise.all([
+                loadSandboxConfig(configDir),
+                loadToolsConfig(configDir),
+                loadSkillsConfig(configDir),
+            ]);
+
+            const ctx = createRuntime({
+                outputDir: program.opts().outputDir,
+                runId: runPaths.runId,
+                sandboxSpec: sandboxConfig,
+                policyConfig: toolsConfig.policy ?? {},
+                allowedTools: toolsConfig.allowed_tools ?? null,
+                skillsConfig,
+                skillsDir: DEFAULT_SKILLS_DIR,
+                enableCleanupHooks: true,
+            });
+
+            await writeRunIndex(ctx.runPaths);
+
+            const result = await ctx.skillRunner.run(skillId, inputs, ctx, {
+                run_id: runPaths.runId,
+            });
+
+            process.stdout.write(JSON.stringify(result, null, 2) + '\n');
+
+            if (!result.ok) {
+                process.exitCode = 1;
+            }
+        } catch (err) {
+            process.stderr.write(`[agents-team] skill run 失败: ${err.message}\n`);
+            process.exitCode = 1;
+        }
+    });
+
+skillCmd
+    .command('list')
+    .description('列出白名单中的 skill')
+    .action(async () => {
+        const configDir = program.opts().configDir;
+        try {
+            const skillsConfig = await loadSkillsConfig(configDir);
+            process.stdout.write(JSON.stringify(skillsConfig.allowed_skills ?? [], null, 2) + '\n');
+        } catch (err) {
+            process.stderr.write(`[agents-team] skill list 失败: ${err.message}\n`);
+            process.exitCode = 1;
+        }
     });
 
 // ── mcp ───────────────────────────────────────────

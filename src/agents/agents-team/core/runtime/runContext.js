@@ -3,7 +3,8 @@
  *
  * 注入顺序（自上而下）：
  *   runPaths → sandboxProvider → sandboxRegistry → artifactRegistry
- *   → policyEngine → toolRegistry → toolGateway → mcpRegistry（可选）
+ *   → policyEngine → toolRegistry → toolGateway
+ *   → skillRegistry → skillRunner → mcpRegistry（可选）
  */
 export class RunContext {
     constructor({
@@ -14,6 +15,8 @@ export class RunContext {
         policyEngine,
         toolRegistry,
         toolGateway,
+        skillRegistry = null,
+        skillRunner = null,
         mcpRegistry = null,
     }) {
         this.runPaths = runPaths;
@@ -23,6 +26,8 @@ export class RunContext {
         this.policyEngine = policyEngine;
         this.toolRegistry = toolRegistry;
         this.toolGateway = toolGateway;
+        this.skillRegistry = skillRegistry;
+        this.skillRunner = skillRunner;
         this.mcpRegistry = mcpRegistry;
     }
 }

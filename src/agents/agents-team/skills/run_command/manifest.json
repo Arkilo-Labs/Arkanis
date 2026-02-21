@@ -1,0 +1,27 @@
+{
+    "id": "run_command",
+    "version": "0.1.0",
+    "description": "在 sandbox 内执行命令，把 stdout/stderr 落为 artifacts",
+    "implementation": {
+        "type": "builtin",
+        "entry": "runCommand"
+    },
+    "permissions": {
+        "network": "off",
+        "workspace_access": "none",
+        "host_exec": "deny",
+        "secrets": "deny"
+    },
+    "inputs": {
+        "sandbox_id": "string?",
+        "cmd": "string",
+        "args": "string[]",
+        "cwd": "string?",
+        "timeout_ms": "number?"
+    },
+    "outputs": {
+        "exit_code": "number",
+        "stdout_artifact_id": "string",
+        "stderr_artifact_id": "string"
+    }
+}

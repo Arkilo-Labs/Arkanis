@@ -1,0 +1,6 @@
+{
+    "version": 1,
+    "allowed_skills": [
+        { "id": "run_command", "version": "0.1.0" }
+    ]
+}
