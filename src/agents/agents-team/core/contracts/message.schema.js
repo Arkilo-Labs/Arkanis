@@ -33,7 +33,7 @@ export const MessageSchema = z
     .object({
         msg_id: SafeSegmentSchema,
         run_id: RunIdSchema,
-        task_refs: z.array(z.string().min(1)),
+        task_refs: z.array(z.string().min(1)).min(1),
         type: MessageTypeSchema,
         from_agent: z.string().min(1),
         to_agent: z.string().min(1).optional(),

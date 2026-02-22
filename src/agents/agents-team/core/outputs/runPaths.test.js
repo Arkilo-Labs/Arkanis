@@ -55,3 +55,29 @@ test('createRunPaths 生成的路径是绝对路径且可预测', () => {
         path.join(expectedRunDir, 'sandbox', 'sb1', 'env_fingerprint.json'),
     );
 });
+
+test('createRunPaths 新增控制面路径正确', () => {
+    const cwd = path.join(process.cwd(), 'tmp_p2');
+    const runId = '20260217_153012';
+    const paths = createRunPaths({ cwd, outputDir: 'outputs/agents_team', runId });
+    const runDir = paths.runDir;
+
+    assert.equal(paths.tasksDir, path.join(runDir, 'tasks'));
+    assert.equal(paths.taskPath('task-1'), path.join(runDir, 'tasks', 'task-1.json'));
+
+    assert.equal(paths.mailboxDir, path.join(runDir, 'mailbox'));
+    assert.equal(paths.messagePath('msg-1'), path.join(runDir, 'mailbox', 'msg-1.json'));
+    assert.equal(paths.messageAckPath('msg-1'), path.join(runDir, 'mailbox', 'msg-1.ack.json'));
+
+    assert.equal(paths.locksDir, path.join(runDir, 'locks'));
+    assert.equal(paths.lockPath('lock-1'), path.join(runDir, 'locks', 'lock-1.json'));
+
+    assert.equal(paths.promptsDir, path.join(runDir, 'prompts'));
+});
+
+test('taskPath / messagePath / lockPath 拒绝不合法的 segment', () => {
+    const paths = createRunPaths({ outputDir: 'outputs/agents_team', runId: '20260217_153012' });
+    assert.throws(() => paths.taskPath(''), /task_id 不能为空/);
+    assert.throws(() => paths.messagePath(''), /msg_id 不能为空/);
+    assert.throws(() => paths.lockPath(''), /lock_id 不能为空/);
+});

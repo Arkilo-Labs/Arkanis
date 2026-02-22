@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
     ArtifactsSummarySchema,
+    DecisionSchema,
     MessagesSummarySchema,
     RunSessionSchema,
     SessionConfigSchema,
@@ -93,6 +94,16 @@ test('SessionConfigSchema：拒绝 max_turns=0', () => {
 
 test('SessionConfigSchema：拒绝负 timeout_ms', () => {
     assert.throws(() => SessionConfigSchema.parse({ max_turns: 1, timeout_ms: -1 }));
+});
+
+test('SessionConfigSchema：拒绝 timeout_ms=0', () => {
+    assert.throws(() => SessionConfigSchema.parse({ max_turns: 1, timeout_ms: 0 }));
+});
+
+test('DecisionSchema：导出且可解析合法值', () => {
+    const now = new Date().toISOString();
+    const decision = { artifact_id: 'decision_01', direction: '建议升级', decided_at: now };
+    assert.deepEqual(DecisionSchema.parse(decision), decision);
 });
 
 test('TasksSummarySchema：parse 合法值', () => {

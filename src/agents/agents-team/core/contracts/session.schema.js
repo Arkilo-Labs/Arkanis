@@ -44,12 +44,12 @@ export const ArtifactsSummarySchema = z
 export const SessionConfigSchema = z
     .object({
         max_turns: z.number().int().min(1),
-        timeout_ms: z.number().int().nonnegative(),
+        timeout_ms: z.number().int().positive(),
         budget_tokens: z.number().int().min(1).optional(),
     })
     .strict();
 
-const DecisionSchema = z
+export const DecisionSchema = z
     .object({
         artifact_id: SafeSegmentSchema,
         direction: z.string().min(1),

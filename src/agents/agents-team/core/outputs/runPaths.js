@@ -81,5 +81,21 @@ export function createRunPaths({ outputDir, runId, cwd } = {}) {
 
         artifactsDir,
         artifactDir,
+
+        tasksDir: path.join(runDir, 'tasks'),
+        taskPath: (taskId) =>
+            path.join(runDir, 'tasks', normalizeSafeSegment('task_id', taskId) + '.json'),
+
+        mailboxDir: path.join(runDir, 'mailbox'),
+        messagePath: (msgId) =>
+            path.join(runDir, 'mailbox', normalizeSafeSegment('msg_id', msgId) + '.json'),
+        messageAckPath: (msgId) =>
+            path.join(runDir, 'mailbox', normalizeSafeSegment('msg_id', msgId) + '.ack.json'),
+
+        locksDir: path.join(runDir, 'locks'),
+        lockPath: (lockId) =>
+            path.join(runDir, 'locks', normalizeSafeSegment('lock_id', lockId) + '.json'),
+
+        promptsDir: path.join(runDir, 'prompts'),
     };
 }

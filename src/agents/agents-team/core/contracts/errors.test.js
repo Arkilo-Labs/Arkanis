@@ -22,6 +22,7 @@ test('ErrorCode 集合冻结且不可变', () => {
         'ERR_TOOL_EXEC_FAILED',
         'ERR_TOOL_NOT_FOUND',
         'ERR_TASK_NOT_FOUND',
+        'ERR_MESSAGE_NOT_FOUND',
         'ERR_LEASE_CONFLICT',
         'ERR_LEASE_EXPIRED',
         'ERR_TASK_DEPENDENCY_NOT_MET',

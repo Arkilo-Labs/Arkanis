@@ -136,3 +136,7 @@ test('MessageSchema：拒绝空 content', () => {
 test('MessageSchema：拒绝额外字段（strict）', () => {
     assert.throws(() => MessageSchema.parse(validMessage({ extra: 'x' })));
 });
+
+test('MessageSchema：拒绝 task_refs 空数组', () => {
+    assert.throws(() => MessageSchema.parse(validMessage({ task_refs: [] })));
+});
