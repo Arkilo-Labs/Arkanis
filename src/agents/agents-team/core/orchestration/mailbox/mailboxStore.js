@@ -1,7 +1,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 
 import { createRunPaths } from '../../outputs/runPaths.js';
-import { MessageSchema } from '../../contracts/message.schema.js';
+import { MessageSchema, MessageDeliveryStatusSchema } from '../../contracts/message.schema.js';
 import { ErrorCode } from '../../contracts/errors.js';
 import { atomicWriteJson } from '../atomicWrite.js';
 
@@ -49,15 +49,21 @@ export function createMailboxStore({ outputDir, cwd } = {}) {
         }
 
         // 合并 ack 状态（P7 写入 .ack.json，保持消息体不可变）
-        const ackPath = `${filePath.slice(0, -5)}.ack.json`;
+        const ackPath = rp.messageAckPath(msgId);
         try {
             const ackRaw = await readFile(ackPath, 'utf-8');
             const ack = JSON.parse(ackRaw);
             if (ack.delivery_status !== undefined) {
                 parsed.delivery_status = ack.delivery_status;
             }
-        } catch {
-            // ack 文件不存在或解析失败，使用主文件原值
+        } catch (err) {
+            if (err.code !== 'ENOENT') {
+                throw makeError(
+                    ErrorCode.ERR_INVALID_ARGUMENT,
+                    `ack 文件损坏: ${msgId}`,
+                    { runId, msgId, ackPath },
+                );
+            }
         }
 
         const result = MessageSchema.safeParse(parsed);
@@ -124,5 +130,18 @@ export function createMailboxStore({ outputDir, cwd } = {}) {
         return messages;
     }
 
-    return { readMessage, writeMessage, listMessages };
+    async function writeAck(runId, msgId, { delivery_status }) {
+        const parseResult = MessageDeliveryStatusSchema.safeParse(delivery_status);
+        if (!parseResult.success) {
+            throw makeError(
+                ErrorCode.ERR_INVALID_ARGUMENT,
+                `delivery_status 无效: ${delivery_status}`,
+                { runId, msgId },
+            );
+        }
+        const rp = runPaths(runId);
+        await atomicWriteJson(rp.messageAckPath(msgId), { delivery_status: parseResult.data });
+    }
+
+    return { readMessage, writeMessage, listMessages, writeAck };
 }

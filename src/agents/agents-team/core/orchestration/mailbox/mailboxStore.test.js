@@ -181,3 +181,43 @@ test('readMessage 合并 .ack.json 的 delivery_status', async () => {
     const got = await store.readMessage(RUN_ID, msg.msg_id);
     assert.equal(got.delivery_status, MessageDeliveryStatus.ACKNOWLEDGED);
 });
+
+test('readMessage ack 文件 JSON 损坏 → 抛 ERR_INVALID_ARGUMENT', async () => {
+    const { store, dir } = await makeStore();
+    const msg = validMessage();
+    await store.writeMessage(RUN_ID, msg);
+
+    const mailboxDir = join(dir, 'outputs/agents_team', RUN_ID, 'mailbox');
+    const ackPath = join(mailboxDir, `${msg.msg_id}.ack.json`);
+    await writeFile(ackPath, '{ broken ack json', 'utf-8');
+
+    await assert.rejects(
+        () => store.readMessage(RUN_ID, msg.msg_id),
+        (err) => {
+            assert.equal(err.code, ErrorCode.ERR_INVALID_ARGUMENT);
+            return true;
+        },
+    );
+});
+
+test('writeAck → readMessage 返回更新后的 delivery_status', async () => {
+    const { store } = await makeStore();
+    const msg = validMessage({ delivery_status: MessageDeliveryStatus.SENT });
+    await store.writeMessage(RUN_ID, msg);
+
+    await store.writeAck(RUN_ID, msg.msg_id, { delivery_status: MessageDeliveryStatus.ACKNOWLEDGED });
+
+    const got = await store.readMessage(RUN_ID, msg.msg_id);
+    assert.equal(got.delivery_status, MessageDeliveryStatus.ACKNOWLEDGED);
+});
+
+test('writeAck 无效 delivery_status → 抛 ERR_INVALID_ARGUMENT', async () => {
+    const { store } = await makeStore();
+    await assert.rejects(
+        () => store.writeAck(RUN_ID, 'msg-x', { delivery_status: 'INVALID_STATUS' }),
+        (err) => {
+            assert.equal(err.code, ErrorCode.ERR_INVALID_ARGUMENT);
+            return true;
+        },
+    );
+});

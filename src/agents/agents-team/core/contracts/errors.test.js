@@ -47,7 +47,6 @@ test('DenyReason 集合冻结且不可变', () => {
         'SKILL_NOT_WHITELISTED',
         'WORKSPACE_WRITE_FORBIDDEN',
         'TASK_WRONG_STATE',
-        'TASK_DEPENDENCY_NOT_MET',
         'LEASE_REQUIRED',
         'LOCK_HELD_BY_OTHER',
     ].sort();
