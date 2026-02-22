@@ -121,6 +121,8 @@ export function createMailboxStore({ outputDir, cwd } = {}) {
                 continue;
             messages.push(msg);
         }
+        // 按 created_at 升序，保证调用方看到稳定的时间线顺序
+        messages.sort((a, b) => a.created_at.localeCompare(b.created_at));
         return messages;
     }
 

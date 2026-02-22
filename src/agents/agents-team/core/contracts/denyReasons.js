@@ -10,6 +10,8 @@ export const DenyReason = Object.freeze({
     TASK_WRONG_STATE: 'TASK_WRONG_STATE',
     LEASE_REQUIRED: 'LEASE_REQUIRED',
     LOCK_HELD_BY_OTHER: 'LOCK_HELD_BY_OTHER',
+    // 角色工具白名单拒绝
+    TOOL_NOT_ALLOWED: 'TOOL_NOT_ALLOWED',
 });
 
 export const DenyReasonSchema = z.enum(Object.values(DenyReason));

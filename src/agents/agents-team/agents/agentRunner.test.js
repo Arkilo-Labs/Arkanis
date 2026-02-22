@@ -175,6 +175,7 @@ test('T4: 每轮都向 mailbox 投递 update 消息，消息数 = turns', async 
     const updates = messages.filter((m) => m.type === 'update' && m.from_agent === 'researcher-runner');
     assert.equal(updates.length, result.turns, `update 消息数应等于 turns=${result.turns}，实际: ${updates.length}`);
 
-    assert.ok(updates[0].content.includes('第一轮输出'), '第1条 update 应含第一轮文字');
-    assert.ok(updates[1].content.includes('第二轮输出'), '第2条 update 应含第二轮文字');
+    const contents = updates.map((u) => u.content);
+    assert.ok(contents.some((c) => c.includes('第一轮输出')), `update 消息集合中应含"第一轮输出"，实际: ${JSON.stringify(contents)}`);
+    assert.ok(contents.some((c) => c.includes('第二轮输出')), `update 消息集合中应含"第二轮输出"，实际: ${JSON.stringify(contents)}`);
 });

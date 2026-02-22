@@ -49,6 +49,7 @@ test('DenyReason 集合冻结且不可变', () => {
         'TASK_WRONG_STATE',
         'LEASE_REQUIRED',
         'LOCK_HELD_BY_OTHER',
+        'TOOL_NOT_ALLOWED',
     ].sort();
 
     assert.deepEqual(values, expected);
