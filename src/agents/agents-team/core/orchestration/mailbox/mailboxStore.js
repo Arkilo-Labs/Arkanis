@@ -4,13 +4,7 @@ import { createRunPaths } from '../../outputs/runPaths.js';
 import { MessageSchema, MessageDeliveryStatusSchema } from '../../contracts/message.schema.js';
 import { ErrorCode } from '../../contracts/errors.js';
 import { atomicWriteJson } from '../atomicWrite.js';
-
-function makeError(code, message, details) {
-    const err = new Error(message);
-    err.code = code;
-    if (details !== undefined) err.details = details;
-    return err;
-}
+import { makeError } from '../errors.util.js';
 
 /**
  * @param {{ outputDir?: string, cwd?: string }} [opts]
@@ -130,7 +124,12 @@ export function createMailboxStore({ outputDir, cwd } = {}) {
         return messages;
     }
 
-    async function writeAck(runId, msgId, { delivery_status }) {
+    /**
+     * @param {string} runId
+     * @param {string} msgId
+     * @param {{ delivery_status: string, acknowledged_by?: string }} opts
+     */
+    async function writeAck(runId, msgId, { delivery_status, acknowledged_by }) {
         const parseResult = MessageDeliveryStatusSchema.safeParse(delivery_status);
         if (!parseResult.success) {
             throw makeError(
@@ -140,7 +139,9 @@ export function createMailboxStore({ outputDir, cwd } = {}) {
             );
         }
         const rp = runPaths(runId);
-        await atomicWriteJson(rp.messageAckPath(msgId), { delivery_status: parseResult.data });
+        const ackData = { delivery_status: parseResult.data };
+        if (acknowledged_by !== undefined) ackData.acknowledged_by = acknowledged_by;
+        await atomicWriteJson(rp.messageAckPath(msgId), ackData);
     }
 
     return { readMessage, writeMessage, listMessages, writeAck };
